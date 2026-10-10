@@ -129,3 +129,76 @@ def test_html_forms(client):
 
     moved = client.post(f"/wishlist/{entry['id']}/purchase")
     assert "moved from wishlist to collection" in moved.text
+
+
+def test_search_collection(client):
+    for name in ("Sol Ring", "Lim-Dûl's Vault", "Fire // Ice"):
+        client.post("/api/collection", json={"name": name})
+
+    def found(query):
+        return [item["card"]["name"] for item in client.get("/api/collection", params={"q": query}).json()["items"]]
+
+    assert found("sol") == ["Sol Ring"]
+    assert found("lim-dul vault") == ["Lim-Dûl's Vault"]  # accents and word order do not matter
+    assert found("MH2") == ["Fire // Ice"]  # set code
+    assert found("ring cmm") == ["Sol Ring"] and found("ring mh2") == []
+    assert len(found("")) == 3
+
+    page = client.get("/collection", params={"q": "sol"})
+    assert 'id="collection-search"' in page.text and 'value="sol"' in page.text
+    assert page.text.count("data-search=") == 3  # filtering happens in the browser
+
+
+def test_change_quantity(client):
+    entry = client.post("/api/collection", json={"name": "Sol Ring", "quantity": 4}).json()
+    updated = client.patch(f"/api/collection/{entry['id']}", json={"quantity": 3})
+    assert updated.status_code == 200
+    assert (updated.json()["quantity"], updated.json()["total_price"]) == (3, 4.5)
+    assert client.get("/api/collection").json()["total_value"] == 4.5
+    assert client.get("/api/summary").json()["card_count"] == 3
+
+    assert client.patch(f"/api/collection/{entry['id']}", json={"quantity": 0}).status_code == 422
+    assert client.patch("/api/collection/9999", json={"quantity": 1}).status_code == 404
+
+    page = client.get("/collection")
+    assert 'class="qty"' in page.text and 'value="3"' in page.text
+    assert "Quantity updated" in client.post(f"/collection/{entry['id']}/quantity", data={"quantity": "2"}).text
+    assert "at least 1" in client.post(f"/collection/{entry['id']}/quantity", data={"quantity": "0"}).text
+    assert client.get("/api/collection").json()["items"][0]["quantity"] == 2
+
+
+async def test_lowering_a_quantity_frees_fewer_copies_for_decks(session, scryfall):
+    from app.services.collection import add_card_by_name, set_quantity
+    from app.services.decks import DeckCard, save_deck, saved_deck_rows
+
+    entry = await add_card_by_name(session, scryfall, "Sol Ring", quantity=2)
+    first = save_deck(session, "First", [DeckCard("Sol Ring", 1)])
+    second = save_deck(session, "Second", [DeckCard("Sol Ring", 1)])
+    assert saved_deck_rows(session, second)[0].missing == 0
+    set_quantity(session, entry, 1)
+    assert (saved_deck_rows(session, first)[0].missing, saved_deck_rows(session, second)[0].missing) == (0, 1)
+
+
+def test_add_exact_printing_by_set_and_collector_number(client):
+    # Commander Masters has two Sol Rings in the fake data: #1 (1.50) and #410 (6.00).
+    added = client.post("/api/collection", json={"set_code": "CMM", "collector_number": "410"})
+    assert added.status_code == 201
+    card = added.json()["card"]
+    assert (card["name"], card["collector_number"], added.json()["unit_price"]) == ("Sol Ring", "410", 6.0)
+
+    by_name = client.post("/api/collection", json={"name": "Sol Ring", "set_code": "cmm"}).json()
+    assert by_name["card"]["collector_number"] == "1"  # a name alone cannot pick the other version
+    assert len(client.get("/api/collection").json()["items"]) == 2
+    assert [i["card"]["collector_number"] for i in client.get("/api/collection", params={"q": "#410"}).json()["items"]] == ["410"]
+
+    # The name is optional, but when given it has to match the card behind the number.
+    assert client.post("/api/collection", json={"name": "sol ring", "set_code": "cmm", "collector_number": "410"}).status_code == 201
+    wrong = client.post("/api/collection", json={"name": "Black Lotus", "set_code": "cmm", "collector_number": "410"})
+    assert wrong.status_code == 400 and "is Sol Ring, not Black Lotus" in wrong.json()["detail"]
+    assert client.post("/api/collection", json={"collector_number": "410"}).status_code == 400  # no set
+    assert client.post("/api/collection", json={}).status_code == 400
+    assert client.post("/api/collection", json={"set_code": "cmm", "collector_number": "999"}).status_code == 404
+
+    form = client.post("/collection/add", data={"set_code": "cmm", "collector_number": "#410", "quantity": "1"})
+    assert "Added Sol Ring (CMM #410)" in form.text and "(CMM #410)" in client.get("/collection").text
+    assert "Fill in the set" in client.post("/collection/add", data={"name": "Sol Ring", "collector_number": "410"}).text

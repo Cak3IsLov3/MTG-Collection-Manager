@@ -14,6 +14,7 @@ from app.schemas import (
     CollectionAdd,
     CollectionItemOut,
     CollectionOut,
+    CollectionUpdate,
     DeckCardOut,
     DeckCheckIn,
     DeckDetailOut,
@@ -27,7 +28,7 @@ from app.schemas import (
     WishlistItemOut,
     WishlistOut,
 )
-from app.scryfall import CardNotFound, ScryfallClient, ScryfallError
+from app.scryfall import CardNotFound, InvalidCardRequest, ScryfallClient, ScryfallError
 from app.services import collection, decks, stats, wishlist
 
 router = APIRouter(prefix="/api", tags=["api"])
@@ -36,6 +37,8 @@ router = APIRouter(prefix="/api", tags=["api"])
 def _scryfall_http_error(exc: ScryfallError) -> HTTPException:
     if isinstance(exc, CardNotFound):
         return HTTPException(status_code=404, detail=str(exc))
+    if isinstance(exc, InvalidCardRequest):
+        return HTTPException(status_code=400, detail=str(exc))
     return HTTPException(status_code=502, detail=str(exc))
 
 
@@ -45,8 +48,9 @@ def summary(session: Session = Depends(get_session)):
 
 
 @router.get("/collection", response_model=CollectionOut)
-def list_collection(session: Session = Depends(get_session)):
-    rows = collection.collection_rows(session)
+def list_collection(q: str | None = None, session: Session = Depends(get_session)):
+    """The collection; `q` filters on card name, set name or set code (every word must match)."""
+    rows = collection.search_rows(collection.collection_rows(session), q)
     return CollectionOut(
         total_value=collection.collection_value(rows),
         items=[CollectionItemOut.from_row(row) for row in rows],
@@ -61,7 +65,8 @@ async def add_to_collection(
 ):
     try:
         entry = await collection.add_card_by_name(
-            session, scryfall, payload.name, payload.set_code, payload.quantity, payload.is_foil
+            session, scryfall, (payload.name or "").strip(), payload.set_code, payload.quantity, payload.is_foil,
+            (payload.collector_number or "").strip() or None,
         )
     except ScryfallError as exc:
         raise _scryfall_http_error(exc) from exc
@@ -94,6 +99,18 @@ async def import_collection(
         not_found=result.not_found,
         errors=parsed.errors,
     )
+
+
+@router.patch("/collection/{entry_id}", response_model=CollectionItemOut)
+def update_collection_entry(entry_id: int, payload: CollectionUpdate, session: Session = Depends(get_session)):
+    """Change the number of copies of a card in the collection."""
+    entry = session.get(CollectionEntry, entry_id)
+    if entry is None:
+        raise HTTPException(status_code=404, detail="Collection entry not found")
+    collection.set_quantity(session, entry, payload.quantity)
+    stats.record_daily_total(session)
+    session.commit()
+    return CollectionItemOut.from_row(collection.collection_rows(session, entry_id)[0])
 
 
 @router.delete("/collection/{entry_id}", status_code=204)

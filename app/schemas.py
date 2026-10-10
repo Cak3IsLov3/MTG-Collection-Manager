@@ -19,10 +19,16 @@ class CardOut(BaseModel):
 
 
 class CollectionAdd(BaseModel):
-    name: str = Field(min_length=1)
+    # Either a name (optionally with a set), or a set + collector number for one exact printing.
+    name: str | None = None
     set_code: str | None = None
+    collector_number: str | None = None
     quantity: int = Field(default=1, ge=1)
     is_foil: bool = False
+
+
+class CollectionUpdate(BaseModel):
+    quantity: int = Field(ge=1)
 
 
 class CollectionItemOut(BaseModel):

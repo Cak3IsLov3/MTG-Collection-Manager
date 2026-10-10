@@ -33,6 +33,7 @@ def scryfall_json(name, scryfall_id, set_code="tst", eur="1.00", eur_foil=None, 
 CARDS = [
     scryfall_json("Sol Ring", "id-sol", "cmm", eur="1.50", eur_foil="4.00"),
     scryfall_json("Sol Ring", "id-sol-lea", "lea", eur="900.00"),
+    scryfall_json("Sol Ring", "id-sol-cmm-art", "cmm", eur="6.00", collector_number="410"),
     scryfall_json("Lim-Dûl's Vault", "id-vault", "all", eur="12.34"),
     scryfall_json("Fire // Ice", "id-fire", "mh2", eur="0.25", eur_foil="0.80"),
     scryfall_json("Black Lotus", "id-lotus", "lea", eur=None),
@@ -83,7 +84,11 @@ class FakeScryfall:
                 card = self._find(identifier)
                 (data if card else missing).append(card or identifier)
             return httpx.Response(200, json={"data": data, "not_found": missing})
-        card = self._find({"id": request.url.path.rsplit("/", 1)[-1]})
+        parts = request.url.path.strip("/").split("/")
+        if len(parts) == 3:  # /cards/{set}/{collector_number}
+            card = self._find({"set": parts[1], "collector_number": parts[2]})
+            return httpx.Response(200, json=card) if card else not_found
+        card = self._find({"id": parts[-1]})
         return httpx.Response(200, json=card) if card else not_found
 
 

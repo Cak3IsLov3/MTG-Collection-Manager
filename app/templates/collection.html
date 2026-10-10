@@ -3,19 +3,21 @@
 
 {% block content %}
 <div class="toolbar">
-  <h1>Collection <span class="muted">· {{ total | eur }}</span></h1>
+  <h1>Collection <span class="muted">· <span id="collection-total" data-value="{{ total }}">{{ total | eur }}</span></span></h1>
 </div>
 
 <div class="grid two">
   <div class="panel">
     <h2>Add a card</h2>
     <form class="row" method="post" action="/collection/add">
-      <label>Card name<input name="name" required placeholder="Lim-Dûl's Vault"></label>
+      <label>Card name<input name="name" placeholder="Lim-Dûl's Vault"></label>
       <label>Set (optional)<input name="set_code" class="narrow" placeholder="cmm"></label>
+      <label>Card number (optional)<input name="collector_number" class="narrow" placeholder="410"></label>
       <label>Quantity<input name="quantity" type="number" min="1" value="1"></label>
       <label class="check"><input name="is_foil" type="checkbox">&nbsp;Foil</label>
       <button>Add</button>
     </form>
+    <p class="muted">Several versions of a card in one set? Fill in the set and the card number printed at the bottom of the card to get that exact one. The name is optional then.</p>
   </div>
   <div class="panel">
     <h2>Import CSV</h2>
@@ -33,22 +35,34 @@
 
 <div class="panel table-wrap">
   {% if rows %}
-  <table>
+  <div class="toolbar search-bar">
+    <input id="collection-search" type="search" size="40" autocomplete="off" value="{{ request.query_params.get('q', '') }}"
+           placeholder="Search by card name or set…" aria-label="Search your collection">
+    <label class="check muted"><input id="collection-foil" type="checkbox">&nbsp;Foil only</label>
+    <span id="collection-count" class="muted"></span>
+  </div>
+  <p id="collection-empty" class="muted" hidden>No cards match your search.</p>
+  <table id="collection-table">
     <tr>
       <th></th><th>Card</th><th>Set</th><th class="num">Qty</th>
       <th class="num">Price</th><th class="num">Total</th><th></th>
     </tr>
     {% for row in rows %}
-    <tr>
+    <tr data-search="{{ row.card.name }} {{ row.card.set_name }} {{ row.card.set_code }} #{{ row.card.collector_number or '' }}" data-foil="{{ 1 if row.entry.is_foil else 0 }}" data-qty="{{ row.entry.quantity }}">
       <td>{% if row.card.image_url %}<img class="thumb" src="{{ row.card.image_url }}" alt="" loading="lazy">{% endif %}</td>
       <td>
         <a href="/cards/{{ row.card.id }}">{{ row.card.name }}</a>
         {% if row.entry.is_foil %}<span class="badge foil">foil</span>{% endif %}
       </td>
-      <td class="muted">{{ row.card.set_name }} ({{ row.card.set_code | upper }})</td>
-      <td class="num">{{ row.entry.quantity }}</td>
+      <td class="muted">{{ row.card.set_name }} ({{ row.card.set_code | upper }}{% if row.card.collector_number %} #{{ row.card.collector_number }}{% endif %})</td>
+      <td class="num">
+        <form class="inline qty-form" method="post" action="/collection/{{ row.entry.id }}/quantity">
+          <input class="qty" name="quantity" type="number" min="1" step="1" value="{{ row.entry.quantity }}"
+                 data-entry="{{ row.entry.id }}" aria-label="Quantity of {{ row.card.name }}">
+        </form>
+      </td>
       <td class="num">{{ row.unit_price | eur }}</td>
-      <td class="num">{{ row.total_price | eur }}</td>
+      <td class="num row-total" data-value="{{ row.total_price or 0 }}">{{ row.total_price | eur }}</td>
       <td>
         <div class="actions">
           <form class="inline" method="post" action="/collection/{{ row.entry.id }}/delete" data-confirm="Click again to remove">
@@ -63,4 +77,101 @@
   <p class="muted">No cards yet. Add one above or import a CSV export.</p>
   {% endif %}
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  // Instant search over the rows that are already on the page.
+  const search = document.getElementById("collection-search");
+  if (search) {
+    const foilOnly = document.getElementById("collection-foil");
+    const count = document.getElementById("collection-count");
+    const empty = document.getElementById("collection-empty");
+    const table = document.getElementById("collection-table");
+    // Lower-case and strip accents, so "lim-dul" finds "Lim-Dûl's Vault".
+    const fold = (text) => text.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
+    const rows = [...table.querySelectorAll("tr[data-search]")].map((row) => ({
+      row,
+      text: fold(row.dataset.search),
+      foil: row.dataset.foil === "1",
+      quantity: Number(row.dataset.qty),
+    }));
+
+    function filter() {
+      const words = fold(search.value).split(/\s+/).filter(Boolean);
+      let shown = 0;
+      let cards = 0;
+      for (const item of rows) {
+        const match = (!foilOnly.checked || item.foil) && words.every((word) => item.text.includes(word));
+        item.row.hidden = !match;
+        if (match) {
+          shown += 1;
+          cards += item.quantity;
+        }
+      }
+      const filtered = words.length > 0 || foilOnly.checked;
+      count.textContent = filtered ? `${shown} of ${rows.length} entries · ${cards} cards` : `${rows.length} entries`;
+      empty.hidden = shown > 0;
+      table.hidden = shown === 0;
+      const url = new URL(location.href);
+      if (search.value.trim()) url.searchParams.set("q", search.value.trim());
+      else url.searchParams.delete("q");
+      history.replaceState(null, "", url);
+    }
+
+    search.addEventListener("input", filter);
+    foilOnly.addEventListener("change", filter);
+    filter();
+
+    // Change a quantity in place: saved through the API, without reloading the page.
+    const euro = (value) => (value === null ? "–" : "€" + value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+    const grandTotal = document.getElementById("collection-total");
+
+    async function saveQuantity(input) {
+      const item = rows.find((candidate) => candidate.row.contains(input));
+      const quantity = Number(input.value);
+      if (!Number.isInteger(quantity) || quantity < 1) {
+        input.value = item.quantity;  // use Remove to take a card out completely
+        return;
+      }
+      if (quantity === item.quantity) return;
+      input.disabled = true;
+      try {
+        const response = await fetch(`/api/collection/${input.dataset.entry}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ quantity }),
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const saved = await response.json();
+        const cell = item.row.querySelector(".row-total");
+        const change = (saved.total_price ?? 0) - Number(cell.dataset.value);
+        cell.dataset.value = saved.total_price ?? 0;
+        cell.textContent = euro(saved.total_price);
+        grandTotal.dataset.value = Number(grandTotal.dataset.value) + change;
+        grandTotal.textContent = euro(Number(grandTotal.dataset.value));
+        item.quantity = saved.quantity;
+        input.value = saved.quantity;
+        input.classList.remove("failed");
+        input.classList.add("saved");
+        setTimeout(() => input.classList.remove("saved"), 1200);
+        filter();
+      } catch (error) {
+        input.value = item.quantity;
+        input.classList.add("failed");
+      } finally {
+        input.disabled = false;
+      }
+    }
+
+    table.addEventListener("change", (event) => {
+      if (event.target.matches("input.qty")) saveQuantity(event.target);
+    });
+    table.addEventListener("submit", (event) => {
+      if (!event.target.matches(".qty-form")) return;
+      event.preventDefault();  // Enter in the field: already handled by the change event
+      event.target.querySelector("input.qty").blur();
+    });
+  }
+</script>
 {% endblock %}

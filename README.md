@@ -15,9 +15,11 @@ price.
 | --- | --- |
 | ![Top 10 most valuable cards, risers and fallers](docs/dashboard-cards.jpg) | ![Wishlist](docs/wishlist.jpg) |
 
-| Collection with CSV import | Saved decks and adding a new one |
+| Collection: add by name or card number, edit quantities | Saved decks and adding a new one |
 | --- | --- |
 | ![Collection](docs/collection.jpg) | ![Saved decks with progress](docs/decks.jpg) |
+
+![Searching the collection: four versions of Sol Ring, told apart by set and card number](docs/collection-search.jpg)
 
 ![A saved deck: the printing each card uses, a choice of printing where you own several, and the deck's value](docs/deck.jpg)
 
@@ -32,8 +34,10 @@ price.
 ## Features
 
 **Collection (HAVE)**
-- Add cards by name (optionally a specific set, foil or non-foil)
+- Add cards by name (optionally a specific set, foil or non-foil), or by set + collector number to get one exact version when a set has several
 - CSV import with automatic format detection (Archidekt, Moxfield, or any CSV with a quantity and name column); adds to your collection or replaces it
+- Change the quantity of a card in place, without removing and re-adding it
+- Instant search in the collection on card name or set (accents and word order do not matter), with a foil-only filter
 - Daily price snapshots, total value over time, top 10 most valuable cards, weekly risers and fallers
 - Price history chart per card
 
@@ -106,9 +110,9 @@ product page. Two things to know:
 
 | Method | Path | |
 | --- | --- | --- |
-| `GET` / `POST` | `/api/collection` | List the collection / add a card and fetch its price |
+| `GET` / `POST` | `/api/collection` | List the collection (`?q=` searches name and set) / add a card and fetch its price |
 | `POST` | `/api/collection/import` | Upload an Archidekt or Moxfield CSV |
-| `DELETE` | `/api/collection/{id}` | Remove an entry |
+| `PATCH` / `DELETE` | `/api/collection/{id}` | Change the quantity of an entry / remove it |
 | `GET` / `POST` | `/api/wishlist` | List the wishlist / watch a card with a max price |
 | `POST` | `/api/wishlist/{id}/purchase` | Move a card from WANT to HAVE |
 | `DELETE` | `/api/wishlist/{id}` | Stop watching a card |

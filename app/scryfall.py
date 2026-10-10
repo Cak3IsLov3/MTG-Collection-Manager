@@ -4,6 +4,7 @@ import asyncio
 import json
 import logging
 from dataclasses import dataclass
+from urllib.parse import quote
 
 import httpx
 
@@ -26,6 +27,10 @@ class ScryfallError(Exception):
 
 class CardNotFound(ScryfallError):
     pass
+
+
+class InvalidCardRequest(ScryfallError):
+    """The lookup itself makes no sense (e.g. a card number without a set); nothing was sent."""
 
 
 def _to_float(value) -> float | None:
@@ -166,6 +171,14 @@ class ScryfallClient:
 
     async def get_by_id(self, scryfall_id: str) -> ScryfallCard:
         return ScryfallCard.from_json(await self._request("GET", f"/cards/{scryfall_id}"))
+
+    async def get_by_number(self, set_code: str, collector_number: str) -> ScryfallCard:
+        """One exact printing, e.g. ("cmm", "410"); the way to tell apart versions within a set."""
+        path = f"/cards/{quote(set_code.strip().lower(), safe='')}/{quote(collector_number.strip(), safe='')}"
+        try:
+            return ScryfallCard.from_json(await self._request("GET", path))
+        except CardNotFound:
+            raise CardNotFound(f"No card #{collector_number.strip()} in set {set_code.strip().upper()}") from None
 
     async def get_by_name(self, name: str, set_code: str | None = None) -> ScryfallCard:
         """Exact name match first, fuzzy as a fallback for typos."""

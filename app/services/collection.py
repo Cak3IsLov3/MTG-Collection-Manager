@@ -1,12 +1,13 @@
 """HAVE: the collection."""
 
+import unicodedata
 from dataclasses import dataclass, field
 
 from sqlmodel import Session, select
 
 from app.csv_import import ImportRow
 from app.models import Card, CollectionEntry
-from app.scryfall import ScryfallClient
+from app.scryfall import InvalidCardRequest, ScryfallClient
 from app.services.pricing import SCRYFALL, latest_snapshots, price_for, store_scryfall_card
 
 
@@ -41,6 +42,16 @@ def add_to_collection(session: Session, card: Card, quantity: int = 1, is_foil: 
     return entry
 
 
+def set_quantity(session: Session, entry: CollectionEntry, quantity: int) -> CollectionEntry:
+    """Change how many copies of a printing are in the collection (at least one; delete to remove)."""
+    if quantity < 1:
+        raise ValueError("Quantity must be at least 1")
+    entry.quantity = quantity
+    session.add(entry)
+    session.flush()
+    return entry
+
+
 def collection_rows(session: Session, entry_id: int | None = None) -> list[CollectionRow]:
     statement = select(CollectionEntry, Card).join(Card, CollectionEntry.card_id == Card.id).order_by(Card.name)
     if entry_id is not None:
@@ -49,6 +60,27 @@ def collection_rows(session: Session, entry_id: int | None = None) -> list[Colle
     return [
         CollectionRow(entry=entry, card=card, unit_price=price_for(prices.get(card.id), entry.is_foil))
         for entry, card in session.exec(statement)
+    ]
+
+
+def _fold(text: str) -> str:
+    """Lower-case without accents, so "lim-dul" finds "Lim-Dûl's Vault"."""
+    decomposed = unicodedata.normalize("NFD", text)
+    return "".join(ch for ch in decomposed if not unicodedata.combining(ch)).casefold()
+
+
+def search_rows(rows: list[CollectionRow], query: str | None) -> list[CollectionRow]:
+    """Rows whose card name, set name or set code contain every word of `query`."""
+    words = _fold(query or "").split()
+    if not words:
+        return rows
+    return [
+        row
+        for row in rows
+        if all(
+            word in _fold(f"{row.card.name} {row.card.set_name} {row.card.set_code} #{row.card.collector_number}")
+            for word in words
+        )
     ]
 
 
@@ -64,9 +96,23 @@ async def add_card_by_name(
     set_code: str | None = None,
     quantity: int = 1,
     is_foil: bool = False,
+    collector_number: str | None = None,
 ) -> CollectionEntry:
-    card = store_scryfall_card(session, await scryfall.get_by_name(name, set_code))
-    return add_to_collection(session, card, quantity, is_foil)
+    """Add a card by name, or one exact printing by set code + collector number."""
+    if collector_number:
+        if not set_code:
+            raise InvalidCardRequest("Fill in the set as well when you use a card number")
+        data = await scryfall.get_by_number(set_code, collector_number)
+        # A name is optional here, but if it is given it has to be the card that number points to.
+        if name and _fold(name) not in _fold(data.name):
+            raise InvalidCardRequest(
+                f"{set_code.upper()} #{collector_number} is {data.name}, not {name}. Check the set and number."
+            )
+    elif name:
+        data = await scryfall.get_by_name(name, set_code)
+    else:
+        raise InvalidCardRequest("Fill in a card name, or a set and card number")
+    return add_to_collection(session, store_scryfall_card(session, data), quantity, is_foil)
 
 
 async def import_rows(

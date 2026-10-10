@@ -87,8 +87,9 @@ def collection_page(request: Request, session: Session = Depends(get_session)):
 
 @router.post("/collection/add")
 async def collection_add(
-    name: str = Form(...),
+    name: str = Form(""),
     set_code: str = Form(""),
+    collector_number: str = Form(""),
     quantity: int = Form(1),
     is_foil: bool = Form(False),
     session: Session = Depends(get_session),
@@ -96,14 +97,15 @@ async def collection_add(
 ):
     try:
         entry = await collection.add_card_by_name(
-            session, scryfall, name.strip(), set_code.strip() or None, max(1, quantity), is_foil
+            session, scryfall, name.strip(), set_code.strip() or None, max(1, quantity), is_foil,
+            collector_number.strip().lstrip("#") or None,
         )
     except ScryfallError as exc:
         return redirect("/collection", str(exc), error=True)
     card = session.get(Card, entry.card_id)
     stats.record_daily_total(session)
     session.commit()
-    return redirect("/collection", f"Added {card.name} ({card.set_code.upper()})")
+    return redirect("/collection", f"Added {card.name} ({card.set_code.upper()} #{card.collector_number})")
 
 
 @router.post("/collection/import")
@@ -126,6 +128,18 @@ async def collection_import(
         shown = "; ".join(problems[:10]) + ("; …" if len(problems) > 10 else "")
         msg += f" {len(problems)} skipped — {shown}"
     return redirect("/collection", msg, error=bool(problems))
+
+
+@router.post("/collection/{entry_id}/quantity")
+def collection_quantity(entry_id: int, quantity: int = Form(...), session: Session = Depends(get_session)):
+    """Fallback for browsers without JavaScript; the page normally saves through the API."""
+    entry = session.get(CollectionEntry, entry_id)
+    if entry is None or quantity < 1:
+        return redirect("/collection", "Enter a quantity of at least 1", error=True)
+    collection.set_quantity(session, entry, quantity)
+    stats.record_daily_total(session)
+    session.commit()
+    return redirect("/collection", "Quantity updated")
 
 
 @router.post("/collection/{entry_id}/delete")
