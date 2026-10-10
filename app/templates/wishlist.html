@@ -9,6 +9,12 @@
     <form id="wishlist-form" class="inline" method="post" action="/wishlist/targets" data-keep-scroll></form>
     <button form="wishlist-form" class="wishlist-save">Save all prices</button>
     <form class="inline" method="post" action="/jobs/check-wishlist"><button class="secondary">Check prices now</button></form>
+    {% if rows %}
+    <form class="inline" method="post" action="/wishlist/clear"
+          data-confirm="Click again to remove all {{ rows | length }} card{{ 's' if rows | length != 1 }}">
+      <button class="secondary" title="Stop watching every card on your wishlist">Remove all</button>
+    </form>
+    {% endif %}
   </div>
 </div>
 

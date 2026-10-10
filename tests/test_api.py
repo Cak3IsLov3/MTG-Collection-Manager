@@ -286,3 +286,26 @@ def test_choose_the_set_of_a_wishlist_card(client):
     art = next(p for p in printings if p["collector_number"] == "410")
     api = client.put(f"/api/wishlist/{entry['id']}/printing", json={"scryfall_id": art["scryfall_id"]}).json()
     assert (api["card"]["collector_number"], api["current_price"], api["target_price"]) == ("410", 6.0, 1.2)
+
+
+def test_remove_all_from_the_wishlist(client):
+    assert "Remove all" not in client.get("/wishlist").text  # nothing to remove yet
+    for name in ("Sol Ring", "Fire // Ice", "Lim-Dûl's Vault"):
+        client.post("/api/wishlist", json={"name": name, "target_price": 1})
+    client.post("/api/collection", json={"name": "Sol Ring"})
+
+    page = client.get("/wishlist").text
+    assert 'action="/wishlist/clear"' in page and 'data-confirm="Click again to remove all 3 cards"' in page
+
+    cleared = client.post("/wishlist/clear")
+    assert "Removed all 3 cards from your wishlist" in cleared.text and "Nothing on your wishlist yet." in cleared.text
+    assert client.get("/api/wishlist").json() == {"total_cost": 0.0, "items": []}
+    summary = client.get("/api/summary").json()
+    assert (summary["wishlist_count"], summary["wishlist_cost"], summary["card_count"]) == (0, 0.0, 1)  # collection untouched
+    assert "already empty" in client.post("/wishlist/clear").text
+
+    # A card can simply be watched again afterwards.
+    client.post("/api/wishlist", json={"name": "Sol Ring", "target_price": 2})
+    client.post("/api/wishlist", json={"name": "Fire // Ice", "target_price": 2})
+    assert client.delete("/api/wishlist").json() == {"removed": 2}
+    assert client.delete("/api/wishlist").json() == {"removed": 0}

@@ -131,6 +131,16 @@ async def change_printing(
     return entry
 
 
+def clear_wishlist(session: Session) -> int:
+    """Stop watching every card; returns how many were removed. Alert history is kept."""
+    entries = session.exec(select(WishlistEntry).where(WishlistEntry.active == True)).all()  # noqa: E712
+    for entry in entries:
+        entry.active = False
+        session.add(entry)
+    session.flush()
+    return len(entries)
+
+
 def set_targets(session: Session, targets: dict[int, float]) -> int:
     """Set the target price of several wishlist entries at once; returns how many actually changed.
 

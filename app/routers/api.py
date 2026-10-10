@@ -157,6 +157,15 @@ async def add_to_wishlist(
     return WishlistItemOut.from_row(wishlist.wishlist_rows(session, entry.id)[0])
 
 
+@router.delete("/wishlist")
+def clear_wishlist(session: Session = Depends(get_session)):
+    """Stop watching every card on the wishlist. The alert history is kept."""
+    removed = wishlist.clear_wishlist(session)
+    stats.record_daily_total(session)
+    session.commit()
+    return {"removed": removed}
+
+
 @router.get("/printings", response_model=list[PrintingOut])
 async def list_printings(name: str, scryfall: ScryfallClient = Depends(get_scryfall)):
     """Every paper printing of a card with its price, newest first; for choosing a set."""

@@ -23,6 +23,8 @@ price.
 
 ![Choosing the set of a wishlist card: every printing of Force of Will with its price](docs/wishlist-set.jpg)
 
+![Remove all asks for a second click before it empties the wishlist](docs/wishlist-remove-all.jpg)
+
 ![Searching the collection: four versions of Sol Ring, told apart by set and card number](docs/collection-search.jpg)
 
 ![Printings without a price of their own borrow one from another printing, marked ≈ SET (Dragon Egg and Fellwar Stone)](docs/collection-borrowed.jpg)
@@ -60,6 +62,7 @@ price.
 - Discord webhook alert when a price is at or below your target, at most once per card per 24 hours
 - Choose the set you want a card from: "Change set" lists every printing with its price; the target price is kept
 - Sort the wishlist by card name, current price, target price or difference, in either direction
+- "Remove all" empties the wishlist in one go, after a second click to confirm
 - Edit target prices freely and store them with one "Save all prices" button; set every target to 80, 85, 90 or 95% of the current price in one click
 - Alert history
 
@@ -146,6 +149,7 @@ product page. Two things to know:
 | `PUT` | `/api/wishlist/{id}/printing` | Watch another printing (set) of the same card |
 | `GET` | `/api/printings?name=` | Every printing of a card with its price |
 | `DELETE` | `/api/wishlist/{id}` | Stop watching a card |
+| `DELETE` | `/api/wishlist` | Stop watching every card |
 | `GET` | `/api/alerts` | Alert history |
 | `GET` | `/api/cards/{id}/prices` | Price history of one card |
 | `GET` | `/api/summary` | Collection value vs. wishlist cost |

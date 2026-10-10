@@ -200,6 +200,17 @@ def _active_entry(session: Session, entry_id: int) -> WishlistEntry | None:
     return entry if entry is not None and entry.active else None
 
 
+@router.post("/wishlist/clear")
+def wishlist_clear(session: Session = Depends(get_session)):
+    """The "Remove all" button."""
+    removed = wishlist.clear_wishlist(session)
+    stats.record_daily_total(session)
+    session.commit()
+    if not removed:
+        return redirect("/wishlist", "Your wishlist was already empty")
+    return redirect("/wishlist", f"Removed all {removed} card{'s' if removed != 1 else ''} from your wishlist")
+
+
 @router.post("/wishlist/targets")
 async def wishlist_targets(request: Request, session: Session = Depends(get_session)):
     """The "Save all prices" button: every target price on the page in one go."""
