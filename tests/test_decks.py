@@ -458,3 +458,49 @@ def test_save_button_stores_all_deck_changes_at_once(client):
     assert (detail["bracket"], detail["basic_lands"]) == (None, {})
     assert "Nothing was saved" in client.post(url, data={"bracket": "9"}).text
     assert "Deck not found" in client.post("/decks/9999/save", data={}).text
+
+
+def test_random_decks():
+    import random
+
+    from app.models import Deck
+    from app.services.decks import DeckSummary, random_decks
+
+    def summary(deck_id, bracket, usable):
+        return DeckSummary(Deck(id=deck_id, name=f"Deck {deck_id}", bracket=bracket), needed=10, usable=usable)
+
+    decks = [summary(1, 2, 10), summary(2, 3, 10), summary(3, 3, 4), summary(4, None, 10)]
+    rng = random.Random(1)
+
+    assert {random_decks(decks, rng=rng)[0].deck.id for _ in range(60)} == {1, 2, 3, 4}  # every deck gets a turn
+    pod = random_decks(decks, count=4, rng=rng)
+    assert sorted(s.deck.id for s in pod) == [1, 2, 3, 4]  # one each, never the same deck twice
+    assert {random_decks(decks, bracket=3, rng=rng)[0].deck.id for _ in range(30)} == {2, 3}
+    assert {random_decks(decks, bracket=3, complete_only=True, rng=rng)[0].deck.id for _ in range(10)} == {2}
+
+    for kwargs in ({"count": 5}, {"bracket": 5}, {"bracket": 3, "complete_only": True, "count": 2}, {"count": 0}):
+        with pytest.raises(DeckError):
+            random_decks(decks, rng=rng, **kwargs)
+
+
+def test_random_deck_page_and_api(client):
+    assert "random-go" not in client.get("/deck").text  # nothing to pick from yet
+    assert client.get("/api/decks/random").status_code == 400
+
+    client.post("/api/collection", json={"name": "Sol Ring"})
+    first = client.post("/api/decks", json={"name": "Ramp", "decklist": "1 Sol Ring", "bracket": 2}).json()
+    client.post("/api/decks", json={"name": "Burn & <Friends>", "decklist": "4 Fire // Ice", "bracket": 4})
+
+    page = client.get("/deck")
+    assert 'id="random-go"' in page.text and '"name": "Ramp"' in page.text
+    assert '<option value="2">2 · Core</option>' in page.text and '<option value="3">' not in page.text
+    assert "<Friends>" not in page.text  # deck names are escaped in the embedded data
+
+    picked = client.get("/api/decks/random").json()
+    assert len(picked) == 1 and picked[0]["name"] in ("Ramp", "Burn & <Friends>")
+    assert [d["name"] for d in client.get("/api/decks/random", params={"complete_only": True}).json()] == ["Ramp"]
+    assert [d["id"] for d in client.get("/api/decks/random", params={"bracket": 2}).json()] == [first["id"]]
+    assert len({d["id"] for d in client.get("/api/decks/random", params={"count": 2}).json()}) == 2
+    too_many = client.get("/api/decks/random", params={"count": 3})
+    assert too_many.status_code == 400 and "only 2 decks match" in too_many.json()["detail"]
+    assert client.get(f"/api/decks/{first['id']}").json()["name"] == "Ramp"  # /decks/random does not shadow this

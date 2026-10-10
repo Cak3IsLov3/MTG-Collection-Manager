@@ -1,5 +1,6 @@
 """Decks: which cards of a deck do you own, which are tied up in other decks, and which are missing."""
 
+import random
 import re
 from dataclasses import dataclass, field
 
@@ -484,6 +485,30 @@ def update_deck(
     set_basic_lands(session, deck, basics)
     for entry_id, collection_entry_id in printings.items():
         choose_printing(session, deck, entry_id, collection_entry_id)
+
+
+def random_decks(
+    summaries: list[DeckSummary],
+    count: int = 1,
+    bracket: int | None = None,
+    complete_only: bool = False,
+    rng: random.Random | None = None,
+) -> list[DeckSummary]:
+    """Pick `count` different decks at random, e.g. one per player at the table.
+
+    Raises DeckError when fewer decks match than were asked for.
+    """
+    eligible = [
+        summary
+        for summary in summaries
+        if (bracket is None or summary.deck.bracket == bracket) and (summary.complete or not complete_only)
+    ]
+    if count < 1:
+        raise DeckError("Pick at least one deck")
+    if len(eligible) < count:
+        found = "no decks" if not eligible else f"only {len(eligible)} deck{'s' if len(eligible) != 1 else ''}"
+        raise DeckError(f"You asked for {count}, but {found} match")
+    return (rng or random).sample(eligible, count)
 
 
 def tracked_basic_lands(session: Session, deck: Deck) -> int:

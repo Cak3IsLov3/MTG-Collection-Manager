@@ -76,6 +76,24 @@
   </table>
   <p class="muted">Every copy you own can only be in one deck. Printings you chose yourself go first, then older decks get first pick.</p>
 </div>
+
+<div class="panel randomizer">
+  <h2>Can't decide what to play?</h2>
+  <div class="row">
+    <label>Bracket
+      <select id="random-bracket">
+        <option value="">Any bracket</option>
+        {% for number, label in brackets.items() %}{% if summaries | selectattr('deck.bracket', 'equalto', number) | list %}
+        <option value="{{ number }}">{{ number }} · {{ label }}</option>
+        {% endif %}{% endfor %}
+      </select>
+    </label>
+    <label>Players<input id="random-players" class="qty" type="number" min="1" max="{{ summaries | length }}" step="1" value="1"></label>
+    <label class="check"><input id="random-complete" type="checkbox">&nbsp;Only decks I can build right now</label>
+    <button id="random-go">Pick a random deck</button>
+  </div>
+  <div id="random-result" class="random-result" aria-live="polite"></div>
+</div>
 {% endif %}
 
 <div class="panel">
@@ -242,6 +260,83 @@
 {% endblock %}
 
 {% block scripts %}
+{% if not deck and summaries %}
+<script>
+  // Deck randomizer: one random deck, or a different one for every player at the table.
+  const savedDecks = {{ deck_data | tojson }};
+  const result = document.getElementById("random-result");
+  const goButton = document.getElementById("random-go");
+  let lastPick = [];
+
+  function eligibleDecks() {
+    const bracket = document.getElementById("random-bracket").value;
+    const completeOnly = document.getElementById("random-complete").checked;
+    return savedDecks.filter((d) => (!bracket || String(d.bracket) === bracket) && (!completeOnly || d.complete));
+  }
+
+  function shuffled(list) {
+    const copy = [...list];
+    for (let i = copy.length - 1; i > 0; i -= 1) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [copy[i], copy[j]] = [copy[j], copy[i]];
+    }
+    return copy;
+  }
+
+  function card(deck, player, settled) {
+    const item = document.createElement(settled ? "a" : "div");
+    item.className = "random-card" + (settled ? " settled" : "");
+    if (settled) item.href = `/decks/${deck.id}`;
+    const title = document.createElement("strong");
+    title.textContent = deck.name;
+    const detail = document.createElement("span");
+    detail.className = "muted";
+    detail.textContent = [
+      player,
+      deck.bracket ? `Bracket ${deck.bracket} · ${deck.bracket_name}` : "No bracket",
+      deck.complete ? "ready to play" : `${deck.needed - deck.usable} card${deck.needed - deck.usable === 1 ? "" : "s"} missing`,
+    ].filter(Boolean).join(" · ");
+    item.append(title, detail);
+    return item;
+  }
+
+  function show(decks, settled) {
+    result.replaceChildren(...decks.map((deck, i) => card(deck, decks.length > 1 ? `Player ${i + 1}` : "", settled)));
+  }
+
+  goButton.addEventListener("click", () => {
+    const pool = eligibleDecks();
+    const players = Math.max(1, Number(document.getElementById("random-players").value) || 1);
+    if (pool.length < players) {
+      result.textContent = pool.length
+        ? `Only ${pool.length} deck${pool.length === 1 ? "" : "s"} match, not enough for ${players} players.`
+        : "No decks match those choices.";
+      return;
+    }
+    // Avoid handing out exactly the same pick twice in a row when there is a choice.
+    let pick = shuffled(pool).slice(0, players);
+    for (let attempt = 0; attempt < 5 && pool.length > players && pick.every((d, i) => d.id === lastPick[i]); attempt += 1) {
+      pick = shuffled(pool).slice(0, players);
+    }
+    lastPick = pick.map((d) => d.id);
+
+    // A short shuffle through the candidates before it lands.
+    goButton.disabled = true;
+    let ticks = pool.length > players ? 14 : 0;
+    const spin = () => {
+      if (ticks <= 0) {
+        show(pick, true);
+        goButton.disabled = false;
+        return;
+      }
+      show(shuffled(pool).slice(0, players), false);
+      ticks -= 1;
+      setTimeout(spin, 60 + (14 - ticks) * 12);
+    };
+    spin();
+  });
+</script>
+{% endif %}
 {% if deck %}
 <div id="unsaved-bar" class="unsaved-bar" hidden>
   <span>You have unsaved changes in this deck.</span>

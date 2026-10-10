@@ -243,8 +243,25 @@ def _decklist_text(rows: list[decks.DeckRow]) -> str:
 
 @router.get("/deck")
 def deck_page(request: Request, session: Session = Depends(get_session)):
-    return render(request, "deck.html", rows=None, deck=None, summaries=decks.deck_summaries(session),
-                  brackets=decks.BRACKETS)
+    summaries = decks.deck_summaries(session)
+    return render(request, "deck.html", rows=None, deck=None, summaries=summaries, brackets=decks.BRACKETS,
+                  deck_data=_deck_data(summaries))
+
+
+def _deck_data(summaries: list[decks.DeckSummary]) -> list[dict]:
+    """What the deck randomizer on the page needs to know about every saved deck."""
+    return [
+        {
+            "id": s.deck.id,
+            "name": s.deck.name,
+            "bracket": s.deck.bracket,
+            "bracket_name": s.bracket_name,
+            "complete": s.complete,
+            "usable": s.usable,
+            "needed": s.needed,
+        }
+        for s in summaries
+    ]
 
 
 @router.post("/deck")
@@ -266,7 +283,8 @@ async def deck_check(
         loaded = await load_deck(decklist, archidekt_url, uploaded, include_basics, include_tokens)
     except decks.DeckError as exc:
         return render(request, "deck.html", rows=None, deck=None, summaries=summaries, decklist=decklist,
-                      archidekt_url=archidekt_url, brackets=decks.BRACKETS, msg=str(exc), error=True)
+                      archidekt_url=archidekt_url, brackets=decks.BRACKETS, deck_data=_deck_data(summaries),
+                      msg=str(exc), error=True)
     name, cards = loaded.name, loaded.cards
     if name is None and uploaded:
         name = PurePath(file.filename).stem
@@ -278,7 +296,7 @@ async def deck_check(
     rows = decks.check_deck(session, cards)
     return render(request, "deck.html", rows=rows, deck=None, summaries=summaries, deck_name=name,
                   decklist=_decklist_text(rows), archidekt_url=archidekt_url, left_out=loaded.left_out,
-                  bracket=loaded.bracket, brackets=decks.BRACKETS,
+                  bracket=loaded.bracket, brackets=decks.BRACKETS, deck_data=_deck_data(summaries),
                   include_basics=include_basics, include_tokens=include_tokens)
 
 

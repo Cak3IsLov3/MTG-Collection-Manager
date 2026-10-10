@@ -250,6 +250,21 @@ async def save_deck(payload: DeckSaveIn, session: Session = Depends(get_session)
     return _deck_detail(session, deck)
 
 
+@router.get("/decks/random", response_model=list[DeckOut])
+def random_decks(
+    count: int = 1,
+    bracket: int | None = None,
+    complete_only: bool = False,
+    session: Session = Depends(get_session),
+):
+    """Pick `count` different saved decks at random, optionally only from one bracket or only complete ones."""
+    try:
+        picked = decks.random_decks(decks.deck_summaries(session), count, bracket, complete_only)
+    except decks.DeckError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return [_deck_out(summary) for summary in picked]
+
+
 @router.get("/decks/{deck_id}", response_model=DeckDetailOut)
 def get_deck(deck_id: int, session: Session = Depends(get_session)):
     deck = session.get(Deck, deck_id)

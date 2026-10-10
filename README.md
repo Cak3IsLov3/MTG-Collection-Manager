@@ -15,9 +15,9 @@ price.
 | --- | --- |
 | ![Top 10 most valuable cards, risers and fallers](docs/dashboard-cards.jpg) | ![Wishlist](docs/wishlist.jpg) |
 
-| Collection: add by name or card number, edit quantities | Saved decks with their bracket, and adding a new one |
+| Collection: add by name or card number, edit quantities | Saved decks, and the randomizer picking a deck for three players |
 | --- | --- |
-| ![Collection](docs/collection.jpg) | ![Saved decks with bracket, progress and value](docs/decks.jpg) |
+| ![Collection](docs/collection.jpg) | ![Saved decks with bracket, progress and value, and a random deck for each of three players](docs/decks.jpg) |
 
 ![Searching the collection: four versions of Sol Ring, told apart by set and card number](docs/collection-search.jpg)
 
@@ -58,6 +58,7 @@ price.
 - Saved decks: save a deck and the cards you own are set aside for it. Every copy can only be in one deck, so a second deck does not count the same Sol Ring again; it shows which deck is using it instead
 - Basic lands and tokens are left out of the tracked cards by default, so they do not show up as missing or end up on your wishlist; tick a box to include them
 - Basic lands per deck: fill in how many of each basic land a deck runs, whatever the printing. Imported decks start with the numbers from the list, and older decks can move their lands over in one click
+- Deck randomizer: can't decide what to play? Pick a random deck, or a different one for every player at the table, optionally only from one bracket or only decks you can build right now
 - Search inside a deck on card name or set
 - One "Save changes" button per deck: bracket, basic lands and chosen printings are edited freely and stored together, with a reminder while there are unsaved changes
 - Commander bracket per deck: taken from Archidekt when the deck has one, and changeable at any time
@@ -130,6 +131,7 @@ product page. Two things to know:
 | `GET` | `/api/summary` | Collection value vs. wishlist cost |
 | `POST` | `/api/decks/check` | Have/missing overview for a decklist or Archidekt URL |
 | `GET` / `POST` | `/api/decks` | List saved decks / save a deck and set its cards aside |
+| `GET` | `/api/decks/random` | Pick random decks (`count`, `bracket`, `complete_only`) |
 | `GET` / `DELETE` | `/api/decks/{id}` | A saved deck with its cards / delete it and free its cards |
 | `PUT` | `/api/decks/{id}/cards/{entry_id}/printing` | Choose which printing a deck uses for a card |
 | `PUT` | `/api/decks/{id}/basic-lands` | Set how many of each basic land a deck runs |
