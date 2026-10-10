@@ -8,7 +8,7 @@ from app.cardmarket import is_cardmarket_url
 from app.csv_import import CsvFormatError, parse_collection_csv
 from app.database import get_session
 from app.deps import get_scryfall
-from app.models import Card, CollectionEntry, WishlistEntry
+from app.models import Card, CollectionEntry, Deck, WishlistEntry
 from app.schemas import (
     AlertOut,
     CollectionAdd,
@@ -16,6 +16,9 @@ from app.schemas import (
     CollectionOut,
     DeckCardOut,
     DeckCheckIn,
+    DeckDetailOut,
+    DeckOut,
+    DeckSaveIn,
     ImportOut,
     PurchaseIn,
     SummaryOut,
@@ -179,34 +182,78 @@ def card_prices(card_id: int, session: Session = Depends(get_session)):
 
 @router.post("/decks/check", response_model=list[DeckCardOut])
 async def check_deck(payload: DeckCheckIn, session: Session = Depends(get_session)):
+    """Have/missing overview for a deck, without saving it."""
     try:
-        cards = await load_deck(payload.decklist, payload.archidekt_url)
+        _, cards = await load_deck(payload.decklist, payload.archidekt_url)
     except decks.DeckError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return [
-        DeckCardOut(
-            name=r.name, needed=r.needed, owned=r.owned, missing=r.missing, on_wishlist=r.on_wishlist,
-            printings=[CollectionItemOut.from_row(p) for p in r.printings],
-        )
-        for r in decks.check_deck(session, cards)
-    ]
+    return [DeckCardOut.from_row(row) for row in decks.check_deck(session, cards)]
+
+
+def _deck_out(summary: decks.DeckSummary) -> DeckOut:
+    return DeckOut(
+        id=summary.deck.id, name=summary.deck.name, cards_needed=summary.needed,
+        cards_usable=summary.usable, complete=summary.complete,
+    )
+
+
+def _deck_detail(session: Session, deck: Deck) -> DeckDetailOut:
+    summary = next(s for s in decks.deck_summaries(session) if s.deck.id == deck.id)
+    cards = [DeckCardOut.from_row(row) for row in decks.saved_deck_rows(session, deck)]
+    return DeckDetailOut(**_deck_out(summary).model_dump(), cards=cards)
+
+
+@router.get("/decks", response_model=list[DeckOut])
+def list_decks(session: Session = Depends(get_session)):
+    return [_deck_out(summary) for summary in decks.deck_summaries(session)]
+
+
+@router.post("/decks", response_model=DeckDetailOut, status_code=201)
+async def save_deck(payload: DeckSaveIn, session: Session = Depends(get_session)):
+    """Save a deck; the cards you own are set aside for it and no longer count for newer decks."""
+    try:
+        _, cards = await load_deck(payload.decklist, payload.archidekt_url)
+    except decks.DeckError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    deck = decks.save_deck(session, payload.name, cards)
+    session.commit()
+    return _deck_detail(session, deck)
+
+
+@router.get("/decks/{deck_id}", response_model=DeckDetailOut)
+def get_deck(deck_id: int, session: Session = Depends(get_session)):
+    deck = session.get(Deck, deck_id)
+    if deck is None:
+        raise HTTPException(status_code=404, detail="Deck not found")
+    return _deck_detail(session, deck)
+
+
+@router.delete("/decks/{deck_id}", status_code=204)
+def delete_deck(deck_id: int, session: Session = Depends(get_session)):
+    deck = session.get(Deck, deck_id)
+    if deck is None:
+        raise HTTPException(status_code=404, detail="Deck not found")
+    decks.delete_deck(session, deck)
+    session.commit()
 
 
 async def load_deck(
     decklist: str | None, archidekt_url: str | None, file_content: bytes | None = None
-) -> list[decks.DeckCard]:
+) -> tuple[str | None, list[decks.DeckCard]]:
+    """Returns (deck name if the source has one, cards)."""
+    name = None
     if archidekt_url and archidekt_url.strip():
         deck_id = decks.archidekt_deck_id(archidekt_url)
         if deck_id is None:
             raise decks.DeckError("That does not look like an Archidekt deck URL")
-        _, cards = await decks.fetch_archidekt_deck(deck_id)
+        name, cards = await decks.fetch_archidekt_deck(deck_id)
     elif file_content:
         cards = decks.parse_deck_file(file_content)
     else:
         cards = decks.parse_decklist(decklist or "")
     if not cards:
         raise decks.DeckError("No cards found in that deck")
-    return cards
+    return name, cards
 
 
 @router.post("/jobs/update-prices", status_code=202)

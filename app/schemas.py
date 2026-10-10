@@ -129,6 +129,33 @@ class DeckCardOut(BaseModel):
     name: str
     needed: int
     owned: int
+    reserved: int
+    available: int
     missing: int
     on_wishlist: bool
+    used_by: list[str] = []
     printings: list[CollectionItemOut] = []
+
+    @classmethod
+    def from_row(cls, row) -> "DeckCardOut":
+        return cls(
+            name=row.name, needed=row.needed, owned=row.owned, reserved=row.reserved,
+            available=row.available, missing=row.missing, on_wishlist=row.on_wishlist,
+            used_by=row.used_by, printings=[CollectionItemOut.from_row(p) for p in row.printings],
+        )
+
+
+class DeckSaveIn(DeckCheckIn):
+    name: str = Field(min_length=1)
+
+
+class DeckOut(BaseModel):
+    id: int
+    name: str
+    cards_needed: int
+    cards_usable: int
+    complete: bool
+
+
+class DeckDetailOut(DeckOut):
+    cards: list[DeckCardOut]

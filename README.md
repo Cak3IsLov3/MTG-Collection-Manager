@@ -41,6 +41,7 @@ price.
 - Collection value next to wishlist cost
 - "Bought it" moves a card from WANT to HAVE
 - Deck check: paste a decklist, upload a deck file or give an Archidekt URL. You see which cards you already own and in which printing (set, foil, quantity), so you can pull them from your collection, and you can add the missing cards to your wishlist in one click
+- Saved decks: save a deck and the cards you own are set aside for it. Every copy can only be in one deck, so a second deck does not count the same Sol Ring again; it shows which deck is using it instead
 
 ## Quick start
 
@@ -107,6 +108,8 @@ product page. Two things to know:
 | `GET` | `/api/cards/{id}/prices` | Price history of one card |
 | `GET` | `/api/summary` | Collection value vs. wishlist cost |
 | `POST` | `/api/decks/check` | Have/missing overview for a decklist or Archidekt URL |
+| `GET` / `POST` | `/api/decks` | List saved decks / save a deck and set its cards aside |
+| `GET` / `DELETE` | `/api/decks/{id}` | A saved deck with its cards / delete it and free its cards |
 | `POST` | `/api/jobs/update-prices`, `/api/jobs/check-wishlist` | Run a background job now |
 
 ## How it works
@@ -114,7 +117,7 @@ product page. Two things to know:
 ```
 app/
   main.py              FastAPI app, lifespan (database + scheduler)
-  models.py            Card, CollectionEntry, WishlistEntry, PriceSnapshot, Alert, DailyTotal
+  models.py            Card, CollectionEntry, WishlistEntry, PriceSnapshot, Alert, DailyTotal, Deck, DeckEntry
   scryfall.py          async Scryfall client (httpx), batch lookups, 429 retry
   cardmarket.py        product page scraper (BeautifulSoup), selectors from JSON
   rate_limit.py        one independent rate-limit queue per external source

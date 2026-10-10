@@ -61,3 +61,18 @@ class DailyTotal(SQLModel, table=True):
     date: dt.date = Field(unique=True, index=True)
     collection_value: float = 0.0
     wishlist_cost: float = 0.0
+
+
+class Deck(SQLModel, table=True):
+    """A saved deck. Older decks get first pick of the cards in the collection."""
+
+    id: int | None = Field(default=None, primary_key=True)
+    name: str
+    created_at: dt.datetime = Field(default_factory=utcnow)
+
+
+class DeckEntry(SQLModel, table=True):
+    id: int | None = Field(default=None, primary_key=True)
+    deck_id: int = Field(foreign_key="deck.id", index=True)
+    name: str
+    quantity: int = 1

@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Deck check · MTG Collection Manager{% endblock %}
+{% block title %}{{ deck.name if deck else 'Decks' }} · MTG Collection Manager{% endblock %}
 
 {% macro printings(row) %}
   {% for p in row.printings %}
@@ -16,11 +16,45 @@
   {% if image %}<img class="thumb" src="{{ image }}" alt="" loading="lazy">{% endif %}
 {% endmacro %}
 
+{% macro in_use(row) %}
+  {% if row.used_by %}<div class="printing muted">{{ row.reserved }} in use by {{ row.used_by | join(', ') }}</div>{% endif %}
+{% endmacro %}
+
 {% block content %}
-<h1>Deck check</h1>
+{% if deck %}
+<div class="toolbar">
+  <h1>{{ deck.name }}</h1>
+  <div class="actions">
+    <a href="/deck">← All decks</a>
+    <form class="inline" method="post" action="/decks/{{ deck.id }}/delete"
+          onsubmit="return confirm('Delete this deck? Its cards become available for other decks again.')">
+      <button class="secondary small">Delete deck</button>
+    </form>
+  </div>
+</div>
+{% else %}
+<h1>Decks</h1>
+
+{% if summaries %}
+<div class="panel table-wrap">
+  <h2>Your saved decks</h2>
+  <table>
+    <tr><th>Deck</th><th class="num">Cards</th><th>Owned</th><th></th></tr>
+    {% for s in summaries %}
+    <tr>
+      <td><a href="/decks/{{ s.deck.id }}">{{ s.deck.name }}</a></td>
+      <td class="num">{{ s.usable }} / {{ s.needed }}</td>
+      <td style="width: 40%"><div class="progress slim"><div style="width: {{ s.percent }}%"></div></div></td>
+      <td>{% if s.complete %}<span class="badge hit">complete</span>{% else %}<span class="badge">{{ s.needed - s.usable }} missing</span>{% endif %}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  <p class="muted">Every copy you own can only be in one deck. Older decks get first pick; what is left counts for newer decks.</p>
+</div>
+{% endif %}
 
 <div class="panel">
-  <h2>Which cards of a deck do you already own?</h2>
+  <h2>Check a deck against your collection</h2>
   <form method="post" action="/deck" enctype="multipart/form-data">
     <div class="row deck-sources">
       <label>Archidekt deck URL<input name="archidekt_url" type="url" size="44" value="{{ archidekt_url or '' }}" placeholder="https://archidekt.com/decks/123456/my-deck"></label>
@@ -31,6 +65,7 @@
     <p><button>Check deck</button></p>
   </form>
 </div>
+{% endif %}
 
 {% if rows is not none %}
 {% set have = rows | rejectattr('missing') | list %}
@@ -41,28 +76,43 @@
 {% set pct = (usable / total * 100) | round | int if total else 0 %}
 
 <div class="panel">
-  <h2>You own {{ usable }} of the {{ total }} cards in this deck ({{ pct }}%)</h2>
+  {% if deck %}
+  <h2>{{ usable }} of the {{ total }} cards are set aside for this deck ({{ pct }}%)</h2>
+  {% else %}
+  <h2>You have {{ usable }} of the {{ total }} cards for this deck available ({{ pct }}%)</h2>
+  {% endif %}
   <div class="progress"><div style="width: {{ pct }}%"></div></div>
-  <p class="muted">{{ have | length }} different cards ready to pull from your collection · {{ need | length }} still to get</p>
+  <p class="muted">
+    {{ have | length }} different cards {{ 'set aside for this deck' if deck else 'ready to pull from your collection' }} · {{ need | length }} still to get
+  </p>
+  {% if not deck %}
+  <form class="row" method="post" action="/deck/save">
+    <input type="hidden" name="decklist" value="{{ decklist }}">
+    <label>Deck name<input name="name" required size="30" value="{{ deck_name or '' }}" placeholder="My Commander deck"></label>
+    <button>Save deck &amp; set these cards aside</button>
+  </form>
+  <p class="muted">Saved decks keep their cards, so the next deck you check does not count the same Sol Ring again.</p>
+  {% endif %}
 </div>
 
 <div class="panel table-wrap">
-  <h2 class="up">In your collection ({{ have | length }})</h2>
+  <h2 class="up">{{ 'In this deck' if deck else 'Available in your collection' }} ({{ have | length }})</h2>
   {% if have %}
   <table>
-    <tr><th></th><th>Card</th><th class="num">Needed</th><th class="num">Owned</th><th>Where to find it</th></tr>
+    <tr><th></th><th>Card</th><th class="num">Needed</th><th class="num">Owned</th><th class="num">Free</th><th>Where to find it</th></tr>
     {% for row in have %}
     <tr>
       <td>{{ thumb(row) }}</td>
       <td>{{ row.name }}</td>
       <td class="num">{{ row.needed }}</td>
       <td class="num">{{ row.owned }}</td>
-      <td>{{ printings(row) }}</td>
+      <td class="num">{{ row.available }}</td>
+      <td>{{ printings(row) }}{{ in_use(row) }}</td>
     </tr>
     {% endfor %}
   </table>
   {% else %}
-  <p class="muted">You don't own any of these cards yet.</p>
+  <p class="muted">None of these cards are available in your collection yet.</p>
   {% endif %}
 </div>
 
@@ -79,16 +129,18 @@
   </div>
   {% if need %}
   <table>
-    <tr><th></th><th>Card</th><th class="num">Needed</th><th class="num">Owned</th><th class="num">Missing</th><th>Status</th></tr>
+    <tr><th></th><th>Card</th><th class="num">Needed</th><th class="num">Owned</th><th class="num">Free</th><th class="num">Missing</th><th>Status</th></tr>
     {% for row in need %}
     <tr>
       <td>{{ thumb(row) }}</td>
-      <td>{{ row.name }}{% if row.printings %}<div>{{ printings(row) }}</div>{% endif %}</td>
+      <td>{{ row.name }}{{ printings(row) }}{{ in_use(row) }}</td>
       <td class="num">{{ row.needed }}</td>
       <td class="num">{{ row.owned }}</td>
+      <td class="num">{{ row.available }}</td>
       <td class="num down">{{ row.missing }}</td>
       <td>
         {% if row.on_wishlist %}<span class="badge">on wishlist</span>
+        {% elif row.owned and not row.available %}<span class="badge">all copies in other decks</span>
         {% elif row.owned %}<span class="badge">need more copies</span>
         {% else %}<span class="badge">not owned</span>{% endif %}
       </td>
@@ -96,7 +148,7 @@
     {% endfor %}
   </table>
   {% else %}
-  <p class="up">You own every card in this deck.</p>
+  <p class="up">{{ 'This deck is complete.' if deck else 'You have every card for this deck available.' }}</p>
   {% endif %}
 </div>
 {% endif %}

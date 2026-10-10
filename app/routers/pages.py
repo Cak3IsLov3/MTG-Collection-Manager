@@ -1,5 +1,6 @@
 """Server-rendered pages (Jinja2) and the HTML forms behind them."""
 
+from pathlib import PurePath
 from urllib.parse import quote
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Request, UploadFile
@@ -13,7 +14,7 @@ from app.config import BASE_DIR
 from app.csv_import import CsvFormatError, parse_collection_csv
 from app.database import get_session
 from app.deps import get_scryfall
-from app.models import Card, CollectionEntry, WishlistEntry
+from app.models import Card, CollectionEntry, Deck, WishlistEntry
 from app.routers.api import load_deck
 from app.scryfall import ScryfallClient, ScryfallError
 from app.services import collection, decks, stats, wishlist
@@ -222,9 +223,13 @@ def wishlist_delete(entry_id: int, session: Session = Depends(get_session)):
 # --- deck view ---------------------------------------------------------------
 
 
+def _decklist_text(rows: list[decks.DeckRow]) -> str:
+    return "\n".join(f"{row.needed} {row.name}" for row in rows)
+
+
 @router.get("/deck")
-def deck_page(request: Request):
-    return render(request, "deck.html", rows=None)
+def deck_page(request: Request, session: Session = Depends(get_session)):
+    return render(request, "deck.html", rows=None, deck=None, summaries=decks.deck_summaries(session))
 
 
 @router.post("/deck")
@@ -236,13 +241,47 @@ async def deck_check(
     session: Session = Depends(get_session),
 ):
     uploaded = await file.read() if file is not None and file.filename else None
+    summaries = decks.deck_summaries(session)
     try:
-        cards = await load_deck(decklist, archidekt_url, uploaded)
+        name, cards = await load_deck(decklist, archidekt_url, uploaded)
     except decks.DeckError as exc:
-        return render(request, "deck.html", rows=None, decklist=decklist, archidekt_url=archidekt_url,
-                      msg=str(exc), error=True)
+        return render(request, "deck.html", rows=None, deck=None, summaries=summaries, decklist=decklist,
+                      archidekt_url=archidekt_url, msg=str(exc), error=True)
+    if name is None and uploaded:
+        name = PurePath(file.filename).stem
     rows = decks.check_deck(session, cards)
-    return render(request, "deck.html", rows=rows, decklist=decklist, archidekt_url=archidekt_url)
+    return render(request, "deck.html", rows=rows, deck=None, summaries=summaries, deck_name=name or "",
+                  decklist=_decklist_text(rows), archidekt_url=archidekt_url)
+
+
+@router.post("/deck/save")
+def deck_save(name: str = Form(...), decklist: str = Form(...), session: Session = Depends(get_session)):
+    cards = decks.parse_decklist(decklist)
+    if not cards:
+        return redirect("/deck", "No cards found in that deck", error=True)
+    deck = decks.save_deck(session, name, cards)
+    session.commit()
+    return redirect(f"/decks/{deck.id}", f"Saved {deck.name}. The cards you own are now set aside for this deck.")
+
+
+@router.get("/decks/{deck_id}")
+def saved_deck_page(deck_id: int, request: Request, session: Session = Depends(get_session)):
+    deck = session.get(Deck, deck_id)
+    if deck is None:
+        raise HTTPException(status_code=404, detail="Deck not found")
+    return render(request, "deck.html", rows=decks.saved_deck_rows(session, deck), deck=deck,
+                  summaries=decks.deck_summaries(session))
+
+
+@router.post("/decks/{deck_id}/delete")
+def saved_deck_delete(deck_id: int, session: Session = Depends(get_session)):
+    deck = session.get(Deck, deck_id)
+    if deck is None:
+        return redirect("/deck", "Deck not found", error=True)
+    name = deck.name
+    decks.delete_deck(session, deck)
+    session.commit()
+    return redirect("/deck", f"Deleted {name}. Its cards are available for other decks again.")
 
 
 @router.post("/deck/wishlist")
