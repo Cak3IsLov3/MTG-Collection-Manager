@@ -15,7 +15,7 @@ price.
 | --- | --- |
 | ![Top 10 most valuable cards, risers and fallers](docs/dashboard-cards.jpg) | ![Wishlist](docs/wishlist.jpg) |
 
-| Collection with CSV import | Saved decks |
+| Collection with CSV import | Saved decks and adding a new one |
 | --- | --- |
 | ![Collection](docs/collection.jpg) | ![Saved decks with progress](docs/decks.jpg) |
 

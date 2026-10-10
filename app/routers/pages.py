@@ -237,9 +237,12 @@ async def deck_check(
     request: Request,
     decklist: str = Form(""),
     archidekt_url: str = Form(""),
+    deck_name: str = Form(""),
+    action: str = Form("check"),
     file: UploadFile | None = File(None),
     session: Session = Depends(get_session),
 ):
+    """Check a deck against the collection; with action=save it is stored as well."""
     uploaded = await file.read() if file is not None and file.filename else None
     summaries = decks.deck_summaries(session)
     try:
@@ -249,8 +252,13 @@ async def deck_check(
                       archidekt_url=archidekt_url, msg=str(exc), error=True)
     if name is None and uploaded:
         name = PurePath(file.filename).stem
+    name = deck_name.strip() or name or ""
+    if action == "save":
+        deck = decks.save_deck(session, name, cards)
+        session.commit()
+        return redirect(f"/decks/{deck.id}", f"Saved {deck.name}. The cards you own are now set aside for this deck.")
     rows = decks.check_deck(session, cards)
-    return render(request, "deck.html", rows=rows, deck=None, summaries=summaries, deck_name=name or "",
+    return render(request, "deck.html", rows=rows, deck=None, summaries=summaries, deck_name=name,
                   decklist=_decklist_text(rows), archidekt_url=archidekt_url)
 
 

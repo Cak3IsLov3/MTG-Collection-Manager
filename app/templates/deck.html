@@ -54,7 +54,7 @@
 {% endif %}
 
 <div class="panel">
-  <h2>Check a deck against your collection</h2>
+  <h2>Add a deck</h2>
   <form method="post" action="/deck" enctype="multipart/form-data">
     <div class="row deck-sources">
       <label>Archidekt deck URL<input name="archidekt_url" type="url" size="44" value="{{ archidekt_url or '' }}" placeholder="https://archidekt.com/decks/123456/my-deck"></label>
@@ -62,7 +62,12 @@
     </div>
     <p class="muted">…or paste a decklist (one card per line, e.g. <code>1 Sol Ring</code>):</p>
     <textarea name="decklist" placeholder="1 Sol Ring&#10;1 Arcane Signet&#10;1 Fire // Ice">{{ decklist or '' }}</textarea>
-    <p><button>Check deck</button></p>
+    <div class="row">
+      <label>Deck name (optional)<input name="deck_name" size="30" value="{{ deck_name or '' }}" placeholder="Taken from Archidekt or the file name"></label>
+      <button name="action" value="save">Save deck</button>
+      <button name="action" value="check" class="secondary">Only check, don't save</button>
+    </div>
+    <p class="muted">Saving sets the cards you own aside for this deck. "Only check" shows what you have without saving anything.</p>
   </form>
 </div>
 {% endif %}
@@ -91,7 +96,7 @@
     <label>Deck name<input name="name" required size="30" value="{{ deck_name or '' }}" placeholder="My Commander deck"></label>
     <button>Save deck &amp; set these cards aside</button>
   </form>
-  <p class="muted">Saved decks keep their cards, so the next deck you check does not count the same Sol Ring again.</p>
+  <p class="muted"><strong>This deck is not saved yet.</strong> Saved decks keep their cards, so the next deck does not count the same Sol Ring again.</p>
   {% endif %}
 </div>
 

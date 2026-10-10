@@ -156,3 +156,15 @@ def test_save_deck_through_pages_and_api(client):
     assert client.delete(f"/api/decks/{first_id}").status_code == 204
     assert client.get(f"/api/decks/{body['id']}").json()["complete"] is True
     assert client.get("/api/decks/9999").status_code == 404
+
+def test_adding_a_deck_saves_it_unless_only_checking(client):
+    client.post("/api/collection", json={"name": "Sol Ring"})
+    checked = client.post("/deck", data={"decklist": "1 Sol Ring", "action": "check"})
+    assert "This deck is not saved yet." in checked.text
+    assert client.get("/api/decks").json() == []
+
+    saved = client.post("/deck", data={"decklist": "1 Sol Ring", "deck_name": "Ramp", "action": "save"})
+    assert "Saved Ramp" in saved.text and "This deck is complete." in saved.text
+    unnamed = client.post("/deck", files={"file": ("storm.txt", b"1 Sol Ring\n", "text/plain")}, data={"action": "save"})
+    assert "Saved storm" in unnamed.text
+    assert [d["name"] for d in client.get("/api/decks").json()] == ["Ramp", "storm"]
