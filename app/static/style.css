@@ -165,3 +165,5 @@ th[aria-sort] button.sort { color: var(--text); }
 /* Keep prices, badges and row buttons on one line; long card and set names wrap instead. */
 td.num, .badge { white-space: nowrap; }
 .actions { flex-wrap: nowrap; white-space: nowrap; align-items: center; }
+
+.bulk-targets { margin-bottom: 8px; font-size: 13px; }

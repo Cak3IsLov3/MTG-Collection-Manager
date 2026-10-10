@@ -19,6 +19,8 @@ price.
 | --- | --- |
 | ![Collection](docs/collection.jpg) | ![Saved decks with bracket, progress and value, and a random deck for each of three players](docs/decks.jpg) |
 
+![Wishlist targets set to 85% of the current price: the changed prices are highlighted until you save them all](docs/wishlist-targets.jpg)
+
 ![Searching the collection: four versions of Sol Ring, told apart by set and card number](docs/collection-search.jpg)
 
 ![Printings without a price of their own borrow one from another printing, marked ≈ SET (Dragon Egg and Fellwar Stone)](docs/collection-borrowed.jpg)
@@ -55,6 +57,7 @@ price.
 - Periodic price check against Cardmarket, with Scryfall as a fallback
 - Discord webhook alert when a price is at or below your target, at most once per card per 24 hours
 - Sort the wishlist by card name, current price, target price or difference, in either direction
+- Edit target prices freely and store them with one "Save all prices" button; set every target to 80, 85, 90 or 95% of the current price in one click
 - Alert history
 
 **Both**
@@ -136,6 +139,7 @@ product page. Two things to know:
 | `PATCH` / `DELETE` | `/api/collection/{id}` | Change the quantity of an entry / remove it |
 | `GET` / `POST` | `/api/wishlist` | List the wishlist / watch a card with a max price |
 | `POST` | `/api/wishlist/{id}/purchase` | Move a card from WANT to HAVE |
+| `PUT` | `/api/wishlist/targets` | Set several target prices at once |
 | `DELETE` | `/api/wishlist/{id}` | Stop watching a card |
 | `GET` | `/api/alerts` | Alert history |
 | `GET` | `/api/cards/{id}/prices` | Price history of one card |

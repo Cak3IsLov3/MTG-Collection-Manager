@@ -200,6 +200,28 @@ def _active_entry(session: Session, entry_id: int) -> WishlistEntry | None:
     return entry if entry is not None and entry.active else None
 
 
+@router.post("/wishlist/targets")
+async def wishlist_targets(request: Request, session: Session = Depends(get_session)):
+    """The "Save all prices" button: every target price on the page in one go."""
+    targets: dict[int, float] = {}
+    for key, value in (await request.form()).items():
+        if not key.startswith("target:"):
+            continue
+        price = parse_money(str(value))
+        if price is None or not key.removeprefix("target:").isdigit():
+            return redirect("/wishlist", f"Nothing was saved: '{value}' is not a valid price", error=True)
+        targets[int(key.removeprefix("target:"))] = price
+    try:
+        changed = wishlist.set_targets(session, targets)
+    except ValueError as exc:
+        session.rollback()
+        return redirect("/wishlist", f"Nothing was saved: {exc}", error=True)
+    session.commit()
+    if not changed:
+        return redirect("/wishlist", "No target prices were changed")
+    return redirect("/wishlist", f"Saved {changed} target price{'s' if changed != 1 else ''}")
+
+
 @router.post("/wishlist/{entry_id}/target")
 def wishlist_target(entry_id: int, target_price: str = Form(...), session: Session = Depends(get_session)):
     entry, target = _active_entry(session, entry_id), parse_money(target_price)

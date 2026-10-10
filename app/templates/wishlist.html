@@ -4,7 +4,12 @@
 {% block content %}
 <div class="toolbar">
   <h1>Wishlist <span class="muted">· {{ total | eur }} to buy it all</span></h1>
-  <form method="post" action="/jobs/check-wishlist"><button class="secondary">Check prices now</button></form>
+  <div class="actions">
+    {# Every target price field belongs to this one form, so a single button saves them all. #}
+    <form id="wishlist-form" class="inline" method="post" action="/wishlist/targets" data-keep-scroll></form>
+    <button form="wishlist-form" class="wishlist-save">Save all prices</button>
+    <form class="inline" method="post" action="/jobs/check-wishlist"><button class="secondary">Check prices now</button></form>
+  </div>
 </div>
 
 <p class="muted">Your collection is worth {{ collection_value | eur }}, your wishlist still costs {{ total | eur }}.</p>
@@ -22,6 +27,13 @@
 
 <div class="panel table-wrap">
   {% if rows %}
+  <div class="toolbar search-bar bulk-targets">
+    <span class="muted">Set every target to</span>
+    {% for pct in (80, 85, 90, 95) %}
+    <button type="button" class="secondary small" data-target-pct="{{ pct }}" title="Fill in {{ pct }}% of each card's current price as its target">{{ pct }}%</button>
+    {% endfor %}
+    <span class="muted">of the current price, then press "Save all prices".</span>
+  </div>
   <table id="wishlist-table">
     <thead>
     <tr>
@@ -47,10 +59,8 @@
         {% if row.price_source %}<div class="muted">{{ row.price_source }} · {{ row.price_date }}</div>{% endif %}
       </td>
       <td class="num">
-        <form class="inline" method="post" action="/wishlist/{{ row.entry.id }}/target">
-          <input name="target_price" class="narrow" value="{{ '%.2f' | format(row.entry.target_price) }}" inputmode="decimal">
-          <button class="secondary small">Save</button>
-        </form>
+        <input name="target:{{ row.entry.id }}" form="wishlist-form" class="narrow" inputmode="decimal"
+               value="{{ '%.2f' | format(row.entry.target_price) }}" aria-label="Target price for {{ row.card.name }}">
       </td>
       <td class="num {{ 'up' if row.below_target else 'muted' }}">
         {% if row.difference is not none %}{{ '%+.2f' | format(row.difference) }}{% else %}–{% endif %}
@@ -101,6 +111,48 @@
 {% endblock %}
 
 {% block scripts %}
+<div id="unsaved-bar" class="unsaved-bar" hidden>
+  <span id="unsaved-text">You have unsaved target prices.</span>
+  <a href="/wishlist">Discard</a>
+  <button form="wishlist-form">Save all prices</button>
+</div>
+<script>
+  // One save for every target price: the button lights up as soon as a price differs from what is stored.
+  const targetFields = [...document.querySelectorAll('input[form="wishlist-form"]')];
+  const targetButtons = document.querySelectorAll('button[form="wishlist-form"]');
+  const targetBar = document.getElementById("unsaved-bar");
+
+  function markTargets() {
+    let changed = 0;
+    for (const field of targetFields) {
+      // defaultValue is what the server sent; "12,5" and "12.50" are the same price.
+      const typed = Number(field.value.trim().replace(",", "."));
+      const dirty = field.value.trim() === "" || Number.isNaN(typed) || typed !== Number(field.defaultValue);
+      field.classList.toggle("changed", dirty);
+      if (dirty) changed += 1;
+    }
+    for (const button of targetButtons) button.disabled = changed === 0;
+    targetBar.hidden = changed === 0;
+    document.getElementById("unsaved-text").textContent =
+      changed === 1 ? "1 target price is not saved yet." : `${changed} target prices are not saved yet.`;
+  }
+
+  for (const field of targetFields) field.addEventListener("input", markTargets);
+  markTargets();
+
+  // "80%" etc.: fill in that share of the current price for every card. Nothing is saved until you press save.
+  for (const button of document.querySelectorAll("button[data-target-pct]")) {
+    button.addEventListener("click", () => {
+      const share = Number(button.dataset.targetPct) / 100;
+      for (const field of targetFields) {
+        const current = field.closest("tr").dataset.current;
+        if (current === "") continue;  // no price known: leave the target as it is
+        field.value = (Math.round(Number(current) * share * 100) / 100).toFixed(2);
+      }
+      markTargets();
+    });
+  }
+</script>
 <script>
   // Click a column header to sort; click again to reverse. The choice is remembered in this browser.
   const wishlistTable = document.getElementById("wishlist-table");

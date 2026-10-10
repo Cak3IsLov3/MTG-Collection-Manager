@@ -213,3 +213,39 @@ def test_wishlist_table_is_sortable(client):
     assert 'data-name="Lim-Dûl&#39;s Vault" data-current="12.34"' in page
     assert 'data-target="10.0" data-difference="2.34"' in page
     assert 'data-name="Black Lotus" data-current=""' in page  # sorts last, whatever the direction
+
+
+def test_save_all_target_prices_at_once(client):
+    vault = client.post("/api/wishlist", json={"name": "Lim-Dûl's Vault", "target_price": 10}).json()
+    sol = client.post("/api/wishlist", json={"name": "Sol Ring", "target_price": 1}).json()
+    fire = client.post("/api/wishlist", json={"name": "Fire // Ice", "target_price": 0.2}).json()
+
+    page = client.get("/wishlist").text
+    assert 'id="wishlist-form"' in page and "Save all prices" in page
+    assert f'name="target:{vault["id"]}" form="wishlist-form"' in page
+    assert page.count(">Save</button>") == 0  # no more saving row by row
+    for pct in (80, 85, 90, 95):  # fill every target with a share of the current price
+        assert f'data-target-pct="{pct}"' in page
+
+    def targets():
+        return {i["card"]["name"]: i["target_price"] for i in client.get("/api/wishlist").json()["items"]}
+
+    # Three fields are submitted, two of them changed (one with a comma).
+    saved = client.post("/wishlist/targets", data={
+        f"target:{vault['id']}": "8,50", f"target:{sol['id']}": "1.00", f"target:{fire['id']}": "0.10",
+    })
+    assert "Saved 2 target prices" in saved.text
+    assert targets() == {"Lim-Dûl's Vault": 8.5, "Sol Ring": 1.0, "Fire // Ice": 0.1}
+    assert "No target prices were changed" in client.post("/wishlist/targets", data={f"target:{sol['id']}": "1"}).text
+    assert "Saved 1 target price<" in client.post("/wishlist/targets", data={f"target:{sol['id']}": "2"}).text
+
+    # One bad value and nothing is stored, not even the valid ones next to it.
+    failed = client.post("/wishlist/targets", data={f"target:{vault['id']}": "5", f"target:{sol['id']}": "cheap"})
+    assert "Nothing was saved" in failed.text
+    assert "Nothing was saved" in client.post("/wishlist/targets", data={f"target:{vault['id']}": "5", "target:9999": "1"}).text
+    assert targets() == {"Lim-Dûl's Vault": 8.5, "Sol Ring": 2.0, "Fire // Ice": 0.1}
+
+    api = client.put("/api/wishlist/targets", json={str(vault["id"]): 7, str(fire["id"]): 0.3})
+    assert api.status_code == 200 and targets() == {"Lim-Dûl's Vault": 7.0, "Sol Ring": 2.0, "Fire // Ice": 0.3}
+    assert client.put("/api/wishlist/targets", json={str(vault["id"]): -1}).status_code == 400
+    assert client.put("/api/wishlist/targets", json={"9999": 1}).status_code == 400

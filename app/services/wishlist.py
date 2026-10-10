@@ -103,6 +103,30 @@ async def add_wish_by_name(
     return add_to_wishlist(session, card, target_price, cardmarket_url or data.cardmarket_url)
 
 
+def set_targets(session: Session, targets: dict[int, float]) -> int:
+    """Set the target price of several wishlist entries at once; returns how many actually changed.
+
+    Raises ValueError (and changes nothing) when an entry is unknown or a price is negative.
+    """
+    entries = {}
+    for entry_id, price in targets.items():
+        entry = session.get(WishlistEntry, entry_id)
+        if entry is None or not entry.active:
+            raise ValueError("One of those cards is no longer on your wishlist")
+        if price < 0:
+            raise ValueError("A target price cannot be negative")
+        entries[entry_id] = entry
+    changed = 0
+    for entry_id, entry in entries.items():
+        price = round(targets[entry_id], 2)
+        if entry.target_price != price:
+            entry.target_price = price
+            session.add(entry)
+            changed += 1
+    session.flush()
+    return changed
+
+
 def purchase(session: Session, entry: WishlistEntry, quantity: int = 1, is_foil: bool = False) -> CollectionEntry:
     """WANT -> HAVE: move a bought card into the collection and stop watching it."""
     card = session.get(Card, entry.card_id)

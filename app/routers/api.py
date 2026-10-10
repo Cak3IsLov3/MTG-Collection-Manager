@@ -155,6 +155,19 @@ async def add_to_wishlist(
     return WishlistItemOut.from_row(wishlist.wishlist_rows(session, entry.id)[0])
 
 
+@router.put("/wishlist/targets", response_model=WishlistOut)
+def set_wishlist_targets(targets: dict[int, float], session: Session = Depends(get_session)):
+    """Set several target prices at once: {wishlist entry id: price}. All of them or, on an error, none."""
+    try:
+        wishlist.set_targets(session, targets)
+    except ValueError as exc:
+        session.rollback()
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    session.commit()
+    rows = wishlist.wishlist_rows(session)
+    return WishlistOut(total_cost=wishlist.wishlist_cost(rows), items=[WishlistItemOut.from_row(row) for row in rows])
+
+
 def _wishlist_entry(session: Session, entry_id: int) -> WishlistEntry:
     entry = session.get(WishlistEntry, entry_id)
     if entry is None or not entry.active:
