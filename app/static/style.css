@@ -63,7 +63,8 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 tr:last-child td { border-bottom: 0; }
 .table-wrap { overflow-x: auto; }
 
-img.thumb { width: 36px; border-radius: 3px; display: block; }
+/* Fixed shape, so rows keep their height while the images are still loading. */
+img.thumb { width: 36px; aspect-ratio: 5 / 7; background: var(--bg); border-radius: 3px; display: block; }
 .muted { color: var(--muted); }
 .up { color: var(--up); }
 .down { color: var(--down); }

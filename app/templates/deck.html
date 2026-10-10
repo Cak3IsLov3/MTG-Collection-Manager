@@ -13,8 +13,8 @@
   </div>
   {% endfor %}
   {% if deck and row.entry_id and row.printings | length > 1 %}
-  <form class="inline" method="post" action="/decks/{{ deck.id }}/cards/{{ row.entry_id }}/printing">
-    <select name="collection_entry_id" onchange="this.form.submit()" title="Choose which printing this deck uses">
+  <form class="inline" method="post" action="/decks/{{ deck.id }}/cards/{{ row.entry_id }}/printing" data-keep-scroll>
+    <select name="collection_entry_id" onchange="this.form.requestSubmit()" title="Choose which printing this deck uses">
       <option value="">Choose for me (cheapest free copy)</option>
       {% for p in row.printings %}
       {% set free = row.free.get(p.entry.id, 0) %}

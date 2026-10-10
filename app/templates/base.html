@@ -23,6 +23,21 @@
     {% block content %}{% endblock %}
   </main>
   <script>
+    // Forms marked data-keep-scroll reload the same page; put the reader back where they were.
+    const scrollKey = "scroll:" + location.pathname;
+    try {
+      const saved = sessionStorage.getItem(scrollKey);
+      if (saved !== null) {
+        sessionStorage.removeItem(scrollKey);
+        history.scrollRestoration = "manual";
+        window.scrollTo(0, Number(saved));
+      }
+    } catch (error) { /* storage unavailable: the page just starts at the top */ }
+    document.addEventListener("submit", (event) => {
+      if (!event.target.hasAttribute("data-keep-scroll")) return;
+      try { sessionStorage.setItem(scrollKey, String(window.scrollY)); } catch (error) {}
+    });
+
     // Two-click confirmation for destructive buttons: the first click arms the button, the second submits.
     // (Not window.confirm(): embedded browsers suppress native dialogs, which silently cancels the action.)
     document.addEventListener("submit", (event) => {
