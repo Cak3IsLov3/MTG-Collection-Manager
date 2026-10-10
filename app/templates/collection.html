@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}Collection · MTG Collection Manager{% endblock %}
+
+{% block content %}
+<div class="toolbar">
+  <h1>Collection <span class="muted">· {{ total | eur }}</span></h1>
+</div>
+
+<div class="grid two">
+  <div class="panel">
+    <h2>Add a card</h2>
+    <form class="row" method="post" action="/collection/add">
+      <label>Card name<input name="name" required placeholder="Lim-Dûl's Vault"></label>
+      <label>Set (optional)<input name="set_code" class="narrow" placeholder="cmm"></label>
+      <label>Quantity<input name="quantity" type="number" min="1" value="1"></label>
+      <label class="check"><input name="is_foil" type="checkbox">&nbsp;Foil</label>
+      <button>Add</button>
+    </form>
+  </div>
+  <div class="panel">
+    <h2>Import CSV</h2>
+    <form class="row" method="post" action="/collection/import" enctype="multipart/form-data">
+      <label>Archidekt or Moxfield export<input name="file" type="file" accept=".csv,text/csv" required></label>
+      <button>Import</button>
+    </form>
+  </div>
+</div>
+
+<div class="panel table-wrap">
+  {% if rows %}
+  <table>
+    <tr>
+      <th></th><th>Card</th><th>Set</th><th class="num">Qty</th>
+      <th class="num">Price</th><th class="num">Total</th><th></th>
+    </tr>
+    {% for row in rows %}
+    <tr>
+      <td>{% if row.card.image_url %}<img class="thumb" src="{{ row.card.image_url }}" alt="" loading="lazy">{% endif %}</td>
+      <td>
+        <a href="/cards/{{ row.card.id }}">{{ row.card.name }}</a>
+        {% if row.entry.is_foil %}<span class="badge foil">foil</span>{% endif %}
+      </td>
+      <td class="muted">{{ row.card.set_name }} ({{ row.card.set_code | upper }})</td>
+      <td class="num">{{ row.entry.quantity }}</td>
+      <td class="num">{{ row.unit_price | eur }}</td>
+      <td class="num">{{ row.total_price | eur }}</td>
+      <td>
+        <div class="actions">
+          <form class="inline" method="post" action="/collection/{{ row.entry.id }}/delete"
+                onsubmit="return confirm('Remove {{ row.card.name | replace("'", "\\'") }} from your collection?')">
+            <button class="secondary small">Remove</button>
+          </form>
+        </div>
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}
+  <p class="muted">No cards yet. Add one above or import a CSV export.</p>
+  {% endif %}
+</div>
+{% endblock %}

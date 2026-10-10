@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}{{ card.name }} · MTG Collection Manager{% endblock %}
+
+{% block content %}
+<div class="card-detail">
+  <div>
+    {% if card.image_url %}<img src="{{ card.image_url }}" alt="{{ card.name }}">{% endif %}
+  </div>
+  <div>
+    <h1>{{ card.name }}</h1>
+    <p class="muted">
+      {{ card.set_name }} ({{ card.set_code | upper }}{% if card.collector_number %} #{{ card.collector_number }}{% endif %})
+      · <a href="https://scryfall.com/card/{{ card.scryfall_id }}" target="_blank" rel="noopener">Scryfall ↗</a>
+    </p>
+
+    <div class="panel">
+      <h2>Price history</h2>
+      {% if history.labels %}
+      <div class="chart-box"><canvas id="price-chart"></canvas></div>
+      {% else %}
+      <p class="muted">No price data yet.</p>
+      {% endif %}
+    </div>
+
+    <div class="grid two">
+      <div class="panel">
+        <h2>In your collection</h2>
+        {% for row in owned %}
+        <div>{{ row.entry.quantity }}× {{ 'foil' if row.entry.is_foil else 'non-foil' }} · {{ row.unit_price | eur }} each · {{ row.total_price | eur }}</div>
+        {% else %}
+        <p class="muted">You don't own this printing.</p>
+        {% endfor %}
+      </div>
+      <div class="panel">
+        <h2>On your wishlist</h2>
+        {% for row in wanted %}
+        <div>
+          Target {{ row.entry.target_price | eur }} · now {{ row.current_price | eur }}
+          {% if row.below_target %}<span class="badge hit">at target</span>{% endif %}
+        </div>
+        {% else %}
+        <p class="muted">Not on your wishlist.</p>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{% if history.labels %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script>
+  const history = {{ history | tojson }};
+  const series = [
+    { label: "Scryfall (non-foil)", data: history.scryfall, borderColor: "#4c9aff" },
+    { label: "Scryfall (foil)", data: history.scryfall_foil, borderColor: "#e8a33d" },
+    { label: "Cardmarket (from)", data: history.cardmarket, borderColor: "#3ecf8e" },
+  ].filter((s) => s.data.some((v) => v !== null));
+  new Chart(document.getElementById("price-chart"), {
+    type: "line",
+    data: { labels: history.labels, datasets: series.map((s) => ({ ...s, tension: 0.25, spanGaps: true })) },
+    options: {
+      maintainAspectRatio: false,
+      interaction: { mode: "index", intersect: false },
+      scales: {
+        x: { ticks: { color: "#8b93a3" }, grid: { color: "#2c313c" } },
+        y: { ticks: { color: "#8b93a3", callback: (v) => "€" + v }, grid: { color: "#2c313c" } },
+      },
+      plugins: { legend: { labels: { color: "#e6e8ec" } } },
+    },
+  });
+</script>
+{% endif %}
+{% endblock %}

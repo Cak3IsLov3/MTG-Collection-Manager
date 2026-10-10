@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% block title %}Wishlist · MTG Collection Manager{% endblock %}
+
+{% block content %}
+<div class="toolbar">
+  <h1>Wishlist <span class="muted">· {{ total | eur }} to buy it all</span></h1>
+  <form method="post" action="/jobs/check-wishlist"><button class="secondary">Check prices now</button></form>
+</div>
+
+<p class="muted">Your collection is worth {{ collection_value | eur }}, your wishlist still costs {{ total | eur }}.</p>
+
+<div class="panel">
+  <h2>Watch a card</h2>
+  <form class="row" method="post" action="/wishlist/add">
+    <label>Card name<input name="name" required placeholder="Fire // Ice"></label>
+    <label>Set (optional)<input name="set_code" class="narrow" placeholder="mh2"></label>
+    <label>Max price (€)<input name="target_price" class="narrow" required inputmode="decimal" placeholder="12.50"></label>
+    <label>Cardmarket URL (optional)<input name="cardmarket_url" type="url" size="34" placeholder="https://www.cardmarket.com/en/Magic/Products/Singles/…"></label>
+    <button>Watch</button>
+  </form>
+</div>
+
+<div class="panel table-wrap">
+  {% if rows %}
+  <table>
+    <tr>
+      <th></th><th>Card</th><th class="num">Current</th><th class="num">Target</th>
+      <th class="num">Difference</th><th>Status</th><th></th>
+    </tr>
+    {% for row in rows %}
+    <tr>
+      <td>{% if row.card.image_url %}<img class="thumb" src="{{ row.card.image_url }}" alt="" loading="lazy">{% endif %}</td>
+      <td>
+        <a href="/cards/{{ row.card.id }}">{{ row.card.name }}</a>
+        <div class="muted">{{ row.card.set_name }} ({{ row.card.set_code | upper }})</div>
+      </td>
+      <td class="num">
+        {{ row.current_price | eur }}
+        {% if row.price_source %}<div class="muted">{{ row.price_source }} · {{ row.price_date }}</div>{% endif %}
+      </td>
+      <td class="num">
+        <form class="inline" method="post" action="/wishlist/{{ row.entry.id }}/target">
+          <input name="target_price" class="narrow" value="{{ '%.2f' | format(row.entry.target_price) }}" inputmode="decimal">
+          <button class="secondary small">Save</button>
+        </form>
+      </td>
+      <td class="num {{ 'up' if row.below_target else 'muted' }}">
+        {% if row.difference is not none %}{{ '%+.2f' | format(row.difference) }}{% else %}–{% endif %}
+      </td>
+      <td>
+        {% if row.below_target %}<span class="badge hit">at target</span>
+        {% elif row.current_price is none %}<span class="badge">no price</span>
+        {% else %}<span class="badge">waiting</span>{% endif %}
+      </td>
+      <td>
+        <div class="actions">
+          {% if row.entry.cardmarket_url %}<a href="{{ row.entry.cardmarket_url }}" target="_blank" rel="noopener">Cardmarket ↗</a>{% endif %}
+          <form class="inline" method="post" action="/wishlist/{{ row.entry.id }}/purchase">
+            <button class="small" title="Move this card to your collection">Bought it</button>
+          </form>
+          <form class="inline" method="post" action="/wishlist/{{ row.entry.id }}/delete">
+            <button class="secondary small">Remove</button>
+          </form>
+        </div>
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}
+  <p class="muted">Nothing on your wishlist yet.</p>
+  {% endif %}
+</div>
+
+<div class="panel">
+  <h2>Alert history</h2>
+  {% if alerts %}
+  <table>
+    <tr><th>When (UTC)</th><th>Card</th><th class="num">Price</th><th class="num">Target</th></tr>
+    {% for alert, entry, card in alerts %}
+    <tr>
+      <td class="muted">{{ alert.sent_at.strftime('%Y-%m-%d %H:%M') }}</td>
+      <td><a href="/cards/{{ card.id }}">{{ card.name }}</a></td>
+      <td class="num up">{{ alert.price_at_alert | eur }}</td>
+      <td class="num">{{ entry.target_price | eur }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}
+  <p class="muted">No alerts yet. You get one (at most once per 24 hours per card) when a price drops to your target.</p>
+  {% endif %}
+</div>
+{% endblock %}

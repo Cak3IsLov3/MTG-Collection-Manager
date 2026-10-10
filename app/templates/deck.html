@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Deck check · MTG Collection Manager{% endblock %}
+
+{% block content %}
+<h1>Deck check</h1>
+
+<div class="panel">
+  <h2>Which cards of a deck do you already own?</h2>
+  <form method="post" action="/deck">
+    <p><input name="archidekt_url" type="url" size="50" value="{{ archidekt_url or '' }}" placeholder="https://archidekt.com/decks/123456/my-deck"></p>
+    <p class="muted">…or paste a decklist (one card per line, e.g. <code>1 Sol Ring</code>):</p>
+    <textarea name="decklist" placeholder="1 Sol Ring&#10;1 Arcane Signet&#10;1 Fire // Ice">{{ decklist or '' }}</textarea>
+    <p><button>Check deck</button></p>
+  </form>
+</div>
+
+{% if rows is not none %}
+{% set missing = rows | selectattr('missing') | list %}
+{% set addable = missing | rejectattr('on_wishlist') | list %}
+<div class="panel table-wrap">
+  <div class="toolbar">
+    <h2>{{ rows | length - missing | length }} of {{ rows | length }} cards owned · {{ missing | length }} missing</h2>
+    {% if addable %}
+    <form class="row" method="post" action="/deck/wishlist">
+      {% for row in addable %}<input type="hidden" name="names" value="{{ row.name }}">{% endfor %}
+      <label>Target (% of current price)<input name="target_pct" type="number" min="1" max="100" value="90"></label>
+      <button>Add {{ addable | length }} missing to wishlist</button>
+    </form>
+    {% endif %}
+  </div>
+  <table>
+    <tr><th>Card</th><th class="num">Needed</th><th class="num">Owned</th><th>Status</th></tr>
+    {% for row in rows %}
+    <tr>
+      <td>{{ row.name }}</td>
+      <td class="num">{{ row.needed }}</td>
+      <td class="num">{{ row.owned }}</td>
+      <td>
+        {% if not row.missing %}<span class="badge hit">have</span>
+        {% elif row.on_wishlist %}<span class="badge">missing {{ row.missing }} · on wishlist</span>
+        {% else %}<span class="badge">missing {{ row.missing }}</span>{% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+{% endif %}
+{% endblock %}

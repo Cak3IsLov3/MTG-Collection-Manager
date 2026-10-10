@@ -1,0 +1,6 @@
+{
+  "label_selector": "dl.labeled dt",
+  "low_price_labels": ["From", "Available from", "Ab", "Vanaf", "De", "Desde", "Da"],
+  "trend_price_labels": ["Price Trend", "Preis-Trend", "Prijstrend", "Tendance des prix", "Tendencia de precio", "Tendenza di prezzo"],
+  "blocked_markers": ["Just a moment...", "Attention Required!", "cf-challenge"]
+}

@@ -1,0 +1,63 @@
+import datetime as dt
+
+from sqlmodel import Field, SQLModel, UniqueConstraint
+
+
+def utcnow() -> dt.datetime:
+    return dt.datetime.now(dt.UTC)
+
+
+class Card(SQLModel, table=True):
+    """One specific printing of a card, identified by its Scryfall id."""
+
+    id: int | None = Field(default=None, primary_key=True)
+    name: str = Field(index=True)
+    set_code: str
+    set_name: str
+    scryfall_id: str = Field(unique=True, index=True)
+    collector_number: str | None = None
+    image_url: str | None = None
+
+
+class CollectionEntry(SQLModel, table=True):
+    id: int | None = Field(default=None, primary_key=True)
+    card_id: int = Field(foreign_key="card.id", index=True)
+    quantity: int = 1
+    is_foil: bool = False
+    added_at: dt.datetime = Field(default_factory=utcnow)
+
+
+class WishlistEntry(SQLModel, table=True):
+    id: int | None = Field(default=None, primary_key=True)
+    card_id: int = Field(foreign_key="card.id", index=True)
+    target_price: float
+    cardmarket_url: str | None = None
+    active: bool = True
+    added_at: dt.datetime = Field(default_factory=utcnow)
+
+
+class PriceSnapshot(SQLModel, table=True):
+    """At most one price per card, per day, per source."""
+
+    __table_args__ = (UniqueConstraint("card_id", "date", "source"),)
+
+    id: int | None = Field(default=None, primary_key=True)
+    card_id: int = Field(foreign_key="card.id", index=True)
+    date: dt.date = Field(index=True)
+    source: str  # "scryfall" | "cardmarket"
+    price_eur: float | None = None
+    price_eur_foil: float | None = None
+
+
+class Alert(SQLModel, table=True):
+    id: int | None = Field(default=None, primary_key=True)
+    wishlist_entry_id: int = Field(foreign_key="wishlistentry.id", index=True)
+    sent_at: dt.datetime = Field(default_factory=utcnow)
+    price_at_alert: float
+
+
+class DailyTotal(SQLModel, table=True):
+    id: int | None = Field(default=None, primary_key=True)
+    date: dt.date = Field(unique=True, index=True)
+    collection_value: float = 0.0
+    wishlist_cost: float = 0.0

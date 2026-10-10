@@ -1,0 +1,121 @@
+"""WANT: the wishlist and its alerts."""
+
+import datetime as dt
+from dataclasses import dataclass
+
+from sqlmodel import Session, select
+
+from app.models import Alert, Card, CollectionEntry, WishlistEntry
+from app.scryfall import ScryfallClient
+from app.services.collection import add_to_collection
+from app.services.pricing import CARDMARKET, SCRYFALL, latest_snapshots, store_scryfall_card
+
+
+@dataclass
+class WishlistRow:
+    entry: WishlistEntry
+    card: Card
+    current_price: float | None
+    price_source: str | None
+    price_date: dt.date | None
+
+    @property
+    def below_target(self) -> bool:
+        return self.current_price is not None and self.current_price <= self.entry.target_price
+
+    @property
+    def difference(self) -> float | None:
+        """How far the current price is above (+) or below (-) the target."""
+        if self.current_price is None:
+            return None
+        return round(self.current_price - self.entry.target_price, 2)
+
+
+def add_to_wishlist(
+    session: Session, card: Card, target_price: float, cardmarket_url: str | None = None
+) -> WishlistEntry:
+    """Add a card, or update the target of the entry that is already watching it."""
+    entry = session.exec(
+        select(WishlistEntry).where(WishlistEntry.card_id == card.id, WishlistEntry.active == True)  # noqa: E712
+    ).first()
+    if entry is None:
+        entry = WishlistEntry(card_id=card.id, target_price=target_price)
+    entry.target_price = target_price
+    if cardmarket_url:
+        entry.cardmarket_url = cardmarket_url
+    session.add(entry)
+    session.flush()
+    return entry
+
+
+def current_prices(session: Session) -> dict[int, tuple[float, str, dt.date]]:
+    """Freshest known price per card id; Cardmarket wins over Scryfall on the same day."""
+    best: dict[int, tuple[float, str, dt.date]] = {}
+    for source in (SCRYFALL, CARDMARKET):
+        for card_id, snapshot in latest_snapshots(session, source).items():
+            if snapshot.price_eur is None:
+                continue
+            if card_id not in best or snapshot.date >= best[card_id][2]:
+                best[card_id] = (snapshot.price_eur, source, snapshot.date)
+    return best
+
+
+def wishlist_rows(session: Session, entry_id: int | None = None) -> list[WishlistRow]:
+    statement = select(WishlistEntry, Card).join(Card, WishlistEntry.card_id == Card.id).order_by(Card.name)
+    if entry_id is not None:
+        statement = statement.where(WishlistEntry.id == entry_id)
+    else:
+        statement = statement.where(WishlistEntry.active == True)  # noqa: E712
+    prices = current_prices(session)
+    rows = []
+    for entry, card in session.exec(statement):
+        price, source, day = prices.get(card.id, (None, None, None))
+        rows.append(WishlistRow(entry=entry, card=card, current_price=price, price_source=source, price_date=day))
+    return rows
+
+
+def wishlist_cost(rows: list[WishlistRow]) -> float:
+    """What it costs to buy every active wishlist card at today's prices."""
+    return round(sum(row.current_price or 0.0 for row in rows if row.entry.active), 2)
+
+
+async def add_wish_by_name(
+    session: Session,
+    scryfall: ScryfallClient,
+    name: str,
+    target_price: float,
+    set_code: str | None = None,
+    cardmarket_url: str | None = None,
+) -> WishlistEntry:
+    data = await scryfall.get_by_name(name, set_code)
+    card = store_scryfall_card(session, data)
+    return add_to_wishlist(session, card, target_price, cardmarket_url or data.cardmarket_url)
+
+
+def purchase(session: Session, entry: WishlistEntry, quantity: int = 1, is_foil: bool = False) -> CollectionEntry:
+    """WANT -> HAVE: move a bought card into the collection and stop watching it."""
+    card = session.get(Card, entry.card_id)
+    collection_entry = add_to_collection(session, card, quantity, is_foil)
+    entry.active = False  # kept (inactive) so the alert history stays intact
+    session.add(entry)
+    session.flush()
+    return collection_entry
+
+
+def recently_alerted(session: Session, entry_id: int, now: dt.datetime, cooldown_hours: int) -> bool:
+    cutoff = now - dt.timedelta(hours=cooldown_hours)
+    recent = session.exec(
+        select(Alert).where(Alert.wishlist_entry_id == entry_id, Alert.sent_at > cutoff)
+    ).first()
+    return recent is not None
+
+
+def recent_alerts(session: Session, limit: int = 10) -> list[tuple[Alert, WishlistEntry, Card]]:
+    statement = (
+        select(Alert, WishlistEntry, Card)
+        .join(WishlistEntry, Alert.wishlist_entry_id == WishlistEntry.id)
+        .join(Card, WishlistEntry.card_id == Card.id)
+        .order_by(Alert.sent_at.desc())
+        .limit(limit)
+    )
+    return list(session.exec(statement))

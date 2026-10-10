@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}MTG Collection Manager{% endblock %}</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header class="nav">
+    <span class="brand">MTG Collection Manager</span>
+    <nav>
+      {% set path = request.url.path %}
+      <a href="/" class="{{ 'active' if path == '/' }}">Dashboard</a>
+      <a href="/collection" class="{{ 'active' if path.startswith('/collection') }}">Collection</a>
+      <a href="/wishlist" class="{{ 'active' if path.startswith('/wishlist') }}">Wishlist</a>
+      <a href="/deck" class="{{ 'active' if path.startswith('/deck') }}">Deck check</a>
+      <a href="/docs">API</a>
+    </nav>
+  </header>
+  <main>
+    {% if msg %}<div class="flash {{ 'error' if error }}">{{ msg }}</div>{% endif %}
+    {% block content %}{% endblock %}
+  </main>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

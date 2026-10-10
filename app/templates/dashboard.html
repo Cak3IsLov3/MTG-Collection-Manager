@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+{% block title %}Dashboard · MTG Collection Manager{% endblock %}
+
+{% macro mover_table(movers, direction) %}
+  {% if movers %}
+  <table>
+    {% for m in movers %}
+    <tr>
+      <td><a href="/cards/{{ m.card.id }}">{{ m.card.name }}</a>{% if m.is_foil %} <span class="badge foil">foil</span>{% endif %}</td>
+      <td class="num muted">{{ m.old_price | eur }} → {{ m.new_price | eur }}</td>
+      <td class="num {{ direction }}">{{ '%+.2f' | format(m.change) }} ({{ '%+.1f' | format(m.change_pct) }}%)</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}
+  <p class="muted">No price changes yet — movers appear once there are snapshots from different days.</p>
+  {% endif %}
+{% endmacro %}
+
+{% block content %}
+<div class="toolbar">
+  <h1>Dashboard</h1>
+  <form method="post" action="/jobs/update-prices"><button class="secondary">Update prices now</button></form>
+</div>
+
+<div class="grid stats">
+  <div class="panel stat have">
+    <div class="label">Collection value</div>
+    <div class="value">{{ collection_value | eur }}</div>
+    <div class="sub">{{ card_count }} cards · {{ unique_count }} unique{% if unpriced_count %} · {{ unpriced_count }} without price{% endif %}</div>
+  </div>
+  <div class="panel stat want">
+    <div class="label">Wishlist cost</div>
+    <div class="value">{{ wishlist_cost | eur }}</div>
+    <div class="sub">{{ wishlist_count }} cards still to buy</div>
+  </div>
+  <div class="panel stat">
+    <div class="label">At or below target</div>
+    <div class="value">{{ wishlist_hits }}</div>
+    <div class="sub"><a href="/wishlist">View wishlist</a></div>
+  </div>
+</div>
+
+<div class="panel">
+  <h2>Your collection is worth {{ collection_value | eur }}, your wishlist still costs {{ wishlist_cost | eur }}</h2>
+  {% if history.labels %}
+  <div class="chart-box"><canvas id="value-chart"></canvas></div>
+  {% else %}
+  <p class="muted">Add some cards to start tracking value over time.</p>
+  {% endif %}
+</div>
+
+<div class="panel">
+  <h2>Top 10 most valuable cards</h2>
+  {% if top_cards %}
+  <div class="top-cards">
+    {% for row in top_cards %}
+    <a href="/cards/{{ row.card.id }}">
+      {% if row.card.image_url %}<img src="{{ row.card.image_url }}" alt="{{ row.card.name }}">{% endif %}
+      <div>{{ row.card.name }}</div>
+      <div class="price">{{ row.unit_price | eur }}{% if row.entry.is_foil %} ✦{% endif %}</div>
+    </a>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="muted">Your collection is empty. <a href="/collection">Add cards or import a CSV</a>.</p>
+  {% endif %}
+</div>
+
+<div class="grid two">
+  <div class="panel"><h2>Risers this week</h2>{{ mover_table(gainers, 'up') }}</div>
+  <div class="panel"><h2>Fallers this week</h2>{{ mover_table(losers, 'down') }}</div>
+</div>
+
+<div class="panel">
+  <h2>Recent alerts</h2>
+  {% if alerts %}
+  <table>
+    <tr><th>When (UTC)</th><th>Card</th><th class="num">Price</th><th class="num">Target</th></tr>
+    {% for alert, entry, card in alerts %}
+    <tr>
+      <td class="muted">{{ alert.sent_at.strftime('%Y-%m-%d %H:%M') }}</td>
+      <td><a href="/cards/{{ card.id }}">{{ card.name }}</a></td>
+      <td class="num up">{{ alert.price_at_alert | eur }}</td>
+      <td class="num">{{ entry.target_price | eur }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}
+  <p class="muted">No alerts yet.</p>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+{% if history.labels %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script>
+  const history = {{ history | tojson }};
+  new Chart(document.getElementById("value-chart"), {
+    type: "line",
+    data: {
+      labels: history.labels,
+      datasets: [
+        { label: "Collection value", data: history.collection, borderColor: "#4c9aff", backgroundColor: "rgba(76,154,255,.15)", fill: true, tension: 0.25 },
+        { label: "Wishlist cost", data: history.wishlist, borderColor: "#c77dff", tension: 0.25 },
+      ],
+    },
+    options: {
+      maintainAspectRatio: false,
+      interaction: { mode: "index", intersect: false },
+      scales: {
+        x: { ticks: { color: "#8b93a3" }, grid: { color: "#2c313c" } },
+        y: { ticks: { color: "#8b93a3", callback: (v) => "€" + v }, grid: { color: "#2c313c" } },
+      },
+      plugins: { legend: { labels: { color: "#e6e8ec" } } },
+    },
+  });
+</script>
+{% endif %}
+{% endblock %}
