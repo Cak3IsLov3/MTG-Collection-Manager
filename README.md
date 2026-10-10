@@ -15,9 +15,11 @@ price.
 | --- | --- |
 | ![Top 10 most valuable cards, risers and fallers](docs/dashboard-cards.jpg) | ![Wishlist](docs/wishlist.jpg) |
 
-| Collection with CSV import | Deck check: what you own and where to find it |
+| Collection with CSV import | Saved decks |
 | --- | --- |
-| ![Collection](docs/collection.jpg) | ![Deck check](docs/deck.jpg) |
+| ![Collection](docs/collection.jpg) | ![Saved decks with progress](docs/decks.jpg) |
+
+![A saved deck: the cards set aside for it, and which cards another deck is using](docs/deck.jpg)
 
 ![Card detail page with price history chart](docs/card.jpg)
 
