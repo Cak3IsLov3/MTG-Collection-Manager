@@ -168,3 +168,68 @@ def test_adding_a_deck_saves_it_unless_only_checking(client):
     unnamed = client.post("/deck", files={"file": ("storm.txt", b"1 Sol Ring\n", "text/plain")}, data={"action": "save"})
     assert "Saved storm" in unnamed.text
     assert [d["name"] for d in client.get("/api/decks").json()] == ["Ramp", "storm"]
+
+
+async def test_choose_which_printing_a_deck_uses(session, scryfall):
+    from sqlmodel import select
+
+    from app.models import DeckEntry
+    from app.services.decks import choose_printing
+
+    cheap = await add_card_by_name(session, scryfall, "Sol Ring", set_code="cmm")   # 1.50
+    pricey = await add_card_by_name(session, scryfall, "Sol Ring", set_code="lea")  # 900.00
+    vault = await add_card_by_name(session, scryfall, "Lim-Dûl's Vault")
+    first = save_deck(session, "First", [DeckCard("Sol Ring", 1)])
+    second = save_deck(session, "Second", [DeckCard("Sol Ring", 1)])
+    session.commit()
+
+    def sol(deck):
+        return saved_deck_rows(session, deck)[0]
+
+    def used(deck):
+        return [(p.card.set_code, n) for p, n in sol(deck).picks]
+
+    # Without a choice the oldest deck takes the cheapest copy.
+    assert (used(first), used(second)) == ([("cmm", 1)], [("lea", 1)])
+    assert (sol(first).value, sol(second).value) == (1.5, 900.0)
+    assert [(s.deck.name, s.value) for s in deck_summaries(session)] == [("First", 1.5), ("Second", 900.0)]
+
+    # A chosen printing sticks, even over an older deck that would otherwise take it.
+    entry = session.exec(select(DeckEntry).where(DeckEntry.deck_id == second.id)).one()
+    choose_printing(session, second, entry.id, cheap.id)
+    assert (used(first), used(second)) == ([("lea", 1)], [("cmm", 1)])
+    assert sol(second).pinned_id == cheap.id and sol(second).free == {cheap.id: 1, pricey.id: 0}
+
+    # A printing of another card, or a card of another deck, is refused.
+    with pytest.raises(DeckError):
+        choose_printing(session, second, entry.id, vault.id)
+    with pytest.raises(DeckError):
+        choose_printing(session, first, entry.id, cheap.id)
+
+    # Back to automatic; and a chosen printing that leaves the collection is simply dropped.
+    choose_printing(session, second, entry.id, None)
+    assert used(second) == [("lea", 1)]
+    choose_printing(session, second, entry.id, pricey.id)
+    session.delete(pricey)
+    session.flush()
+    assert (used(first), used(second), sol(second).missing) == ([("cmm", 1)], [], 1)
+
+
+def test_choose_printing_through_pages_and_api(client):
+    cheap = client.post("/api/collection", json={"name": "Sol Ring", "set_code": "cmm"}).json()
+    pricey = client.post("/api/collection", json={"name": "Sol Ring", "set_code": "lea"}).json()
+    deck = client.post("/api/decks", json={"name": "Ramp", "decklist": "1 Sol Ring"}).json()
+    card = deck["cards"][0]
+    assert (deck["value"], card["using"][0]["printing"]["id"], card["chosen_collection_entry_id"]) == (1.5, cheap["id"], None)
+
+    page = client.get(f"/decks/{deck['id']}")
+    assert "Choose for me" in page.text and "worth <strong>€1.50</strong>" in page.text
+
+    form = client.post(f"/decks/{deck['id']}/cards/{card['entry_id']}/printing", data={"collection_entry_id": str(pricey["id"])})
+    assert form.status_code == 200 and "worth <strong>€900.00</strong>" in form.text
+    assert client.get("/api/decks").json()[0]["value"] == 900.0
+
+    url = f"/api/decks/{deck['id']}/cards/{card['entry_id']}/printing"
+    assert client.put(url, json={"collection_entry_id": None}).json()["value"] == 1.5
+    assert client.put(url, json={"collection_entry_id": 9999}).status_code == 400
+    assert client.put(f"/api/decks/9999/cards/{card['entry_id']}/printing", json={}).status_code == 404

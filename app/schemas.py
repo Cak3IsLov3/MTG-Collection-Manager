@@ -125,7 +125,18 @@ class DeckCheckIn(BaseModel):
     archidekt_url: str | None = None
 
 
+class DeckPickOut(BaseModel):
+    quantity: int
+    printing: CollectionItemOut
+
+
+class DeckPrintingIn(BaseModel):
+    # A collection entry id, or null to let the app choose again.
+    collection_entry_id: int | None = None
+
+
 class DeckCardOut(BaseModel):
+    entry_id: int | None = None
     name: str
     needed: int
     owned: int
@@ -134,6 +145,9 @@ class DeckCardOut(BaseModel):
     missing: int
     on_wishlist: bool
     used_by: list[str] = []
+    value: float = 0.0
+    chosen_collection_entry_id: int | None = None
+    using: list[DeckPickOut] = []
     printings: list[CollectionItemOut] = []
 
     @classmethod
@@ -142,6 +156,8 @@ class DeckCardOut(BaseModel):
             name=row.name, needed=row.needed, owned=row.owned, reserved=row.reserved,
             available=row.available, missing=row.missing, on_wishlist=row.on_wishlist,
             used_by=row.used_by, printings=[CollectionItemOut.from_row(p) for p in row.printings],
+            entry_id=row.entry_id, value=row.value, chosen_collection_entry_id=row.pinned_id,
+            using=[DeckPickOut(quantity=n, printing=CollectionItemOut.from_row(p)) for p, n in row.picks],
         )
 
 
@@ -155,6 +171,7 @@ class DeckOut(BaseModel):
     cards_needed: int
     cards_usable: int
     complete: bool
+    value: float
 
 
 class DeckDetailOut(DeckOut):

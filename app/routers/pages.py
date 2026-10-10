@@ -281,6 +281,22 @@ def saved_deck_page(deck_id: int, request: Request, session: Session = Depends(g
                   summaries=decks.deck_summaries(session))
 
 
+@router.post("/decks/{deck_id}/cards/{entry_id}/printing")
+def saved_deck_printing(
+    deck_id: int, entry_id: int, collection_entry_id: str = Form(""), session: Session = Depends(get_session)
+):
+    deck = session.get(Deck, deck_id)
+    if deck is None:
+        return redirect("/deck", "Deck not found", error=True)
+    try:
+        chosen = int(collection_entry_id) if collection_entry_id.strip() else None
+        decks.choose_printing(session, deck, entry_id, chosen)
+    except (ValueError, decks.DeckError) as exc:
+        return redirect(f"/decks/{deck_id}", str(exc), error=True)
+    session.commit()
+    return redirect(f"/decks/{deck_id}")
+
+
 @router.post("/decks/{deck_id}/delete")
 def saved_deck_delete(deck_id: int, session: Session = Depends(get_session)):
     deck = session.get(Deck, deck_id)

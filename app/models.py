@@ -76,3 +76,11 @@ class DeckEntry(SQLModel, table=True):
     deck_id: int = Field(foreign_key="deck.id", index=True)
     name: str
     quantity: int = 1
+
+
+class DeckPick(SQLModel, table=True):
+    """The printing the user chose for a card in a deck; without one the app picks."""
+
+    id: int | None = Field(default=None, primary_key=True)
+    deck_entry_id: int = Field(foreign_key="deckentry.id", unique=True, index=True)
+    collection_entry_id: int = Field(foreign_key="collectionentry.id", index=True)

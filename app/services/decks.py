@@ -8,7 +8,7 @@ from sqlmodel import Session, select
 
 from app.config import get_settings
 from app.csv_import import CsvFormatError, parse_collection_csv
-from app.models import Card, Deck, DeckEntry, WishlistEntry
+from app.models import Card, CollectionEntry, Deck, DeckEntry, DeckPick, WishlistEntry
 from app.scryfall import CardRef, ScryfallClient, name_key
 from app.services.collection import CollectionRow, collection_rows
 from app.services.pricing import store_scryfall_card
@@ -31,6 +31,7 @@ class DeckError(Exception):
 class DeckCard:
     name: str
     quantity: int = 1
+    entry_id: int | None = None  # set for the cards of a saved deck
 
 
 @dataclass
@@ -38,11 +39,17 @@ class DeckRow:
     name: str
     needed: int
     on_wishlist: bool
-    # The printings of this card in the collection, so you know which copies to pull.
+    # Every printing of this card in the collection.
     printings: list[CollectionRow] = field(default_factory=list)
-    # Copies that saved decks with a higher priority already claim, and the names of those decks.
+    # The copies this deck uses: (printing, number of copies).
+    picks: list[tuple[CollectionRow, int]] = field(default_factory=list)
+    # Copies that other saved decks use, and the names of those decks.
     reserved: int = 0
     used_by: list[str] = field(default_factory=list)
+    # Copies per printing (collection entry id) this deck could use: its own plus the unused ones.
+    free: dict[int, int] = field(default_factory=dict)
+    entry_id: int | None = None
+    pinned_id: int | None = None  # collection entry id the user chose, if any
 
     @property
     def owned(self) -> int:
@@ -55,12 +62,16 @@ class DeckRow:
 
     @property
     def usable(self) -> int:
-        """Copies this deck can actually use."""
-        return min(self.available, self.needed)
+        """Copies this deck actually has."""
+        return sum(count for _, count in self.picks)
 
     @property
     def missing(self) -> int:
         return self.needed - self.usable
+
+    @property
+    def value(self) -> float:
+        return round(sum((row.unit_price or 0.0) * count for row, count in self.picks), 2)
 
 
 @dataclass
@@ -68,6 +79,7 @@ class DeckSummary:
     deck: Deck
     needed: int
     usable: int
+    value: float = 0.0  # what the copies in this deck are worth
 
     @property
     def complete(self) -> bool:
@@ -140,12 +152,21 @@ def _names(full_name: str) -> set[str]:
     return {name_key(part) for part in (full_name, *full_name.split(" // "))}
 
 
+@dataclass
+class _Need:
+    name: str
+    quantity: int
+    entry_id: int | None = None
+    pin: int | None = None
+
+
 class _CardPool:
     """The collection, shared out over the saved decks.
 
-    Every physical copy can only be in one deck. Saved decks claim their cards
-    in the order they were created; whatever is left is available to newer
-    decks and to a deck you are only checking.
+    Every physical copy can only be in one deck. Printings a user chose for a
+    deck are handed out first. After that saved decks claim what they still
+    need in the order they were created, cheapest printing first. Whatever is
+    left is available to a deck you are only checking.
     """
 
     def __init__(self, session: Session) -> None:
@@ -156,6 +177,8 @@ class _CardPool:
             self.printings.setdefault(full, []).append(row)
             for name in _names(row.card.name):
                 self._alias.setdefault(name, full)
+        for rows in self.printings.values():
+            rows.sort(key=lambda row: (row.unit_price is None, row.unit_price or 0.0))
 
         self.wished: set[str] = set()
         for card in session.exec(
@@ -163,54 +186,87 @@ class _CardPool:
         ):
             self.wished |= _names(card.name)
 
+        pins = {pick.deck_entry_id: pick.collection_entry_id for pick in session.exec(select(DeckPick))}
         self.decks = list(session.exec(select(Deck).order_by(Deck.id)))
-        self.entries: dict[int, list[DeckCard]] = {deck.id: [] for deck in self.decks}
+        cards: dict[int, list[DeckCard]] = {deck.id: [] for deck in self.decks}
         for entry in session.exec(select(DeckEntry).order_by(DeckEntry.id)):
-            self.entries.setdefault(entry.deck_id, []).append(DeckCard(entry.name, entry.quantity))
+            cards.setdefault(entry.deck_id, []).append(DeckCard(entry.name, entry.quantity, entry.id))
+        self.needs = {deck.id: self._needs(cards[deck.id], pins) for deck in self.decks}
 
-        remaining = {key: sum(row.entry.quantity for row in rows) for key, rows in self.printings.items()}
-        self.claimed: dict[int, dict[str, int]] = {}
-        for deck in self.decks:
-            claims = {}
-            for key, card in self._needs(self.entries[deck.id]).items():
-                take = min(card.quantity, remaining.get(key, 0))
-                if take:
-                    claims[key] = take
-                    remaining[key] -= take
-            self.claimed[deck.id] = claims
+        # claims[deck id][card key][collection entry id] = copies
+        self.remaining = {row.entry.id: row.entry.quantity for rows in self.printings.values() for row in rows}
+        self.claims: dict[int, dict[str, dict[int, int]]] = {deck.id: {} for deck in self.decks}
+        for deck in self.decks:  # chosen printings first
+            for key, need in self.needs[deck.id].items():
+                if need.pin is not None:
+                    self._take([need.pin], need.quantity, self.remaining, self.claims[deck.id].setdefault(key, {}))
+        for deck in self.decks:  # then whatever is still needed
+            for key, need in self.needs[deck.id].items():
+                claimed = self.claims[deck.id].setdefault(key, {})
+                self._take(self._ids(key), need.quantity - sum(claimed.values()), self.remaining, claimed)
 
     def _key(self, name: str) -> str:
         key = name_key(name)
         return self._alias.get(key, key)
 
-    def _needs(self, cards: list[DeckCard]) -> dict[str, DeckCard]:
-        needed: dict[str, DeckCard] = {}
+    def _ids(self, key: str) -> list[int]:
+        return [row.entry.id for row in self.printings.get(key, [])]
+
+    @staticmethod
+    def _take(ids: list[int], wanted: int, remaining: dict[int, int], claimed: dict[int, int]) -> None:
+        for entry_id in ids:
+            take = min(wanted, remaining.get(entry_id, 0))
+            if take > 0:
+                claimed[entry_id] = claimed.get(entry_id, 0) + take
+                remaining[entry_id] -= take
+                wanted -= take
+
+    def _needs(self, cards: list[DeckCard], pins: dict[int, int] | None = None) -> dict[str, _Need]:
+        needs: dict[str, _Need] = {}
         for card in cards:
             key = self._key(card.name)
-            if key in needed:
-                needed[key].quantity += card.quantity
-            else:
-                needed[key] = DeckCard(card.name, card.quantity)
-        return needed
+            need = needs.setdefault(key, _Need(card.name, 0, card.entry_id))
+            need.quantity += card.quantity
+            pin = (pins or {}).get(card.entry_id)
+            # A chosen printing only counts while it is still in the collection as this card.
+            if need.pin is None and pin in self._ids(key):
+                need.pin = pin
+        return needs
 
-    def rows(self, cards: list[DeckCard], deck_id: int | None = None) -> list[DeckRow]:
-        """Have/missing overview. `deck_id` is the saved deck being viewed, if any."""
-        ahead = [deck for deck in self.decks if deck_id is None or deck.id < deck_id]
+    def rows(self, cards: list[DeckCard] | None = None, deck_id: int | None = None) -> list[DeckRow]:
+        """Have/missing overview for a saved deck (`deck_id`) or for loose `cards`."""
+        needs = self.needs[deck_id] if deck_id is not None else self._needs(cards or [])
+        leftover = dict(self.remaining)
         rows = []
-        for key, card in self._needs(cards).items():
-            users = [(deck.name, self.claimed[deck.id].get(key, 0)) for deck in ahead]
+        for key, need in needs.items():
+            if deck_id is not None:
+                mine = self.claims[deck_id].get(key, {})
+            else:
+                mine = {}
+                self._take(self._ids(key), need.quantity, leftover, mine)
+            others = [
+                (deck.name, sum(self.claims[deck.id].get(key, {}).values()))
+                for deck in self.decks
+                if deck.id != deck_id
+            ]
+            printings = self.printings.get(key, [])
             rows.append(
                 DeckRow(
-                    name=card.name,
-                    needed=card.quantity,
-                    on_wishlist=key in self.wished or name_key(card.name) in self.wished,
-                    printings=self.printings.get(key, []),
-                    reserved=sum(count for _, count in users),
-                    used_by=[name for name, count in users if count],
+                    name=need.name,
+                    needed=need.quantity,
+                    on_wishlist=key in self.wished or name_key(need.name) in self.wished,
+                    printings=printings,
+                    picks=[(row, mine[row.entry.id]) for row in printings if mine.get(row.entry.id)],
+                    reserved=sum(count for _, count in others),
+                    used_by=[name for name, count in others if count],
+                    free={row.entry.id: self.remaining[row.entry.id] + mine.get(row.entry.id, 0) for row in printings}
+                    if deck_id is not None
+                    else {},
+                    entry_id=need.entry_id,
+                    pinned_id=need.pin,
                 )
             )
         return sorted(rows, key=lambda row: name_key(row.name))
-
 
 def check_deck(session: Session, cards: list[DeckCard], deck_id: int | None = None) -> list[DeckRow]:
     """Compare a deck with the collection by card name (any printing counts).
@@ -241,23 +297,49 @@ def save_deck(session: Session, name: str, cards: list[DeckCard]) -> Deck:
 def delete_deck(session: Session, deck: Deck) -> None:
     """Remove a saved deck; its cards become available to other decks again."""
     for entry in session.exec(select(DeckEntry).where(DeckEntry.deck_id == deck.id)).all():
+        for pick in session.exec(select(DeckPick).where(DeckPick.deck_entry_id == entry.id)).all():
+            session.delete(pick)
         session.delete(entry)
     session.delete(deck)
     session.flush()
 
 
+def choose_printing(session: Session, deck: Deck, entry_id: int, collection_entry_id: int | None) -> None:
+    """Pin the printing a deck uses for one of its cards; None hands the choice back to the app."""
+    entry = session.get(DeckEntry, entry_id)
+    if entry is None or entry.deck_id != deck.id:
+        raise DeckError("That card is not in this deck")
+    for pick in session.exec(select(DeckPick).where(DeckPick.deck_entry_id == entry_id)).all():
+        session.delete(pick)
+    session.flush()
+    if collection_entry_id is None:
+        return
+    owned = session.get(CollectionEntry, collection_entry_id)
+    card = session.get(Card, owned.card_id) if owned is not None else None
+    if card is None or not _names(card.name) & _names(entry.name):
+        raise DeckError("That printing is not in your collection")
+    session.add(DeckPick(deck_entry_id=entry_id, collection_entry_id=collection_entry_id))
+    session.flush()
+
 def saved_deck_rows(session: Session, deck: Deck) -> list[DeckRow]:
-    pool = _CardPool(session)
-    return pool.rows(pool.entries.get(deck.id, []), deck.id)
+    return _CardPool(session).rows(deck_id=deck.id)
 
 
 def deck_summaries(session: Session) -> list[DeckSummary]:
     pool = _CardPool(session)
     summaries = []
     for deck in pool.decks:
-        rows = pool.rows(pool.entries[deck.id], deck.id)
-        summaries.append(DeckSummary(deck, sum(r.needed for r in rows), sum(r.usable for r in rows)))
+        rows = pool.rows(deck_id=deck.id)
+        summaries.append(
+            DeckSummary(
+                deck,
+                needed=sum(row.needed for row in rows),
+                usable=sum(row.usable for row in rows),
+                value=round(sum(row.value for row in rows), 2),
+            )
+        )
     return summaries
+
 
 async def add_missing_to_wishlist(
     session: Session, scryfall: ScryfallClient, names: list[str], target_pct: float = 90.0

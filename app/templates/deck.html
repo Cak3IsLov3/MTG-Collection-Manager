@@ -1,23 +1,36 @@
 {% extends "base.html" %}
 {% block title %}{{ deck.name if deck else 'Decks' }} · MTG Collection Manager{% endblock %}
 
-{% macro printings(row) %}
-  {% for p in row.printings %}
+{% macro printing_name(p) %}{{ p.card.set_name }} ({{ p.card.set_code | upper }}{% if p.card.collector_number %} #{{ p.card.collector_number }}{% endif %}){% endmacro %}
+
+{# The copies this deck uses and, for a saved deck, the choice of printing. #}
+{% macro using(row) %}
+  {% for p, count in row.picks %}
   <div class="printing">
-    {{ p.entry.quantity }}× <a href="/cards/{{ p.card.id }}">{{ p.card.set_name }} ({{ p.card.set_code | upper }}{% if p.card.collector_number %} #{{ p.card.collector_number }}{% endif %})</a>
+    {{ count }}× <a href="/cards/{{ p.card.id }}">{{ printing_name(p) }}</a>
     {% if p.entry.is_foil %}<span class="badge foil">foil</span>{% endif %}
     <span class="muted">{{ p.unit_price | eur }}</span>
   </div>
   {% endfor %}
+  {% if deck and row.entry_id and row.printings | length > 1 %}
+  <form class="inline" method="post" action="/decks/{{ deck.id }}/cards/{{ row.entry_id }}/printing">
+    <select name="collection_entry_id" onchange="this.form.submit()" title="Choose which printing this deck uses">
+      <option value="">Choose for me (cheapest free copy)</option>
+      {% for p in row.printings %}
+      {% set free = row.free.get(p.entry.id, 0) %}
+      <option value="{{ p.entry.id }}" {{ 'selected' if row.pinned_id == p.entry.id }} {{ 'disabled' if not free and row.pinned_id != p.entry.id }}>
+        {{ printing_name(p) }}{{ ' foil' if p.entry.is_foil }} · {{ p.unit_price | eur }} · {{ free }} free
+      </option>
+      {% endfor %}
+    </select>
+  </form>
+  {% endif %}
+  {% if row.used_by %}<div class="printing muted">{{ row.reserved }} in use by {{ row.used_by | join(', ') }}</div>{% endif %}
 {% endmacro %}
 
 {% macro thumb(row) %}
-  {% set image = (row.printings | first).card.image_url if row.printings else none %}
-  {% if image %}<img class="thumb" src="{{ image }}" alt="" loading="lazy">{% endif %}
-{% endmacro %}
-
-{% macro in_use(row) %}
-  {% if row.used_by %}<div class="printing muted">{{ row.reserved }} in use by {{ row.used_by | join(', ') }}</div>{% endif %}
+  {% set source = (row.picks | first)[0] if row.picks else (row.printings | first) %}
+  {% if source and source.card.image_url %}<img class="thumb" src="{{ source.card.image_url }}" alt="" loading="lazy">{% endif %}
 {% endmacro %}
 
 {% block content %}
@@ -38,17 +51,18 @@
 <div class="panel table-wrap">
   <h2>Your saved decks</h2>
   <table>
-    <tr><th>Deck</th><th class="num">Cards</th><th>Owned</th><th></th></tr>
+    <tr><th>Deck</th><th class="num">Cards</th><th>Owned</th><th class="num">Value</th><th></th></tr>
     {% for s in summaries %}
     <tr>
       <td><a href="/decks/{{ s.deck.id }}">{{ s.deck.name }}</a></td>
       <td class="num">{{ s.usable }} / {{ s.needed }}</td>
-      <td style="width: 40%"><div class="progress slim"><div style="width: {{ s.percent }}%"></div></div></td>
+      <td style="width: 35%"><div class="progress slim"><div style="width: {{ s.percent }}%"></div></div></td>
+      <td class="num">{{ s.value | eur }}</td>
       <td>{% if s.complete %}<span class="badge hit">complete</span>{% else %}<span class="badge">{{ s.needed - s.usable }} missing</span>{% endif %}</td>
     </tr>
     {% endfor %}
   </table>
-  <p class="muted">Every copy you own can only be in one deck. Older decks get first pick; what is left counts for newer decks.</p>
+  <p class="muted">Every copy you own can only be in one deck. Printings you chose yourself go first, then older decks get first pick.</p>
 </div>
 {% endif %}
 
@@ -77,6 +91,7 @@
 {% set addable = need | rejectattr('on_wishlist') | list %}
 {% set total = rows | sum(attribute='needed') %}
 {% set usable = rows | sum(attribute='usable') %}
+{% set value = rows | sum(attribute='value') %}
 {% set pct = (usable / total * 100) | round | int if total else 0 %}
 
 <div class="panel">
@@ -88,6 +103,7 @@
   <div class="progress"><div style="width: {{ pct }}%"></div></div>
   <p class="muted">
     {{ have | length }} different cards {{ 'set aside for this deck' if deck else 'ready to pull from your collection' }} · {{ need | length }} still to get
+    · the copies you have for it are worth <strong>{{ value | eur }}</strong>
   </p>
   {% if not deck %}
   <form class="row" method="post" action="/deck/save">
@@ -103,7 +119,10 @@
   <h2 class="up">{{ 'In this deck' if deck else 'Available in your collection' }} ({{ have | length }})</h2>
   {% if have %}
   <table>
-    <tr><th></th><th>Card</th><th class="num">Needed</th><th class="num">Owned</th><th class="num">Free</th><th>Where to find it</th></tr>
+    <tr>
+      <th></th><th>Card</th><th class="num">Needed</th><th class="num">Owned</th><th class="num">Free</th>
+      <th>{{ 'Printing in this deck' if deck else 'Copies to use' }}</th><th class="num">Value</th>
+    </tr>
     {% for row in have %}
     <tr>
       <td>{{ thumb(row) }}</td>
@@ -111,10 +130,12 @@
       <td class="num">{{ row.needed }}</td>
       <td class="num">{{ row.owned }}</td>
       <td class="num">{{ row.available }}</td>
-      <td>{{ printings(row) }}{{ in_use(row) }}</td>
+      <td>{{ using(row) }}</td>
+      <td class="num">{{ row.value | eur }}</td>
     </tr>
     {% endfor %}
   </table>
+  {% if deck %}<p class="muted">Own a card in several printings? Pick the one that is in this deck; otherwise the cheapest free copy is used.</p>{% endif %}
   {% else %}
   <p class="muted">None of these cards are available in your collection yet.</p>
   {% endif %}
@@ -137,7 +158,7 @@
     {% for row in need %}
     <tr>
       <td>{{ thumb(row) }}</td>
-      <td>{{ row.name }}{{ printings(row) }}{{ in_use(row) }}</td>
+      <td>{{ row.name }}{{ using(row) }}</td>
       <td class="num">{{ row.needed }}</td>
       <td class="num">{{ row.owned }}</td>
       <td class="num">{{ row.available }}</td>

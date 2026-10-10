@@ -18,6 +18,7 @@ from app.schemas import (
     DeckCheckIn,
     DeckDetailOut,
     DeckOut,
+    DeckPrintingIn,
     DeckSaveIn,
     ImportOut,
     PurchaseIn,
@@ -193,7 +194,7 @@ async def check_deck(payload: DeckCheckIn, session: Session = Depends(get_sessio
 def _deck_out(summary: decks.DeckSummary) -> DeckOut:
     return DeckOut(
         id=summary.deck.id, name=summary.deck.name, cards_needed=summary.needed,
-        cards_usable=summary.usable, complete=summary.complete,
+        cards_usable=summary.usable, complete=summary.complete, value=summary.value,
     )
 
 
@@ -225,6 +226,22 @@ def get_deck(deck_id: int, session: Session = Depends(get_session)):
     deck = session.get(Deck, deck_id)
     if deck is None:
         raise HTTPException(status_code=404, detail="Deck not found")
+    return _deck_detail(session, deck)
+
+
+@router.put("/decks/{deck_id}/cards/{entry_id}/printing", response_model=DeckDetailOut)
+def choose_printing(
+    deck_id: int, entry_id: int, payload: DeckPrintingIn, session: Session = Depends(get_session)
+):
+    """Choose which printing from the collection a deck uses for a card (null = let the app choose)."""
+    deck = session.get(Deck, deck_id)
+    if deck is None:
+        raise HTTPException(status_code=404, detail="Deck not found")
+    try:
+        decks.choose_printing(session, deck, entry_id, payload.collection_entry_id)
+    except decks.DeckError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    session.commit()
     return _deck_detail(session, deck)
 
 
