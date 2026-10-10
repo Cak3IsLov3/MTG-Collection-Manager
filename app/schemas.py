@@ -129,6 +129,9 @@ class SummaryOut(BaseModel):
 class DeckCheckIn(BaseModel):
     decklist: str | None = None
     archidekt_url: str | None = None
+    # Basic lands and tokens are left out of a deck unless asked for.
+    include_basic_lands: bool = False
+    include_tokens: bool = False
 
 
 class DeckPickOut(BaseModel):
@@ -169,6 +172,12 @@ class DeckCardOut(BaseModel):
 
 class DeckSaveIn(DeckCheckIn):
     name: str = Field(min_length=1)
+    # Commander bracket 1-5; left out, an Archidekt deck keeps the bracket it has there.
+    bracket: int | None = Field(default=None, ge=1, le=5)
+
+
+class DeckBracketIn(BaseModel):
+    bracket: int | None = Field(default=None, ge=1, le=5)
 
 
 class DeckOut(BaseModel):
@@ -178,7 +187,14 @@ class DeckOut(BaseModel):
     cards_usable: int
     complete: bool
     value: float
+    bracket: int | None = None
+    bracket_name: str | None = None
+    basic_land_count: int = 0
 
 
 class DeckDetailOut(DeckOut):
+    # Basic lands per land, e.g. {"Plains": 10, "Forest": 3}; counted by name, not tracked as cards.
+    basic_lands: dict[str, int] = {}
+    # Copies that are part of the deck but not tracked, e.g. {"basic": 13, "token": 5}.
+    untracked: dict[str, int] = {}
     cards: list[DeckCardOut]

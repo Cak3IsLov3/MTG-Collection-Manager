@@ -243,7 +243,8 @@ def _decklist_text(rows: list[decks.DeckRow]) -> str:
 
 @router.get("/deck")
 def deck_page(request: Request, session: Session = Depends(get_session)):
-    return render(request, "deck.html", rows=None, deck=None, summaries=decks.deck_summaries(session))
+    return render(request, "deck.html", rows=None, deck=None, summaries=decks.deck_summaries(session),
+                  brackets=decks.BRACKETS)
 
 
 @router.post("/deck")
@@ -253,6 +254,8 @@ async def deck_check(
     archidekt_url: str = Form(""),
     deck_name: str = Form(""),
     action: str = Form("check"),
+    include_basics: bool = Form(False),
+    include_tokens: bool = Form(False),
     file: UploadFile | None = File(None),
     session: Session = Depends(get_session),
 ):
@@ -260,28 +263,43 @@ async def deck_check(
     uploaded = await file.read() if file is not None and file.filename else None
     summaries = decks.deck_summaries(session)
     try:
-        name, cards = await load_deck(decklist, archidekt_url, uploaded)
+        loaded = await load_deck(decklist, archidekt_url, uploaded, include_basics, include_tokens)
     except decks.DeckError as exc:
         return render(request, "deck.html", rows=None, deck=None, summaries=summaries, decklist=decklist,
-                      archidekt_url=archidekt_url, msg=str(exc), error=True)
+                      archidekt_url=archidekt_url, brackets=decks.BRACKETS, msg=str(exc), error=True)
+    name, cards = loaded.name, loaded.cards
     if name is None and uploaded:
         name = PurePath(file.filename).stem
     name = deck_name.strip() or name or ""
     if action == "save":
-        deck = decks.save_deck(session, name, cards)
+        deck = decks.save_deck(session, name, cards, loaded.left_out, loaded.bracket)
         session.commit()
         return redirect(f"/decks/{deck.id}", f"Saved {deck.name}. The cards you own are now set aside for this deck.")
     rows = decks.check_deck(session, cards)
     return render(request, "deck.html", rows=rows, deck=None, summaries=summaries, deck_name=name,
-                  decklist=_decklist_text(rows), archidekt_url=archidekt_url)
+                  decklist=_decklist_text(rows), archidekt_url=archidekt_url, left_out=loaded.left_out,
+                  bracket=loaded.bracket, brackets=decks.BRACKETS,
+                  include_basics=include_basics, include_tokens=include_tokens)
 
 
 @router.post("/deck/save")
-def deck_save(name: str = Form(...), decklist: str = Form(...), session: Session = Depends(get_session)):
+async def deck_save(
+    request: Request,
+    name: str = Form(...),
+    decklist: str = Form(...),
+    skipped_token: int = Form(0),
+    bracket: str = Form(""),
+    session: Session = Depends(get_session),
+):
+    """Save the deck that was just checked; its list was already filtered by the check."""
     cards = decks.parse_decklist(decklist)
     if not cards:
         return redirect("/deck", "No cards found in that deck", error=True)
-    deck = decks.save_deck(session, name, cards)
+    try:
+        left_out = decks.LeftOut(_basic_lands_from(await request.form()), max(0, skipped_token))
+    except decks.DeckError as exc:
+        return redirect("/deck", str(exc), error=True)
+    deck = decks.save_deck(session, name, cards, left_out, int(bracket) if bracket.isdigit() else None)
     session.commit()
     return redirect(f"/decks/{deck.id}", f"Saved {deck.name}. The cards you own are now set aside for this deck.")
 
@@ -292,7 +310,52 @@ def saved_deck_page(deck_id: int, request: Request, session: Session = Depends(g
     if deck is None:
         raise HTTPException(status_code=404, detail="Deck not found")
     return render(request, "deck.html", rows=decks.saved_deck_rows(session, deck), deck=deck,
-                  summaries=decks.deck_summaries(session))
+                  summaries=decks.deck_summaries(session), left_out=decks.deck_left_out(session, deck),
+                  bracket=deck.bracket, brackets=decks.BRACKETS, basic_names=decks.BASIC_LAND_NAMES,
+                  tracked_basics=decks.tracked_basic_lands(session, deck))
+
+
+def _basic_lands_from(form) -> dict[str, int]:
+    """Read the "basic:<land>" fields of a form."""
+    return decks.parse_basic_lands(
+        {key.removeprefix("basic:"): value for key, value in form.items() if key.startswith("basic:")}
+    )
+
+
+@router.post("/decks/{deck_id}/basics")
+async def saved_deck_basics(deck_id: int, request: Request, session: Session = Depends(get_session)):
+    deck = session.get(Deck, deck_id)
+    if deck is None:
+        return redirect("/deck", "Deck not found", error=True)
+    try:
+        decks.set_basic_lands(session, deck, _basic_lands_from(await request.form()))
+    except decks.DeckError as exc:
+        return redirect(f"/decks/{deck_id}", str(exc), error=True)
+    session.commit()
+    return redirect(f"/decks/{deck_id}", "Basic lands updated")
+
+
+@router.post("/decks/{deck_id}/basics/move")
+def saved_deck_move_basics(deck_id: int, session: Session = Depends(get_session)):
+    deck = session.get(Deck, deck_id)
+    if deck is None:
+        return redirect("/deck", "Deck not found", error=True)
+    moved = decks.move_basic_lands_out(session, deck)
+    session.commit()
+    return redirect(f"/decks/{deck_id}", f"Moved {moved} basic lands out of the card list")
+
+
+@router.post("/decks/{deck_id}/bracket")
+def saved_deck_bracket(deck_id: int, bracket: str = Form(""), session: Session = Depends(get_session)):
+    deck = session.get(Deck, deck_id)
+    if deck is None:
+        return redirect("/deck", "Deck not found", error=True)
+    try:
+        decks.set_bracket(session, deck, int(bracket) if bracket.strip() else None)
+    except (ValueError, decks.DeckError):
+        return redirect(f"/decks/{deck_id}", "A bracket is a number from 1 to 5", error=True)
+    session.commit()
+    return redirect(f"/decks/{deck_id}")
 
 
 @router.post("/decks/{deck_id}/cards/{entry_id}/printing")

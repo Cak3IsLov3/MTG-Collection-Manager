@@ -8,7 +8,16 @@ from sqlmodel import Session, select
 
 from app.config import get_settings
 from app.csv_import import CsvFormatError, parse_collection_csv
-from app.models import Card, CollectionEntry, Deck, DeckEntry, DeckPick, WishlistEntry
+from app.models import (
+    Card,
+    CollectionEntry,
+    Deck,
+    DeckBasicLand,
+    DeckEntry,
+    DeckPick,
+    DeckSkipped,
+    WishlistEntry,
+)
 from app.scryfall import CardRef, ScryfallClient, name_key
 from app.services.collection import CollectionRow, collection_rows
 from app.services.pricing import store_scryfall_card
@@ -16,6 +25,18 @@ from app.services.wishlist import add_to_wishlist
 
 ARCHIDEKT_API = "https://archidekt.com/api/decks/{deck_id}/"
 SKIPPED_CATEGORIES = {"maybeboard"}
+TOKEN_CATEGORIES = {"tokens & extras"}
+TOKEN_LAYOUTS = {"token", "double_faced_token", "emblem"}
+
+# What a line in a deck is. Basic lands and tokens are left out of a deck by default.
+CARD, BASIC, TOKEN = "card", "basic", "token"
+_BASIC_TYPES = ("Plains", "Island", "Swamp", "Mountain", "Forest", "Wastes")
+BASIC_LAND_NAMES = [*_BASIC_TYPES, *(f"Snow-Covered {land}" for land in _BASIC_TYPES)]
+BASIC_LANDS = {name.casefold(): name for name in BASIC_LAND_NAMES}  # key -> display name
+
+# Commander brackets (https://magic.wizards.com/en/news/announcements/introducing-commander-brackets-beta)
+BRACKETS = {1: "Exhibition", 2: "Core", 3: "Upgraded", 4: "Optimized", 5: "cEDH"}
+_CATEGORY = re.compile(r"\[([^\]]*)\]")
 
 _ARCHIDEKT_URL = re.compile(r"archidekt\.com/(?:api/)?decks/(\d+)", re.IGNORECASE)
 # "[Ramp]" categories, "^Have,#37d67a^" colour labels and "*F*" foil markers
@@ -32,6 +53,19 @@ class DeckCard:
     name: str
     quantity: int = 1
     entry_id: int | None = None  # set for the cards of a saved deck
+    kind: str = "card"  # CARD, BASIC or TOKEN, when the source says so
+
+
+@dataclass
+class LeftOut:
+    """What a deck contains besides the cards that are tracked against the collection."""
+
+    basics: dict[str, int] = field(default_factory=dict)  # "Plains" -> copies
+    tokens: int = 0
+
+    @property
+    def basic_total(self) -> int:
+        return sum(self.basics.values())
 
 
 @dataclass
@@ -80,6 +114,11 @@ class DeckSummary:
     needed: int
     usable: int
     value: float = 0.0  # what the copies in this deck are worth
+    basic_lands: int = 0
+
+    @property
+    def bracket_name(self) -> str | None:
+        return BRACKETS.get(self.deck.bracket)
 
     @property
     def complete(self) -> bool:
@@ -90,6 +129,26 @@ class DeckSummary:
         return round(self.usable / self.needed * 100) if self.needed else 0
 
 
+def card_kind(name: str, kind: str = CARD) -> str:
+    """Recognise basic lands and tokens by name, for sources that do not say what a card is."""
+    if kind != CARD:
+        return kind
+    if name_key(name) in BASIC_LANDS:
+        return BASIC
+    if name_key(name).endswith(" token"):
+        return TOKEN
+    return CARD
+
+
+def _text_category(line: str) -> tuple[str, bool]:
+    """The first '[Category]' on an Archidekt text line and whether it is outside the deck."""
+    match = _CATEGORY.search(line)
+    if not match:
+        return "", False
+    first = match.group(1).split(",")[0]
+    return re.sub(r"\{[^}]*\}", "", first).strip().casefold(), "{nodeck}" in first.casefold()
+
+
 def parse_decklist(text: str) -> list[DeckCard]:
     """Parse '1 Sol Ring' / '1x Sol Ring (cmm) 400 [Ramp]' lines; headers and comments are skipped."""
     cards = []
@@ -98,8 +157,16 @@ def parse_decklist(text: str) -> list[DeckCard]:
         if not line or line.startswith(("#", "//")):
             continue
         match = _LINE.match(_ANNOTATIONS.sub("", line).strip())
-        if match and int(match["qty"]) > 0:
-            cards.append(DeckCard(name=match["name"].strip(), quantity=int(match["qty"])))
+        if not match or int(match["qty"]) <= 0:
+            continue
+        category, outside_deck = _text_category(line)
+        if category in TOKEN_CATEGORIES:
+            kind = TOKEN
+        elif category in SKIPPED_CATEGORIES or outside_deck:
+            continue
+        else:
+            kind = CARD
+        cards.append(DeckCard(name=match["name"].strip(), quantity=int(match["qty"]), kind=kind))
     return cards
 
 
@@ -112,25 +179,92 @@ def parse_deck_file(content: bytes) -> list[DeckCard]:
     return [DeckCard(name=row.name, quantity=row.quantity) for row in rows]
 
 
+def select_tracked(
+    cards: list[DeckCard], include_basics: bool = False, include_tokens: bool = False
+) -> tuple[list[DeckCard], LeftOut]:
+    """Leave basic lands and tokens out of the tracked cards unless asked to keep them.
+
+    Most players do not keep either in their collection, so they would only
+    show up as "missing". Basic lands are still counted per land, tokens in total.
+    """
+    keep = {CARD} | ({BASIC} if include_basics else set()) | ({TOKEN} if include_tokens else set())
+    tracked, left_out = [], LeftOut()
+    for card in cards:
+        kind = card_kind(card.name, card.kind)
+        if kind in keep:
+            tracked.append(card)
+        elif kind == BASIC:
+            land = BASIC_LANDS.get(name_key(card.name), card.name)
+            left_out.basics[land] = left_out.basics.get(land, 0) + card.quantity
+        else:
+            left_out.tokens += card.quantity
+    left_out.basics = {land: left_out.basics[land] for land in BASIC_LAND_NAMES if land in left_out.basics}
+    return tracked, left_out
+
+
+def parse_basic_lands(counts: dict[str, object]) -> dict[str, int]:
+    """Validate {"Plains": 10, ...}; unknown names and negative numbers are refused, zeros dropped."""
+    basics: dict[str, int] = {}
+    for name, value in counts.items():
+        land = BASIC_LANDS.get(name_key(str(name)))
+        try:
+            quantity = int(str(value).strip() or 0)
+        except ValueError:
+            raise DeckError(f"'{value}' is not a number of {name}") from None
+        if land is None:
+            raise DeckError(f"{name} is not a basic land")
+        if quantity < 0:
+            raise DeckError("A deck cannot have a negative number of lands")
+        if quantity:
+            basics[land] = basics.get(land, 0) + quantity
+    return basics
+
+
 def archidekt_deck_id(source: str) -> int | None:
     match = _ARCHIDEKT_URL.search(source)
     return int(match.group(1)) if match else None
 
 
+def archidekt_bracket(data: dict) -> int | None:
+    bracket = data.get("edhBracket")
+    return bracket if bracket in BRACKETS else None
+
+
 def parse_archidekt_deck(data: dict) -> tuple[str, list[DeckCard]]:
+    # Archidekt marks categories such as "Maybeboard" and "Tokens & Extras" as not part of the deck.
+    # A card belongs to its first category. (A user category called "Tokens" is a theme, not tokens.)
+    outside_deck = {
+        str(category.get("name")).casefold()
+        for category in data.get("categories") or []
+        if category.get("includedInDeck") is False
+    }
     cards = []
     for item in data.get("cards") or []:
-        categories = {str(c).casefold() for c in item.get("categories") or []}
-        name = ((item.get("card") or {}).get("oracleCard") or {}).get("name")
-        if not name or categories & SKIPPED_CATEGORIES:
+        oracle = (item.get("card") or {}).get("oracleCard") or {}
+        name = oracle.get("name")
+        categories = [str(c).casefold() for c in item.get("categories") or []]
+        primary = categories[0] if categories else ""
+        if not name:
             continue
-        cards.append(DeckCard(name=name, quantity=int(item.get("quantity") or 1)))
+        if primary in TOKEN_CATEGORIES or oracle.get("layout") in TOKEN_LAYOUTS or "Token" in (oracle.get("types") or []):
+            kind = TOKEN
+        elif primary in outside_deck or set(categories) & SKIPPED_CATEGORIES:
+            continue
+        elif "Basic" in (oracle.get("superTypes") or []) and "Land" in (oracle.get("types") or []):
+            kind = BASIC
+        else:
+            kind = CARD
+        cards.append(DeckCard(name=name, quantity=int(item.get("quantity") or 1), kind=kind))
     return data.get("name") or "Archidekt deck", cards
 
 
 async def fetch_archidekt_deck(
     deck_id: int, transport: httpx.AsyncBaseTransport | None = None
 ) -> tuple[str, list[DeckCard]]:
+    return parse_archidekt_deck(await fetch_archidekt_json(deck_id, transport))
+
+
+async def fetch_archidekt_json(deck_id: int, transport: httpx.AsyncBaseTransport | None = None) -> dict:
     headers = {"User-Agent": get_settings().user_agent, "Accept": "application/json"}
     try:
         async with httpx.AsyncClient(timeout=15.0, headers=headers, transport=transport) as client:
@@ -142,9 +276,12 @@ async def fetch_archidekt_deck(
     if response.status_code >= 400:
         raise DeckError(f"Archidekt returned HTTP {response.status_code}")
     try:
-        return parse_archidekt_deck(response.json())
+        data = response.json()
     except ValueError as exc:
         raise DeckError("Archidekt returned an unexpected response") from exc
+    if not isinstance(data, dict):
+        raise DeckError("Archidekt returned an unexpected response")
+    return data
 
 
 def _names(full_name: str) -> set[str]:
@@ -277,10 +414,21 @@ def check_deck(session: Session, cards: list[DeckCard], deck_id: int | None = No
     return _CardPool(session).rows(cards, deck_id)
 
 
-def save_deck(session: Session, name: str, cards: list[DeckCard]) -> Deck:
-    deck = Deck(name=name.strip() or "Untitled deck")
+def save_deck(
+    session: Session,
+    name: str,
+    cards: list[DeckCard],
+    left_out: LeftOut | None = None,
+    bracket: int | None = None,
+) -> Deck:
+    """Save a deck. `left_out` records its basic lands and tokens, which are not tracked as cards."""
+    deck = Deck(name=name.strip() or "Untitled deck", bracket=bracket if bracket in BRACKETS else None)
     session.add(deck)
     session.flush()
+    if left_out is not None:
+        set_basic_lands(session, deck, left_out.basics)
+        if left_out.tokens > 0:
+            session.add(DeckSkipped(deck_id=deck.id, kind=TOKEN, quantity=left_out.tokens))
     merged: dict[str, DeckCard] = {}
     for card in cards:
         key = name_key(card.name)
@@ -300,8 +448,68 @@ def delete_deck(session: Session, deck: Deck) -> None:
         for pick in session.exec(select(DeckPick).where(DeckPick.deck_entry_id == entry.id)).all():
             session.delete(pick)
         session.delete(entry)
+    for model in (DeckSkipped, DeckBasicLand):
+        for row in session.exec(select(model).where(model.deck_id == deck.id)).all():
+            session.delete(row)
     session.delete(deck)
     session.flush()
+
+
+def set_basic_lands(session: Session, deck: Deck, counts: dict[str, object]) -> dict[str, int]:
+    """Replace the basic lands of a deck with `counts` ({"Plains": 10, ...})."""
+    basics = parse_basic_lands(counts)
+    for row in session.exec(select(DeckBasicLand).where(DeckBasicLand.deck_id == deck.id)).all():
+        session.delete(row)
+    session.flush()
+    for land, quantity in basics.items():
+        session.add(DeckBasicLand(deck_id=deck.id, name=land, quantity=quantity))
+    session.flush()
+    return basics
+
+
+def tracked_basic_lands(session: Session, deck: Deck) -> int:
+    """Basic lands that are still in the deck's card list (decks saved before lands were counted apart)."""
+    entries = session.exec(select(DeckEntry).where(DeckEntry.deck_id == deck.id))
+    return sum(entry.quantity for entry in entries if name_key(entry.name) in BASIC_LANDS)
+
+
+def move_basic_lands_out(session: Session, deck: Deck) -> int:
+    """Take the basic lands out of a deck's card list and add them to its per-land counts.
+
+    Returns the number of copies moved. Their copies in the collection are free again.
+    """
+    counts = dict(deck_left_out(session, deck).basics)
+    moved = 0
+    for entry in session.exec(select(DeckEntry).where(DeckEntry.deck_id == deck.id)).all():
+        land = BASIC_LANDS.get(name_key(entry.name))
+        if land is None:
+            continue
+        counts[land] = counts.get(land, 0) + entry.quantity
+        moved += entry.quantity
+        for pick in session.exec(select(DeckPick).where(DeckPick.deck_entry_id == entry.id)).all():
+            session.delete(pick)
+        session.delete(entry)
+    session.flush()
+    set_basic_lands(session, deck, counts)
+    return moved
+
+
+def set_bracket(session: Session, deck: Deck, bracket: int | None) -> None:
+    if bracket is not None and bracket not in BRACKETS:
+        raise DeckError("A bracket is a number from 1 to 5")
+    deck.bracket = bracket
+    session.add(deck)
+    session.flush()
+
+
+def deck_left_out(session: Session, deck: Deck) -> LeftOut:
+    """The basic lands (per land) and tokens of a saved deck."""
+    lands = {row.name: row.quantity for row in session.exec(select(DeckBasicLand).where(DeckBasicLand.deck_id == deck.id))}
+    tokens = sum(
+        row.quantity
+        for row in session.exec(select(DeckSkipped).where(DeckSkipped.deck_id == deck.id, DeckSkipped.kind == TOKEN))
+    )
+    return LeftOut(basics={name: lands[name] for name in BASIC_LAND_NAMES if lands.get(name)}, tokens=tokens)
 
 
 def choose_printing(session: Session, deck: Deck, entry_id: int, collection_entry_id: int | None) -> None:
@@ -327,6 +535,9 @@ def saved_deck_rows(session: Session, deck: Deck) -> list[DeckRow]:
 
 def deck_summaries(session: Session) -> list[DeckSummary]:
     pool = _CardPool(session)
+    basics: dict[int, int] = {}
+    for row in session.exec(select(DeckBasicLand)):
+        basics[row.deck_id] = basics.get(row.deck_id, 0) + row.quantity
     summaries = []
     for deck in pool.decks:
         rows = pool.rows(deck_id=deck.id)
@@ -336,6 +547,7 @@ def deck_summaries(session: Session) -> list[DeckSummary]:
                 needed=sum(row.needed for row in rows),
                 usable=sum(row.usable for row in rows),
                 value=round(sum(row.value for row in rows), 2),
+                basic_lands=basics.get(deck.id, 0),
             )
         )
     return summaries

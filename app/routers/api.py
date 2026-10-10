@@ -1,5 +1,7 @@
 """JSON API."""
 
+from dataclasses import dataclass
+
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile
 from sqlmodel import Session
 
@@ -18,6 +20,7 @@ from app.schemas import (
     DeckCardOut,
     DeckCheckIn,
     DeckDetailOut,
+    DeckBracketIn,
     DeckOut,
     DeckPrintingIn,
     DeckSaveIn,
@@ -202,23 +205,30 @@ def card_prices(card_id: int, session: Session = Depends(get_session)):
 async def check_deck(payload: DeckCheckIn, session: Session = Depends(get_session)):
     """Have/missing overview for a deck, without saving it."""
     try:
-        _, cards = await load_deck(payload.decklist, payload.archidekt_url)
+        loaded = await load_deck(
+            payload.decklist, payload.archidekt_url, None, payload.include_basic_lands, payload.include_tokens
+        )
     except decks.DeckError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return [DeckCardOut.from_row(row) for row in decks.check_deck(session, cards)]
+    return [DeckCardOut.from_row(row) for row in decks.check_deck(session, loaded.cards)]
 
 
 def _deck_out(summary: decks.DeckSummary) -> DeckOut:
     return DeckOut(
         id=summary.deck.id, name=summary.deck.name, cards_needed=summary.needed,
         cards_usable=summary.usable, complete=summary.complete, value=summary.value,
+        bracket=summary.deck.bracket, bracket_name=summary.bracket_name, basic_land_count=summary.basic_lands,
     )
 
 
 def _deck_detail(session: Session, deck: Deck) -> DeckDetailOut:
     summary = next(s for s in decks.deck_summaries(session) if s.deck.id == deck.id)
     cards = [DeckCardOut.from_row(row) for row in decks.saved_deck_rows(session, deck)]
-    return DeckDetailOut(**_deck_out(summary).model_dump(), cards=cards)
+    left_out = decks.deck_left_out(session, deck)
+    untracked = {kind: n for kind, n in (("basic", left_out.basic_total), ("token", left_out.tokens)) if n}
+    return DeckDetailOut(
+        **_deck_out(summary).model_dump(), cards=cards, basic_lands=left_out.basics, untracked=untracked
+    )
 
 
 @router.get("/decks", response_model=list[DeckOut])
@@ -230,10 +240,12 @@ def list_decks(session: Session = Depends(get_session)):
 async def save_deck(payload: DeckSaveIn, session: Session = Depends(get_session)):
     """Save a deck; the cards you own are set aside for it and no longer count for newer decks."""
     try:
-        _, cards = await load_deck(payload.decklist, payload.archidekt_url)
+        loaded = await load_deck(
+            payload.decklist, payload.archidekt_url, None, payload.include_basic_lands, payload.include_tokens
+        )
     except decks.DeckError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    deck = decks.save_deck(session, payload.name, cards)
+    deck = decks.save_deck(session, payload.name, loaded.cards, loaded.left_out, payload.bracket or loaded.bracket)
     session.commit()
     return _deck_detail(session, deck)
 
@@ -262,6 +274,43 @@ def choose_printing(
     return _deck_detail(session, deck)
 
 
+@router.put("/decks/{deck_id}/basic-lands", response_model=DeckDetailOut)
+def set_basic_lands(deck_id: int, counts: dict[str, int], session: Session = Depends(get_session)):
+    """Set how many of each basic land a deck runs, e.g. {"Plains": 10, "Forest": 3}. Replaces the old numbers."""
+    deck = _saved_deck(session, deck_id)
+    try:
+        decks.set_basic_lands(session, deck, counts)
+    except decks.DeckError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    session.commit()
+    return _deck_detail(session, deck)
+
+
+@router.post("/decks/{deck_id}/basic-lands/move", response_model=DeckDetailOut)
+def move_basic_lands(deck_id: int, session: Session = Depends(get_session)):
+    """Move basic lands that are still in the card list of a deck to its per-land counts."""
+    deck = _saved_deck(session, deck_id)
+    decks.move_basic_lands_out(session, deck)
+    session.commit()
+    return _deck_detail(session, deck)
+
+
+@router.put("/decks/{deck_id}/bracket", response_model=DeckDetailOut)
+def set_bracket(deck_id: int, payload: DeckBracketIn, session: Session = Depends(get_session)):
+    """Set the Commander bracket (1-5) of a deck, or null to clear it."""
+    deck = _saved_deck(session, deck_id)
+    decks.set_bracket(session, deck, payload.bracket)
+    session.commit()
+    return _deck_detail(session, deck)
+
+
+def _saved_deck(session: Session, deck_id: int) -> Deck:
+    deck = session.get(Deck, deck_id)
+    if deck is None:
+        raise HTTPException(status_code=404, detail="Deck not found")
+    return deck
+
+
 @router.delete("/decks/{deck_id}", status_code=204)
 def delete_deck(deck_id: int, session: Session = Depends(get_session)):
     deck = session.get(Deck, deck_id)
@@ -271,23 +320,39 @@ def delete_deck(deck_id: int, session: Session = Depends(get_session)):
     session.commit()
 
 
+@dataclass
+class LoadedDeck:
+    name: str | None  # only when the source has one
+    cards: list[decks.DeckCard]  # the cards to track against the collection
+    left_out: decks.LeftOut  # basic lands and tokens
+    bracket: int | None = None
+
+
 async def load_deck(
-    decklist: str | None, archidekt_url: str | None, file_content: bytes | None = None
-) -> tuple[str | None, list[decks.DeckCard]]:
-    """Returns (deck name if the source has one, cards)."""
-    name = None
+    decklist: str | None,
+    archidekt_url: str | None,
+    file_content: bytes | None = None,
+    include_basics: bool = False,
+    include_tokens: bool = False,
+) -> LoadedDeck:
+    name = bracket = None
     if archidekt_url and archidekt_url.strip():
         deck_id = decks.archidekt_deck_id(archidekt_url)
         if deck_id is None:
             raise decks.DeckError("That does not look like an Archidekt deck URL")
-        name, cards = await decks.fetch_archidekt_deck(deck_id)
+        data = await decks.fetch_archidekt_json(deck_id)
+        name, cards = decks.parse_archidekt_deck(data)
+        bracket = decks.archidekt_bracket(data)
     elif file_content:
         cards = decks.parse_deck_file(file_content)
     else:
         cards = decks.parse_decklist(decklist or "")
     if not cards:
         raise decks.DeckError("No cards found in that deck")
-    return name, cards
+    cards, left_out = decks.select_tracked(cards, include_basics, include_tokens)
+    if not cards:
+        raise decks.DeckError("That deck only has basic lands and tokens; tick the boxes to include them")
+    return LoadedDeck(name, cards, left_out, bracket)
 
 
 @router.post("/jobs/update-prices", status_code=202)

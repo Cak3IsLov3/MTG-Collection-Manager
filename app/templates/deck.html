@@ -38,6 +38,16 @@
 <div class="toolbar">
   <h1>{{ deck.name }}</h1>
   <div class="actions">
+    <form class="inline" method="post" action="/decks/{{ deck.id }}/bracket" data-keep-scroll>
+      <label class="muted">Bracket
+        <select name="bracket" onchange="this.form.requestSubmit()" title="Commander bracket; change it when the deck changes">
+          <option value="">Not set</option>
+          {% for number, label in brackets.items() %}
+          <option value="{{ number }}" {{ 'selected' if deck.bracket == number }}>{{ number }} · {{ label }}</option>
+          {% endfor %}
+        </select>
+      </label>
+    </form>
     <a href="/deck">← All decks</a>
     <form class="inline" method="post" action="/decks/{{ deck.id }}/delete" data-confirm="Click again to delete">
       <button class="secondary small">Delete deck</button>
@@ -51,10 +61,11 @@
 <div class="panel table-wrap">
   <h2>Your saved decks</h2>
   <table>
-    <tr><th>Deck</th><th class="num">Cards</th><th>Owned</th><th class="num">Value</th><th></th></tr>
+    <tr><th>Deck</th><th>Bracket</th><th class="num">Cards</th><th>Owned</th><th class="num">Value</th><th></th></tr>
     {% for s in summaries %}
     <tr>
       <td><a href="/decks/{{ s.deck.id }}">{{ s.deck.name }}</a></td>
+      <td>{% if s.bracket_name %}<span class="badge bracket">{{ s.deck.bracket }} · {{ s.bracket_name }}</span>{% else %}<span class="muted">–</span>{% endif %}</td>
       <td class="num">{{ s.usable }} / {{ s.needed }}</td>
       <td style="width: 35%"><div class="progress slim"><div style="width: {{ s.percent }}%"></div></div></td>
       <td class="num">{{ s.value | eur }}</td>
@@ -77,10 +88,15 @@
     <textarea name="decklist" placeholder="1 Sol Ring&#10;1 Arcane Signet&#10;1 Fire // Ice">{{ decklist or '' }}</textarea>
     <div class="row">
       <label>Deck name (optional)<input name="deck_name" size="30" value="{{ deck_name or '' }}" placeholder="Taken from Archidekt or the file name"></label>
+      <label class="check" title="Plains, Island, Swamp, Mountain, Forest, Wastes and their snow-covered versions">
+        <input name="include_basics" type="checkbox" {{ 'checked' if include_basics }}>&nbsp;Include basic lands
+      </label>
+      <label class="check"><input name="include_tokens" type="checkbox" {{ 'checked' if include_tokens }}>&nbsp;Include tokens</label>
       <button name="action" value="save">Save deck</button>
       <button name="action" value="check" class="secondary">Only check, don't save</button>
     </div>
-    <p class="muted">Saving sets the cards you own aside for this deck. "Only check" shows what you have without saving anything.</p>
+    <p class="muted">Saving sets the cards you own aside for this deck. "Only check" shows what you have without saving anything.
+      Basic lands and tokens are left out unless you tick the boxes.</p>
   </form>
 </div>
 {% endif %}
@@ -105,14 +121,60 @@
     {{ have | length }} different cards {{ 'set aside for this deck' if deck else 'ready to pull from your collection' }} · {{ need | length }} still to get
     · the copies you have for it are worth <strong>{{ value | eur }}</strong>
   </p>
+  {% set basics = left_out.basic_total if left_out else 0 %}
+  {% set tokens = left_out.tokens if left_out else 0 %}
+  {% if basics or tokens %}
+  <p class="muted">
+    Not tracked:
+    {% if basics %}{{ basics }} basic land{{ 's' if basics != 1 }}{% if not deck %} ({% for land, count in left_out.basics.items() %}{{ count }} {{ land }}{{ ', ' if not loop.last }}{% endfor %}){% endif %}{% endif %}{{ ' and ' if basics and tokens }}{% if tokens %}{{ tokens }} token{{ 's' if tokens != 1 }}{% endif %}.
+    They are part of the deck ({{ total + basics }} cards in total) but not counted above.
+  </p>
+  {% endif %}
   {% if not deck %}
   <form class="row" method="post" action="/deck/save">
     <input type="hidden" name="decklist" value="{{ decklist }}">
+    {% for land, count in (left_out.basics if left_out else {}).items() %}<input type="hidden" name="basic:{{ land }}" value="{{ count }}">{% endfor %}
+    <input type="hidden" name="bracket" value="{{ bracket or '' }}">
+    <input type="hidden" name="skipped_token" value="{{ tokens }}">
     <label>Deck name<input name="name" required size="30" value="{{ deck_name or '' }}" placeholder="My Commander deck"></label>
     <button>Save deck &amp; set these cards aside</button>
   </form>
   <p class="muted"><strong>This deck is not saved yet.</strong> Saved decks keep their cards, so the next deck does not count the same Sol Ring again.</p>
   {% endif %}
+</div>
+
+{% if deck %}
+<div class="panel">
+  <h2>Basic lands <span class="muted">· {{ basics }} in this deck</span></h2>
+  <form class="row" method="post" action="/decks/{{ deck.id }}/basics" data-keep-scroll>
+    {% for land in basic_names[:6] %}
+    <label>{{ land }}<input class="qty" name="basic:{{ land }}" type="number" min="0" step="1" value="{{ left_out.basics.get(land, 0) }}"></label>
+    {% endfor %}
+    <details class="snow" {{ 'open' if left_out.basics.keys() | select('in', basic_names[6:]) | list }}>
+      <summary class="muted">Snow-covered</summary>
+      <div class="row">
+        {% for land in basic_names[6:] %}
+        <label>{{ land | replace('Snow-Covered ', '') }}<input class="qty" name="basic:{{ land }}" type="number" min="0" step="1" value="{{ left_out.basics.get(land, 0) }}"></label>
+        {% endfor %}
+      </div>
+    </details>
+    <button class="secondary">Save lands</button>
+  </form>
+  <p class="muted">Fill in how many of each basic land this deck runs. Any printing counts, so they are not matched against your collection.</p>
+  {% if tracked_basics %}
+  <form class="row notice" method="post" action="/decks/{{ deck.id }}/basics/move">
+    <span>This deck still has {{ tracked_basics }} basic land{{ 's' if tracked_basics != 1 }} in its card list below, tied to specific copies in your collection.</span>
+    <button class="small">Move them here</button>
+  </form>
+  {% endif %}
+</div>
+{% endif %}
+
+<div class="panel search-panel">
+  <div class="toolbar search-bar">
+    <input id="deck-search" type="search" size="40" autocomplete="off" placeholder="Search in this deck…" aria-label="Search in this deck">
+    <span id="deck-count" class="muted"></span>
+  </div>
 </div>
 
 <div class="panel table-wrap">
@@ -124,7 +186,7 @@
       <th>{{ 'Printing in this deck' if deck else 'Copies to use' }}</th><th class="num">Value</th>
     </tr>
     {% for row in have %}
-    <tr>
+    <tr data-deck-row="{{ row.name }} {% for p, n in row.picks %}{{ p.card.set_name }} {{ p.card.set_code }} {% endfor %}">
       <td>{{ thumb(row) }}</td>
       <td>{{ row.name }}</td>
       <td class="num">{{ row.needed }}</td>
@@ -156,7 +218,7 @@
   <table>
     <tr><th></th><th>Card</th><th class="num">Needed</th><th class="num">Owned</th><th class="num">Free</th><th class="num">Missing</th><th>Status</th></tr>
     {% for row in need %}
-    <tr>
+    <tr data-deck-row="{{ row.name }} {% for p, n in row.picks %}{{ p.card.set_name }} {{ p.card.set_code }} {% endfor %}">
       <td>{{ thumb(row) }}</td>
       <td>{{ row.name }}{{ using(row) }}</td>
       <td class="num">{{ row.needed }}</td>
@@ -176,5 +238,31 @@
   <p class="up">{{ 'This deck is complete.' if deck else 'You have every card for this deck available.' }}</p>
   {% endif %}
 </div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{% if rows is not none %}
+<script>
+  // Instant search over the cards of this deck (name or set), ignoring accents.
+  const deckSearch = document.getElementById("deck-search");
+  const deckCount = document.getElementById("deck-count");
+  const fold = (text) => text.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
+  const deckRows = [...document.querySelectorAll("tr[data-deck-row]")].map((row) => ({ row, text: fold(row.dataset.deckRow) }));
+
+  function filterDeck() {
+    const words = fold(deckSearch.value).split(/\s+/).filter(Boolean);
+    let shown = 0;
+    for (const item of deckRows) {
+      const match = words.every((word) => item.text.includes(word));
+      item.row.hidden = !match;
+      if (match) shown += 1;
+    }
+    deckCount.textContent = words.length ? `${shown} of ${deckRows.length} cards` : `${deckRows.length} different cards`;
+  }
+
+  deckSearch.addEventListener("input", filterDeck);
+  filterDeck();
+</script>
 {% endif %}
 {% endblock %}

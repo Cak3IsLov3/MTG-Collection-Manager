@@ -20,8 +20,20 @@ def _make_engine(url: str):
 engine = _make_engine(get_settings().database_url)
 
 
+def add_missing_columns(target=None) -> None:
+    """create_all() never alters an existing table, so add columns introduced after a table was created."""
+    target = target or engine
+    if target.dialect.name != "sqlite":
+        return
+    with target.begin() as connection:
+        columns = {row[1] for row in connection.exec_driver_sql("PRAGMA table_info(deck)")}
+        if columns and "bracket" not in columns:
+            connection.exec_driver_sql("ALTER TABLE deck ADD COLUMN bracket INTEGER")
+
+
 def init_db() -> None:
     SQLModel.metadata.create_all(engine)
+    add_missing_columns()
 
 
 def get_session() -> Iterator[Session]:

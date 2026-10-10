@@ -233,3 +233,196 @@ def test_choose_printing_through_pages_and_api(client):
     assert client.put(url, json={"collection_entry_id": None}).json()["value"] == 1.5
     assert client.put(url, json={"collection_entry_id": 9999}).status_code == 400
     assert client.put(f"/api/decks/9999/cards/{card['entry_id']}/printing", json={}).status_code == 404
+
+
+def test_basic_lands_and_tokens_are_left_out_by_default():
+    from app.services.decks import archidekt_bracket, parse_archidekt_deck, select_tracked
+
+    text = """1 Sol Ring
+10 Forest
+3 Snow-Covered Island
+2 forest
+1 Command Tower
+2 Treasure Token
+1x Rabbit (tblb) 21 [Tokens & Extras{noDeck}{noPrice}]
+1x Hare Apparent (fdn) 15 [Tokens]
+1x Mana Crypt (2xm) 270 [Maybeboard{noDeck}{noPrice},Ramp]
+"""
+    cards = parse_decklist(text)
+    assert "Mana Crypt" not in [c.name for c in cards]  # maybeboard is not part of the deck at all
+
+    tracked, left_out = select_tracked(cards)
+    # Non-basic lands stay, and a user category called "Tokens" is a theme, not tokens.
+    assert [c.name for c in tracked] == ["Sol Ring", "Command Tower", "Hare Apparent"]
+    assert left_out.basics == {"Forest": 12, "Snow-Covered Island": 3}  # per land, whatever the printing
+    assert (left_out.basic_total, left_out.tokens) == (15, 3)
+
+    tracked, left_out = select_tracked(cards, include_basics=True)
+    assert "Forest" in [c.name for c in tracked] and left_out.basics == {} and left_out.tokens == 3
+    assert select_tracked(cards, include_basics=True, include_tokens=True)[1].tokens == 0
+
+    archidekt = {
+        "name": "Rabbits",
+        "edhBracket": 3,
+        "categories": [
+            {"name": "Land", "includedInDeck": True},
+            {"name": "Tokens", "includedInDeck": True},
+            {"name": "Tokens & Extras", "includedInDeck": False},
+            {"name": "Sideboard", "includedInDeck": False},
+        ],
+        "cards": [
+            {"quantity": 5, "categories": ["Land"], "card": {"oracleCard": {"name": "Plains", "superTypes": ["Basic"], "types": ["Land"]}}},
+            {"quantity": 2, "categories": ["Land"], "card": {"oracleCard": {"name": "Plains", "superTypes": ["Basic"], "types": ["Land"]}}},
+            {"quantity": 1, "categories": ["Land"], "card": {"oracleCard": {"name": "Command Tower", "superTypes": [], "types": ["Land"]}}},
+            {"quantity": 17, "categories": ["Tokens"], "card": {"oracleCard": {"name": "Hare Apparent", "types": ["Creature"]}}},
+            {"quantity": 4, "categories": ["Tokens & Extras"], "card": {"oracleCard": {"name": "Rabbit", "layout": "token", "types": ["Token", "Creature"]}}},
+            {"quantity": 1, "categories": ["Sideboard"], "card": {"oracleCard": {"name": "Sol Ring", "types": ["Artifact"]}}},
+        ],
+    }
+    _, cards = parse_archidekt_deck(archidekt)
+    tracked, left_out = select_tracked(cards)
+    assert [(c.quantity, c.name) for c in tracked] == [(1, "Command Tower"), (17, "Hare Apparent")]
+    assert (left_out.basics, left_out.tokens) == ({"Plains": 7}, 4)
+    assert archidekt_bracket(archidekt) == 3 and archidekt_bracket({"edhBracket": None}) is None
+
+
+def test_saved_deck_keeps_its_basic_lands_per_land(client):
+    client.post("/api/collection", json={"name": "Sol Ring"})
+    decklist = "1 Sol Ring\n20 Forest\n10 Plains\n2 Treasure Token"
+
+    checked = client.post("/deck", data={"decklist": decklist, "action": "check"})
+    assert "You have 1 of the 1 cards for this deck available (100%)" in checked.text
+    assert "30 basic lands (10 Plains, 20 Forest) and 2 tokens" in checked.text
+    assert 'name="basic:Forest" value="20"' in checked.text
+
+    saved = client.post("/deck", data={"decklist": decklist, "deck_name": "Ramp", "action": "save"})
+    assert "This deck is complete." in saved.text and "30 basic lands and 2 tokens" in saved.text
+    assert "31 cards in total" in saved.text  # tokens are extras, not part of the deck size
+    deck = client.get("/api/decks").json()[0]
+    assert (deck["cards_needed"], deck["complete"], deck["basic_land_count"]) == (1, True, 30)
+    detail = client.get(f"/api/decks/{deck['id']}").json()
+    assert detail["basic_lands"] == {"Plains": 10, "Forest": 20} and detail["untracked"] == {"basic": 30, "token": 2}
+
+    included = client.post("/api/decks", json={"name": "All", "decklist": decklist, "include_basic_lands": True}).json()
+    assert (included["cards_needed"], included["basic_lands"], included["untracked"]) == (31, {}, {"token": 2})
+
+    # Saving after "Only check" keeps the lands and the bracket; deleting a deck cleans up.
+    again = client.post("/deck/save", data={"name": "Later", "decklist": "1 Sol Ring", "basic:Island": "7", "skipped_token": "0", "bracket": "4"})
+    assert "7 basic lands." in again.text
+    later = client.get("/api/decks").json()[-1]
+    assert (later["basic_land_count"], later["bracket"], later["bracket_name"]) == (7, 4, "Optimized")
+    for d in client.get("/api/decks").json():
+        assert client.delete(f"/api/decks/{d['id']}").status_code == 204
+
+    only_lands = client.post("/api/decks/check", json={"decklist": "20 Island"})
+    assert only_lands.status_code == 400 and "basic lands and tokens" in only_lands.json()["detail"]
+
+
+def test_edit_basic_lands_of_a_saved_deck(client):
+    # A deck that was saved without any basic lands, like the ones imported before this existed.
+    deck = client.post("/api/decks", json={"name": "Old", "decklist": "1 Sol Ring"}).json()
+    assert deck["basic_lands"] == {} and deck["basic_land_count"] == 0
+    url = f"/api/decks/{deck['id']}/basic-lands"
+
+    updated = client.put(url, json={"Plains": 10, "forest": 3, "Island": 0}).json()
+    assert updated["basic_lands"] == {"Plains": 10, "Forest": 3}  # zero is dropped, names are normalised
+    assert (updated["basic_land_count"], updated["cards_needed"]) == (13, 1)  # lands are not tracked cards
+
+    page = client.get(f"/decks/{deck['id']}")
+    assert 'name="basic:Plains" type="number" min="0" step="1" value="10"' in page.text
+    assert 'name="basic:Swamp" type="number" min="0" step="1" value="0"' in page.text
+    assert "14 cards in total" in page.text
+
+    form = client.post(f"/decks/{deck['id']}/basics", data={"basic:Plains": "8", "basic:Snow-Covered Forest": "2", "basic:Forest": ""})
+    assert "Basic lands updated" in form.text
+    assert client.get(f"/api/decks/{deck['id']}").json()["basic_lands"] == {"Plains": 8, "Snow-Covered Forest": 2}
+
+    assert client.put(url, json={"Sol Ring": 1}).status_code == 400
+    assert client.put(url, json={"Plains": -1}).status_code == 400
+    assert "not a number" in client.post(f"/decks/{deck['id']}/basics", data={"basic:Plains": "many"}).text
+    assert client.put("/api/decks/9999/basic-lands", json={}).status_code == 404
+    assert client.get(f"/api/decks/{deck['id']}").json()["basic_lands"] == {"Plains": 8, "Snow-Covered Forest": 2}
+
+
+def test_deck_bracket(client):
+    deck = client.post("/api/decks", json={"name": "Casual", "decklist": "1 Sol Ring", "bracket": 2}).json()
+    assert (deck["bracket"], deck["bracket_name"]) == (2, "Core")
+    url = f"/api/decks/{deck['id']}/bracket"
+
+    assert client.put(url, json={"bracket": 4}).json()["bracket_name"] == "Optimized"
+    assert client.put(url, json={"bracket": 6}).status_code == 422
+    listing = client.get("/deck")
+    assert "4 · Optimized" in listing.text
+
+    page = client.post(f"/decks/{deck['id']}/bracket", data={"bracket": "5"})
+    assert '<option value="5" selected>5 · cEDH</option>' in page.text
+    assert "1 to 5" in client.post(f"/decks/{deck['id']}/bracket", data={"bracket": "9"}).text
+    client.post(f"/decks/{deck['id']}/bracket", data={"bracket": ""})
+    cleared = client.get(f"/api/decks/{deck['id']}").json()
+    assert (cleared["bracket"], cleared["bracket_name"]) == (None, None)
+    assert client.put("/api/decks/9999/bracket", json={"bracket": 1}).status_code == 404
+
+
+async def test_archidekt_deck_brings_its_bracket_and_lands(session, monkeypatch):
+    from app.routers.api import load_deck
+    from app.services import decks as deck_service
+
+    async def fake_json(deck_id, transport=None):
+        return {
+            "name": "Rabbit Tribal",
+            "edhBracket": 3,
+            "cards": [
+                {"quantity": 10, "categories": ["Land"], "card": {"oracleCard": {"name": "Plains", "superTypes": ["Basic"], "types": ["Land"]}}},
+                {"quantity": 1, "categories": ["Ramp"], "card": {"oracleCard": {"name": "Sol Ring", "types": ["Artifact"]}}},
+            ],
+        }
+
+    monkeypatch.setattr(deck_service, "fetch_archidekt_json", fake_json)
+    loaded = await load_deck(None, "https://archidekt.com/decks/18350424/")
+    assert (loaded.name, loaded.bracket, loaded.left_out.basics) == ("Rabbit Tribal", 3, {"Plains": 10})
+    deck = deck_service.save_deck(session, loaded.name, loaded.cards, loaded.left_out, loaded.bracket)
+    assert deck.bracket == 3 and deck_service.deck_left_out(session, deck).basics == {"Plains": 10}
+
+
+def test_deck_page_has_a_search_box(client):
+    deck = client.post("/api/decks", json={"name": "Ramp", "decklist": "1 Sol Ring\n1 Fire // Ice"}).json()
+    page = client.get(f"/decks/{deck['id']}")
+    assert 'id="deck-search"' in page.text and page.text.count("data-deck-row=") == 2
+    assert 'id="deck-search"' in client.post("/deck", data={"decklist": "1 Sol Ring"}).text
+    assert 'id="deck-search"' not in client.get("/deck").text  # nothing to search yet
+
+
+def test_bracket_column_is_added_to_an_existing_database():
+    from sqlalchemy import create_engine
+
+    from app.database import add_missing_columns
+
+    old = create_engine("sqlite://")
+    with old.begin() as connection:
+        connection.exec_driver_sql("CREATE TABLE deck (id INTEGER PRIMARY KEY, name VARCHAR NOT NULL, created_at DATETIME)")
+        connection.exec_driver_sql("INSERT INTO deck (name) VALUES ('Marwyn')")
+    add_missing_columns(old)
+    add_missing_columns(old)  # running it again changes nothing
+    with old.begin() as connection:
+        assert connection.exec_driver_sql("SELECT name, bracket FROM deck").all() == [("Marwyn", None)]
+
+
+def test_move_basic_lands_out_of_an_older_deck(client):
+    # Older decks were saved with their basic lands as ordinary cards.
+    client.post("/api/collection", json={"name": "Sol Ring"})
+    deck = client.post("/api/decks", json={"name": "Old", "decklist": "1 Sol Ring\n30 Forest\n4 Island", "include_basic_lands": True}).json()
+    assert (deck["cards_needed"], deck["cards_usable"], deck["basic_lands"]) == (35, 1, {})
+    client.put(f"/api/decks/{deck['id']}/basic-lands", json={"Forest": 1})
+
+    page = client.get(f"/decks/{deck['id']}")
+    assert "still has 34 basic lands in its card list" in page.text
+
+    moved = client.post(f"/decks/{deck['id']}/basics/move")
+    assert "Moved 34 basic lands out of the card list" in moved.text and "still has" not in moved.text
+    after = client.get(f"/api/decks/{deck['id']}").json()
+    assert (after["cards_needed"], after["complete"]) == (1, True)
+    assert after["basic_lands"] == {"Island": 4, "Forest": 31}  # added to what was already filled in
+    assert [c["name"] for c in after["cards"]] == ["Sol Ring"]
+
+    again = client.post(f"/api/decks/{deck['id']}/basic-lands/move").json()  # nothing left to move
+    assert again["basic_lands"] == {"Island": 4, "Forest": 31}

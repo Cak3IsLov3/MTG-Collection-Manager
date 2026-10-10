@@ -69,6 +69,7 @@ class Deck(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     name: str
     created_at: dt.datetime = Field(default_factory=utcnow)
+    bracket: int | None = None  # Commander bracket 1-5, if known
 
 
 class DeckEntry(SQLModel, table=True):
@@ -76,6 +77,24 @@ class DeckEntry(SQLModel, table=True):
     deck_id: int = Field(foreign_key="deck.id", index=True)
     name: str
     quantity: int = 1
+
+
+class DeckBasicLand(SQLModel, table=True):
+    """How many of a basic land a deck runs. Counted by name only: any printing will do."""
+
+    id: int | None = Field(default=None, primary_key=True)
+    deck_id: int = Field(foreign_key="deck.id", index=True)
+    name: str  # "Plains", "Snow-Covered Island", ...
+    quantity: int = 0
+
+
+class DeckSkipped(SQLModel, table=True):
+    """How many tokens were left out of a saved deck."""
+
+    id: int | None = Field(default=None, primary_key=True)
+    deck_id: int = Field(foreign_key="deck.id", index=True)
+    kind: str  # "basic" | "token"
+    quantity: int = 0
 
 
 class DeckPick(SQLModel, table=True):

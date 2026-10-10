@@ -15,13 +15,15 @@ price.
 | --- | --- |
 | ![Top 10 most valuable cards, risers and fallers](docs/dashboard-cards.jpg) | ![Wishlist](docs/wishlist.jpg) |
 
-| Collection: add by name or card number, edit quantities | Saved decks and adding a new one |
+| Collection: add by name or card number, edit quantities | Saved decks with their bracket, and adding a new one |
 | --- | --- |
-| ![Collection](docs/collection.jpg) | ![Saved decks with progress](docs/decks.jpg) |
+| ![Collection](docs/collection.jpg) | ![Saved decks with bracket, progress and value](docs/decks.jpg) |
 
 ![Searching the collection: four versions of Sol Ring, told apart by set and card number](docs/collection-search.jpg)
 
-![A saved deck: the printing each card uses, a choice of printing where you own several, and the deck's value](docs/deck.jpg)
+![A saved deck: its bracket, basic lands per land, search, and the printing each card uses](docs/deck.jpg)
+
+![Searching inside a deck on a set name](docs/deck-search.jpg)
 
 ![Deleting a deck asks for a second click instead of a pop-up](docs/deck-delete.jpg)
 
@@ -52,6 +54,10 @@ price.
 - "Bought it" moves a card from WANT to HAVE
 - Deck check: paste a decklist, upload a deck file or give an Archidekt URL. You see which cards you already own and in which printing (set, foil, quantity), so you can pull them from your collection, and you can add the missing cards to your wishlist in one click
 - Saved decks: save a deck and the cards you own are set aside for it. Every copy can only be in one deck, so a second deck does not count the same Sol Ring again; it shows which deck is using it instead
+- Basic lands and tokens are left out of the tracked cards by default, so they do not show up as missing or end up on your wishlist; tick a box to include them
+- Basic lands per deck: fill in how many of each basic land a deck runs, whatever the printing. Imported decks start with the numbers from the list, and older decks can move their lands over in one click
+- Search inside a deck on card name or set
+- Commander bracket per deck: taken from Archidekt when the deck has one, and changeable at any time
 - Choose the printing: if you own a card in several printings you pick which one is in the deck (say, the foil); otherwise the cheapest free copy is used
 - Deck value: every saved deck shows what the copies in it are worth
 
@@ -123,6 +129,8 @@ product page. Two things to know:
 | `GET` / `POST` | `/api/decks` | List saved decks / save a deck and set its cards aside |
 | `GET` / `DELETE` | `/api/decks/{id}` | A saved deck with its cards / delete it and free its cards |
 | `PUT` | `/api/decks/{id}/cards/{entry_id}/printing` | Choose which printing a deck uses for a card |
+| `PUT` | `/api/decks/{id}/basic-lands` | Set how many of each basic land a deck runs |
+| `PUT` | `/api/decks/{id}/bracket` | Set or clear the Commander bracket of a deck |
 | `POST` | `/api/jobs/update-prices`, `/api/jobs/check-wishlist` | Run a background job now |
 
 ## How it works
@@ -130,7 +138,7 @@ product page. Two things to know:
 ```
 app/
   main.py              FastAPI app, lifespan (database + scheduler)
-  models.py            Card, CollectionEntry, WishlistEntry, PriceSnapshot, Alert, DailyTotal, Deck, DeckEntry, DeckPick
+  models.py            Card, CollectionEntry, WishlistEntry, PriceSnapshot, Alert, DailyTotal, Deck, DeckEntry, DeckPick, DeckBasicLand, DeckSkipped
   scryfall.py          async Scryfall client (httpx), batch lookups, 429 retry
   cardmarket.py        product page scraper (BeautifulSoup), selectors from JSON
   rate_limit.py        one independent rate-limit queue per external source
