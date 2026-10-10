@@ -13,7 +13,7 @@ from app.database import engine
 from app.discord import DiscordNotifier
 from app.models import Alert, Card, CollectionEntry, WishlistEntry, utcnow
 from app.scryfall import ScryfallClient, ScryfallError
-from app.services.pricing import CARDMARKET, SCRYFALL, latest_snapshots, record_snapshot
+from app.services.pricing import CARDMARKET, SCRYFALL, latest_snapshots, record_scryfall_price, record_snapshot
 from app.services.stats import record_daily_total
 from app.services.wishlist import recently_alerted
 
@@ -31,6 +31,12 @@ async def update_collection_prices(session: Session, scryfall: ScryfallClient) -
     """Snapshot today's Scryfall prices and the daily totals. Returns the number of cards updated."""
     cards = tracked_cards(session)
     found, _ = await scryfall.get_collection([{"id": card.scryfall_id} for card in cards])
+    foils = session.exec(
+        select(Card.scryfall_id)
+        .join(CollectionEntry, CollectionEntry.card_id == Card.id)
+        .where(CollectionEntry.is_foil == True)  # noqa: E712
+    ).all()
+    await scryfall.fill_missing_prices(found, set(foils))
     by_id = {data.scryfall_id: data for data in found}
     updated = 0
     for card in cards:
@@ -38,7 +44,7 @@ async def update_collection_prices(session: Session, scryfall: ScryfallClient) -
         if data is None:
             logger.warning("Scryfall no longer knows %s (%s)", card.name, card.scryfall_id)
             continue
-        record_snapshot(session, card.id, SCRYFALL, data.price_eur, data.price_eur_foil)
+        record_scryfall_price(session, card.id, data)
         updated += 1
     record_daily_total(session)
     session.commit()
@@ -76,11 +82,12 @@ async def check_wishlist(
         except ScryfallError as exc:
             logger.warning("Could not refresh Scryfall prices for the wishlist: %s", exc)
         else:
+            await scryfall.fill_missing_prices(found)
             fresh = {data.scryfall_id: data for data in found}
             for _, card in entries:
                 data = fresh.get(card.scryfall_id)
                 if data is not None:
-                    record_snapshot(session, card.id, SCRYFALL, data.price_eur, data.price_eur_foil)
+                    record_scryfall_price(session, card.id, data)
     scryfall_prices = latest_snapshots(session, SCRYFALL)
     for entry, card in entries:
         price, source = None, CARDMARKET

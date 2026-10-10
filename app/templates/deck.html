@@ -9,7 +9,7 @@
   <div class="printing">
     {{ count }}× <a href="/cards/{{ p.card.id }}">{{ printing_name(p) }}</a>
     {% if p.entry.is_foil %}<span class="badge foil">foil</span>{% endif %}
-    <span class="muted">{{ p.unit_price | eur }}</span>
+    <span class="muted">{{ p.unit_price | eur }}</span>{% if p.price_from_set %} <span class="badge est" title="This printing has no price. Shown is the cheapest printing with a price: {{ p.price_from_set | upper }}.">≈ {{ p.price_from_set | upper }}</span>{% endif %}
   </div>
   {% endfor %}
   {% if deck and row.entry_id and row.printings | length > 1 and not row.unassigned %}

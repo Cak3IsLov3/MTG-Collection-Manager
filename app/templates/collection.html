@@ -61,7 +61,7 @@
                  data-entry="{{ row.entry.id }}" aria-label="Quantity of {{ row.card.name }}">
         </form>
       </td>
-      <td class="num">{{ row.unit_price | eur }}</td>
+      <td class="num">{{ row.unit_price | eur }}{% if row.price_from_set %} <span class="badge est" title="This printing has no price. Shown is the cheapest printing with a price: {{ row.price_from_set | upper }}.">≈ {{ row.price_from_set | upper }}</span>{% endif %}</td>
       <td class="num row-total" data-value="{{ row.total_price or 0 }}">{{ row.total_price | eur }}</td>
       <td>
         <div class="actions">

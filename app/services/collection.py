@@ -8,7 +8,7 @@ from sqlmodel import Session, select
 from app.csv_import import ImportRow
 from app.models import Card, CollectionEntry
 from app.scryfall import InvalidCardRequest, ScryfallClient
-from app.services.pricing import SCRYFALL, latest_snapshots, price_for, store_scryfall_card
+from app.services.pricing import SCRYFALL, latest_snapshots, price_for, price_origin, store_scryfall_card
 
 
 @dataclass
@@ -16,6 +16,8 @@ class CollectionRow:
     entry: CollectionEntry
     card: Card
     unit_price: float | None
+    # Set code when this printing has no price and the price of another printing is shown.
+    price_from_set: str | None = None
 
     @property
     def total_price(self) -> float | None:
@@ -58,7 +60,12 @@ def collection_rows(session: Session, entry_id: int | None = None) -> list[Colle
         statement = statement.where(CollectionEntry.id == entry_id)
     prices = latest_snapshots(session, SCRYFALL)
     return [
-        CollectionRow(entry=entry, card=card, unit_price=price_for(prices.get(card.id), entry.is_foil))
+        CollectionRow(
+            entry=entry,
+            card=card,
+            unit_price=price_for(prices.get(card.id), entry.is_foil),
+            price_from_set=price_origin(prices.get(card.id), entry.is_foil),
+        )
         for entry, card in session.exec(statement)
     ]
 
@@ -112,6 +119,7 @@ async def add_card_by_name(
         data = await scryfall.get_by_name(name, set_code)
     else:
         raise InvalidCardRequest("Fill in a card name, or a set and card number")
+    await scryfall.fill_missing_prices([data], {data.scryfall_id} if is_foil else set())
     return add_to_collection(session, store_scryfall_card(session, data), quantity, is_foil)
 
 
@@ -121,6 +129,10 @@ async def import_rows(
     """Add rows to the collection; with `replace` the import becomes the whole collection."""
     result = ImportResult()
     resolved = await scryfall.resolve(rows)
+    await scryfall.fill_missing_prices(
+        [data for data in resolved if data is not None],
+        {data.scryfall_id for row, data in zip(rows, resolved) if data is not None and row.is_foil},
+    )
     if replace:
         # Only after Scryfall answered, so a failed lookup never empties the collection.
         for entry in session.exec(select(CollectionEntry)).all():

@@ -33,6 +33,8 @@ def record_snapshot(
     price_eur: float | None,
     price_eur_foil: float | None = None,
     day: dt.date | None = None,
+    eur_from_set: str | None = None,
+    eur_foil_from_set: str | None = None,
 ) -> PriceSnapshot:
     """Store today's price, overwriting an earlier snapshot from the same day and source."""
     day = day or dt.date.today()
@@ -45,6 +47,8 @@ def record_snapshot(
         snapshot = PriceSnapshot(card_id=card_id, date=day, source=source)
     snapshot.price_eur = price_eur
     snapshot.price_eur_foil = price_eur_foil
+    snapshot.eur_from_set = eur_from_set
+    snapshot.eur_foil_from_set = eur_foil_from_set
     session.add(snapshot)
     session.flush()
     return snapshot
@@ -53,8 +57,21 @@ def record_snapshot(
 def store_scryfall_card(session: Session, data: ScryfallCard) -> Card:
     """Upsert the card and snapshot its current Scryfall prices."""
     card = upsert_card(session, data)
-    record_snapshot(session, card.id, SCRYFALL, data.price_eur, data.price_eur_foil)
+    record_scryfall_price(session, card.id, data)
     return card
+
+
+def record_scryfall_price(session: Session, card_id: int, data: ScryfallCard) -> PriceSnapshot:
+    """Snapshot today's Scryfall prices, including where a borrowed price came from."""
+    return record_snapshot(
+        session,
+        card_id,
+        SCRYFALL,
+        data.price_eur,
+        data.price_eur_foil,
+        eur_from_set=data.eur_from_set,
+        eur_foil_from_set=data.eur_foil_from_set,
+    )
 
 
 def _snapshot_per_card(session: Session, source: str, pick, since: dt.date | None) -> dict[int, PriceSnapshot]:
@@ -80,6 +97,13 @@ def latest_snapshots(session: Session, source: str) -> dict[int, PriceSnapshot]:
 def earliest_snapshots(session: Session, source: str, since: dt.date) -> dict[int, PriceSnapshot]:
     """Oldest snapshot per card id that is not older than `since`."""
     return _snapshot_per_card(session, source, func.min, since)
+
+
+def price_origin(snapshot: PriceSnapshot | None, is_foil: bool) -> str | None:
+    """Set code the price was borrowed from, or None when it is this printing's own price."""
+    if snapshot is None:
+        return None
+    return snapshot.eur_foil_from_set if is_foil else snapshot.eur_from_set
 
 
 def price_for(snapshot: PriceSnapshot | None, is_foil: bool) -> float | None:

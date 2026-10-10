@@ -78,6 +78,14 @@ class FakeScryfall:
                 return httpx.Response(200, json=match) if match else not_found
             card = self._find({"name": name, **({"set": params["set"]} if "set" in params else {})})
             return httpx.Response(200, json=card) if card else not_found
+        if request.url.path == "/cards/search":
+            import re
+
+            wanted = {name.lower() for name in re.findall(r'!"([^"]+)"', request.url.params["q"])}
+            prints = [card for card in self.cards if card["name"].lower() in wanted]
+            if not prints:
+                return not_found
+            return httpx.Response(200, json={"data": prints, "has_more": False})
         if request.url.path == "/cards/collection":
             data, missing = [], []
             for identifier in json.loads(request.content)["identifiers"]:

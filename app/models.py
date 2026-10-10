@@ -47,6 +47,9 @@ class PriceSnapshot(SQLModel, table=True):
     source: str  # "scryfall" | "cardmarket"
     price_eur: float | None = None
     price_eur_foil: float | None = None
+    # Set code of another printing when this printing has no price of its own and the price is borrowed.
+    eur_from_set: str | None = None
+    eur_foil_from_set: str | None = None
 
 
 class Alert(SQLModel, table=True):

@@ -627,6 +627,7 @@ async def add_missing_to_wishlist(
     """
     added, not_found = 0, []
     resolved = await scryfall.resolve([CardRef(name=name) for name in names])
+    await scryfall.fill_missing_prices([data for data in resolved if data is not None])
     for name, data in zip(names, resolved):
         if data is None:
             not_found.append(name)

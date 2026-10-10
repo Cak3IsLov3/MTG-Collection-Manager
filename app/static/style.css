@@ -151,3 +151,5 @@ button:disabled { opacity: .45; cursor: default; filter: none; }
 .random-card.settled:hover { text-decoration: none; filter: brightness(1.15); }
 .random-card strong { font-size: 17px; }
 @keyframes land { from { transform: scale(.92); } 60% { transform: scale(1.04); } to { transform: scale(1); } }
+
+.badge.est { border-style: dashed; cursor: help; }

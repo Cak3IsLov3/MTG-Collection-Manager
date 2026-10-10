@@ -28,6 +28,7 @@ def add_missing_columns(target=None) -> None:
     added = {
         "deck": {"bracket": "INTEGER"},
         "deckentry": {"unassigned": "BOOLEAN NOT NULL DEFAULT 0"},
+        "pricesnapshot": {"eur_from_set": "VARCHAR", "eur_foil_from_set": "VARCHAR"},
     }
     with target.begin() as connection:
         for table, new_columns in added.items():

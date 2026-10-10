@@ -35,7 +35,7 @@
         <div class="muted">{{ row.card.set_name }} ({{ row.card.set_code | upper }})</div>
       </td>
       <td class="num">
-        {{ row.current_price | eur }}
+        {{ row.current_price | eur }}{% if row.price_from_set %} <span class="badge est" title="This printing has no price. Shown is the cheapest printing with a price: {{ row.price_from_set | upper }}.">≈ {{ row.price_from_set | upper }}</span>{% endif %}
         {% if row.price_source %}<div class="muted">{{ row.price_source }} · {{ row.price_date }}</div>{% endif %}
       </td>
       <td class="num">

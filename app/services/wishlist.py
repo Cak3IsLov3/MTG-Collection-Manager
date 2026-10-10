@@ -18,6 +18,8 @@ class WishlistRow:
     current_price: float | None
     price_source: str | None
     price_date: dt.date | None
+    # Set code when this printing has no price and the price of another printing is shown.
+    price_from_set: str | None = None
 
     @property
     def below_target(self) -> bool:
@@ -48,15 +50,18 @@ def add_to_wishlist(
     return entry
 
 
-def current_prices(session: Session) -> dict[int, tuple[float, str, dt.date]]:
-    """Freshest known price per card id; Cardmarket wins over Scryfall on the same day."""
-    best: dict[int, tuple[float, str, dt.date]] = {}
+def current_prices(session: Session) -> dict[int, tuple[float, str, dt.date, str | None]]:
+    """Freshest known price per card id; Cardmarket wins over Scryfall on the same day.
+
+    The last element is the set the price was borrowed from, if it is not the printing's own.
+    """
+    best: dict[int, tuple[float, str, dt.date, str | None]] = {}
     for source in (SCRYFALL, CARDMARKET):
         for card_id, snapshot in latest_snapshots(session, source).items():
             if snapshot.price_eur is None:
                 continue
             if card_id not in best or snapshot.date >= best[card_id][2]:
-                best[card_id] = (snapshot.price_eur, source, snapshot.date)
+                best[card_id] = (snapshot.price_eur, source, snapshot.date, snapshot.eur_from_set)
     return best
 
 
@@ -69,8 +74,13 @@ def wishlist_rows(session: Session, entry_id: int | None = None) -> list[Wishlis
     prices = current_prices(session)
     rows = []
     for entry, card in session.exec(statement):
-        price, source, day = prices.get(card.id, (None, None, None))
-        rows.append(WishlistRow(entry=entry, card=card, current_price=price, price_source=source, price_date=day))
+        price, source, day, from_set = prices.get(card.id, (None, None, None, None))
+        rows.append(
+            WishlistRow(
+                entry=entry, card=card, current_price=price, price_source=source, price_date=day,
+                price_from_set=from_set,
+            )
+        )
     return rows
 
 
@@ -88,6 +98,7 @@ async def add_wish_by_name(
     cardmarket_url: str | None = None,
 ) -> WishlistEntry:
     data = await scryfall.get_by_name(name, set_code)
+    await scryfall.fill_missing_prices([data])
     card = store_scryfall_card(session, data)
     return add_to_wishlist(session, card, target_price, cardmarket_url or data.cardmarket_url)
 

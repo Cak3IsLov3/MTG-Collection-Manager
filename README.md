@@ -21,6 +21,8 @@ price.
 
 ![Searching the collection: four versions of Sol Ring, told apart by set and card number](docs/collection-search.jpg)
 
+![Printings without a price of their own borrow one from another printing, marked ≈ SET (Dragon Egg and Fellwar Stone)](docs/collection-borrowed.jpg)
+
 ![A saved deck: its bracket, basic lands per land, search, and the printing each card uses](docs/deck.jpg)
 
 ![Unsaved changes in a deck: the changed fields are highlighted and one button saves them all](docs/deck-unsaved.jpg)
@@ -44,6 +46,7 @@ price.
 - CSV import with automatic format detection (Archidekt, Moxfield, or any CSV with a quantity and name column); adds to your collection or replaces it
 - Change the quantity of a card in place, without removing and re-adding it
 - Instant search in the collection on card name or set (accents and word order do not matter), with a foil-only filter
+- A printing without a price borrows the price of the cheapest printing with the same name, marked "≈ SET"
 - Daily price snapshots, total value over time, top 10 most valuable cards, weekly risers and fallers
 - Price history chart per card
 
@@ -167,8 +170,11 @@ tests/                 pytest suite: Scryfall client, scraper, alert logic, CSV 
 - **Snapshot pattern** – prices are stored once per card, per day, per source
   (`PriceSnapshot`), and the collection/wishlist totals once per day
   (`DailyTotal`). Charts and "movers" are computed from those.
-- **Missing prices** – Scryfall prices can be `null`; such cards show "–" and
-  count as €0 in totals instead of breaking them.
+- **Missing prices** – some printings have no price on Scryfall. Such a card
+  borrows the price of the cheapest printing with the same name that does have
+  one, marked with "≈ SET" so you can see it is not its own price. If no
+  printing has a price (most tokens), the card shows "–" and counts as €0 in
+  totals instead of breaking them.
 - **Card names** – names like `Lim-Dûl's Vault` and `Fire // Ice` are covered
   by tests end to end (lookup, CSV import, deck check).
 

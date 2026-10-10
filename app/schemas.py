@@ -39,6 +39,8 @@ class CollectionItemOut(BaseModel):
     added_at: dt.datetime
     unit_price: float | None
     total_price: float | None
+    # Set code when the printing has no price of its own and another printing's price is used.
+    price_from_set: str | None = None
 
     @classmethod
     def from_row(cls, row: CollectionRow) -> "CollectionItemOut":
@@ -50,6 +52,7 @@ class CollectionItemOut(BaseModel):
             added_at=row.entry.added_at,
             unit_price=row.unit_price,
             total_price=row.total_price,
+            price_from_set=row.price_from_set,
         )
 
 
@@ -82,6 +85,7 @@ class WishlistItemOut(BaseModel):
     added_at: dt.datetime
     current_price: float | None
     price_source: str | None
+    price_from_set: str | None = None
     below_target: bool
 
     @classmethod
@@ -95,6 +99,7 @@ class WishlistItemOut(BaseModel):
             added_at=row.entry.added_at,
             current_price=row.current_price,
             price_source=row.price_source,
+            price_from_set=row.price_from_set,
             below_target=row.below_target,
         )
 

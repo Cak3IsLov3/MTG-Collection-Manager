@@ -15,6 +15,8 @@ logger = logging.getLogger(__name__)
 
 BASE_URL = "https://api.scryfall.com"
 COLLECTION_BATCH_SIZE = 75  # hard limit of POST /cards/collection
+SEARCH_NAMES_PER_QUERY = 8  # card names looked up in one /cards/search query
+MAX_SEARCH_PAGES = 20
 MAX_RETRIES = 3
 MAX_RETRY_DELAY = 90.0
 # Scryfall allows far fewer requests on these endpoints than on the rest of the API.
@@ -74,6 +76,9 @@ class ScryfallCard:
     price_eur: float | None
     price_eur_foil: float | None
     cardmarket_url: str | None
+    # Filled in when this printing has no price and the price of another printing is used instead.
+    eur_from_set: str | None = None
+    eur_foil_from_set: str | None = None
 
     @classmethod
     def from_json(cls, data: dict) -> "ScryfallCard":
@@ -203,6 +208,59 @@ class ScryfallClient:
             found.extend(ScryfallCard.from_json(card) for card in data.get("data", []))
             not_found.extend(data.get("not_found", []))
         return found, not_found
+
+    async def search(self, query: str, **params) -> list[dict]:
+        """All cards matching a Scryfall search query (raw JSON), following the pages."""
+        results: list[dict] = []
+        for page in range(1, MAX_SEARCH_PAGES + 1):
+            try:
+                data = await self._request("GET", "/cards/search", params={"q": query, "page": page, **params})
+            except CardNotFound:  # Scryfall answers 404 when nothing matches
+                break
+            results.extend(data.get("data", []))
+            if not data.get("has_more"):
+                break
+        return results
+
+    async def fill_missing_prices(self, cards: list[ScryfallCard], foil_ids: frozenset[str] | set[str] = frozenset()) -> int:
+        """Give cards without a price the price of another printing with the same name.
+
+        Some printings have no price on Scryfall at all. For those the cheapest
+        printing that does have one is used, and the set it came from is noted
+        on the card. A missing foil price is only looked up for the ids in
+        `foil_ids`. Returns the number of prices filled in; never raises.
+        """
+        wanted = [
+            card
+            for card in cards
+            if card.price_eur is None or (card.scryfall_id in foil_ids and card.price_eur_foil is None)
+        ]
+        names = sorted({card.name for card in wanted if '"' not in card.name})
+        cheapest: dict[tuple[str, str], tuple[float, str]] = {}  # (name key, "eur" | "eur_foil") -> (price, set)
+        try:
+            for start in range(0, len(names), SEARCH_NAMES_PER_QUERY):
+                batch = names[start : start + SEARCH_NAMES_PER_QUERY]
+                query = "(" + " or ".join(f'!"{name}"' for name in batch) + ") game:paper"
+                for data in await self.search(query, unique="prints"):
+                    for finish in ("eur", "eur_foil"):
+                        price = _to_float((data.get("prices") or {}).get(finish))
+                        key = (name_key(data.get("name", "")), finish)
+                        if price is not None and (key not in cheapest or price < cheapest[key][0]):
+                            cheapest[key] = (price, data.get("set", ""))
+        except ScryfallError as exc:
+            logger.warning("Could not look up prices of other printings: %s", exc)
+
+        filled = 0
+        for card in wanted:
+            regular = cheapest.get((name_key(card.name), "eur"))
+            if card.price_eur is None and regular:
+                card.price_eur, card.eur_from_set = regular
+                filled += 1
+            foil = cheapest.get((name_key(card.name), "eur_foil"))
+            if card.scryfall_id in foil_ids and card.price_eur_foil is None and foil:
+                card.price_eur_foil, card.eur_foil_from_set = foil
+                filled += 1
+        return filled
 
     async def resolve(self, refs: list[CardRef]) -> list[ScryfallCard | None]:
         """Resolve refs in bulk. Result is aligned with `refs`; unknown cards are None."""
