@@ -21,6 +21,10 @@ price.
 
 ![A saved deck: the cards set aside for it, and which cards another deck is using](docs/deck.jpg)
 
+![Deleting a deck asks for a second click instead of a pop-up](docs/deck-delete.jpg)
+
+<sub>Destructive buttons use a two-click confirmation: the first click turns the button red ("Click again to delete"), a second click within four seconds confirms.</sub>
+
 ![Card detail page with price history chart](docs/card.jpg)
 
 <sub>Screenshots use demo data: real cards and current prices, with a generated price history.</sub>
