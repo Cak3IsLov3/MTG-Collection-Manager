@@ -232,10 +232,12 @@ async def deck_check(
     request: Request,
     decklist: str = Form(""),
     archidekt_url: str = Form(""),
+    file: UploadFile | None = File(None),
     session: Session = Depends(get_session),
 ):
+    uploaded = await file.read() if file is not None and file.filename else None
     try:
-        cards = await load_deck(decklist, archidekt_url)
+        cards = await load_deck(decklist, archidekt_url, uploaded)
     except decks.DeckError as exc:
         return render(request, "deck.html", rows=None, decklist=decklist, archidekt_url=archidekt_url,
                       msg=str(exc), error=True)

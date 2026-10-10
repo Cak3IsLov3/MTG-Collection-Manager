@@ -15,6 +15,10 @@ price.
 | --- | --- |
 | ![Top 10 most valuable cards, risers and fallers](docs/dashboard-cards.jpg) | ![Wishlist](docs/wishlist.jpg) |
 
+| Collection with CSV import | Deck check: what you own and where to find it |
+| --- | --- |
+| ![Collection](docs/collection.jpg) | ![Deck check](docs/deck.jpg) |
+
 ![Card detail page with price history chart](docs/card.jpg)
 
 <sub>Screenshots use demo data: real cards and current prices, with a generated price history.</sub>
@@ -36,7 +40,7 @@ price.
 **Both**
 - Collection value next to wishlist cost
 - "Bought it" moves a card from WANT to HAVE
-- Deck check: paste a decklist or an Archidekt URL, see what you own and add the missing cards to your wishlist in one click
+- Deck check: paste a decklist, upload a deck file or give an Archidekt URL. You see which cards you already own and in which printing (set, foil, quantity), so you can pull them from your collection, and you can add the missing cards to your wishlist in one click
 
 ## Quick start
 

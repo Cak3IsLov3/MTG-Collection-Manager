@@ -131,3 +131,4 @@ class DeckCardOut(BaseModel):
     owned: int
     missing: int
     on_wishlist: bool
+    printings: list[CollectionItemOut] = []

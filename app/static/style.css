@@ -105,3 +105,9 @@ button:hover { filter: brightness(1.1); }
 .actions { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
 .toolbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
 .toolbar h1 { margin: 0; }
+
+.progress { height: 10px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; margin-bottom: 10px; }
+.progress div { height: 100%; background: var(--up); }
+.printing { font-size: 13px; }
+.deck-sources { margin-bottom: 4px; }
+h2.up { color: var(--up); }

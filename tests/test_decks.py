@@ -8,6 +8,7 @@ from app.services.decks import (
     archidekt_deck_id,
     check_deck,
     fetch_archidekt_deck,
+    parse_deck_file,
     parse_decklist,
 )
 from app.services.wishlist import wishlist_rows
@@ -63,6 +64,9 @@ async def test_check_deck_and_wishlist_missing(session, scryfall):
     assert (rows["Sol Ring"].needed, rows["Sol Ring"].owned, rows["Sol Ring"].missing) == (2, 1, 1)
     assert rows["Fire // Ice"].missing == 1
     assert rows["Fire"].owned == 1 and rows["Fire"].missing == 0  # owned as "Fire // Ice"
+    # The owned printing is listed, so you know which copy to pull.
+    assert [(p.card.set_code, p.entry.quantity) for p in rows["Sol Ring"].printings] == [("cmm", 1)]
+    assert rows["Sol Ring"].usable == 1 and rows["Lim-Dûl's Vault"].printings == []
     assert rows["Lim-Dûl's Vault"].missing == 1 and not rows["Lim-Dûl's Vault"].on_wishlist
 
     added, not_found = await add_missing_to_wishlist(session, scryfall, ["Lim-Dûl's Vault", "Nope"], target_pct=90)
@@ -72,3 +76,24 @@ async def test_check_deck_and_wishlist_missing(session, scryfall):
 
     rows = {row.name: row for row in check_deck(session, parse_decklist(DECKLIST))}
     assert rows["Lim-Dûl's Vault"].on_wishlist
+
+
+def test_parse_deck_file_accepts_text_and_csv():
+    assert [(c.quantity, c.name) for c in parse_deck_file(b"2 Sol Ring\n1 Fire // Ice\n")] == [(2, "Sol Ring"), (1, "Fire // Ice")]
+    assert [(c.quantity, c.name) for c in parse_deck_file("Quantity,Name\n3,Lim-Dûl's Vault\n".encode())] == [(3, "Lim-Dûl's Vault")]
+    assert parse_deck_file(b"") == []
+
+
+def test_deck_page_shows_owned_cards_with_their_printing(client):
+    client.post("/api/collection", json={"name": "Sol Ring", "set_code": "lea", "quantity": 1})
+    page = client.post("/deck", data={"decklist": "1 Sol Ring\n4 Fire // Ice"})
+    assert page.status_code == 200
+    assert "You own 1 of the 5 cards in this deck (20%)" in page.text
+    assert "In your collection (1)" in page.text and "Set LEA (LEA #1)" in page.text
+    assert "Still missing (1)" in page.text
+
+    uploaded = client.post("/deck", files={"file": ("deck.txt", b"1 Sol Ring\n", "text/plain")})
+    assert "You own every card in this deck." in uploaded.text
+
+    api = client.post("/api/decks/check", json={"decklist": "1 Sol Ring"}).json()
+    assert api[0]["printings"][0]["card"]["set_code"] == "lea"

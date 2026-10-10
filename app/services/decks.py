@@ -1,14 +1,16 @@
 """Deck view: which cards of a deck do you own, and which are still missing."""
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import httpx
 from sqlmodel import Session, select
 
 from app.config import get_settings
-from app.models import Card, CollectionEntry, WishlistEntry
+from app.csv_import import CsvFormatError, parse_collection_csv
+from app.models import Card, WishlistEntry
 from app.scryfall import CardRef, ScryfallClient, name_key
+from app.services.collection import CollectionRow, collection_rows
 from app.services.pricing import store_scryfall_card
 from app.services.wishlist import add_to_wishlist
 
@@ -35,8 +37,18 @@ class DeckCard:
 class DeckRow:
     name: str
     needed: int
-    owned: int
     on_wishlist: bool
+    # The printings of this card in the collection, so you know which copies to pull.
+    printings: list[CollectionRow] = field(default_factory=list)
+
+    @property
+    def owned(self) -> int:
+        return sum(row.entry.quantity for row in self.printings)
+
+    @property
+    def usable(self) -> int:
+        """Owned copies that actually count towards the deck."""
+        return min(self.owned, self.needed)
 
     @property
     def missing(self) -> int:
@@ -54,6 +66,15 @@ def parse_decklist(text: str) -> list[DeckCard]:
         if match and int(match["qty"]) > 0:
             cards.append(DeckCard(name=match["name"].strip(), quantity=int(match["qty"])))
     return cards
+
+
+def parse_deck_file(content: bytes) -> list[DeckCard]:
+    """An uploaded deck: a CSV export (Archidekt/Moxfield) or a plain text decklist."""
+    try:
+        rows = parse_collection_csv(content).rows
+    except CsvFormatError:
+        return parse_decklist(content.decode("utf-8-sig", errors="replace"))
+    return [DeckCard(name=row.name, quantity=row.quantity) for row in rows]
 
 
 def archidekt_deck_id(source: str) -> int | None:
@@ -98,10 +119,10 @@ def _names(full_name: str) -> set[str]:
 
 def check_deck(session: Session, cards: list[DeckCard]) -> list[DeckRow]:
     """Compare a deck with the collection by card name (any printing counts)."""
-    owned: dict[str, int] = {}
-    for entry, card in session.exec(select(CollectionEntry, Card).join(Card, CollectionEntry.card_id == Card.id)):
-        for key in _names(card.name):
-            owned[key] = owned.get(key, 0) + entry.quantity
+    owned: dict[str, list[CollectionRow]] = {}
+    for row in collection_rows(session):
+        for key in _names(row.card.name):
+            owned.setdefault(key, []).append(row)
     wished: set[str] = set()
     for card in session.exec(
         select(Card).join(WishlistEntry, WishlistEntry.card_id == Card.id).where(WishlistEntry.active == True)  # noqa: E712
@@ -116,7 +137,7 @@ def check_deck(session: Session, cards: list[DeckCard]) -> list[DeckRow]:
         else:
             needed[key] = DeckCard(card.name, card.quantity)
     return [
-        DeckRow(name=card.name, needed=card.quantity, owned=owned.get(key, 0), on_wishlist=key in wished)
+        DeckRow(name=card.name, needed=card.quantity, on_wishlist=key in wished, printings=owned.get(key, []))
         for key, card in sorted(needed.items())
     ]
 

@@ -184,17 +184,24 @@ async def check_deck(payload: DeckCheckIn, session: Session = Depends(get_sessio
     except decks.DeckError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return [
-        DeckCardOut(name=r.name, needed=r.needed, owned=r.owned, missing=r.missing, on_wishlist=r.on_wishlist)
+        DeckCardOut(
+            name=r.name, needed=r.needed, owned=r.owned, missing=r.missing, on_wishlist=r.on_wishlist,
+            printings=[CollectionItemOut.from_row(p) for p in r.printings],
+        )
         for r in decks.check_deck(session, cards)
     ]
 
 
-async def load_deck(decklist: str | None, archidekt_url: str | None) -> list[decks.DeckCard]:
+async def load_deck(
+    decklist: str | None, archidekt_url: str | None, file_content: bytes | None = None
+) -> list[decks.DeckCard]:
     if archidekt_url and archidekt_url.strip():
         deck_id = decks.archidekt_deck_id(archidekt_url)
         if deck_id is None:
             raise decks.DeckError("That does not look like an Archidekt deck URL")
         _, cards = await decks.fetch_archidekt_deck(deck_id)
+    elif file_content:
+        cards = decks.parse_deck_file(file_content)
     else:
         cards = decks.parse_decklist(decklist or "")
     if not cards:

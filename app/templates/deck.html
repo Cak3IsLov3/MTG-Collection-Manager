@@ -1,13 +1,31 @@
 {% extends "base.html" %}
 {% block title %}Deck check · MTG Collection Manager{% endblock %}
 
+{% macro printings(row) %}
+  {% for p in row.printings %}
+  <div class="printing">
+    {{ p.entry.quantity }}× <a href="/cards/{{ p.card.id }}">{{ p.card.set_name }} ({{ p.card.set_code | upper }}{% if p.card.collector_number %} #{{ p.card.collector_number }}{% endif %})</a>
+    {% if p.entry.is_foil %}<span class="badge foil">foil</span>{% endif %}
+    <span class="muted">{{ p.unit_price | eur }}</span>
+  </div>
+  {% endfor %}
+{% endmacro %}
+
+{% macro thumb(row) %}
+  {% set image = (row.printings | first).card.image_url if row.printings else none %}
+  {% if image %}<img class="thumb" src="{{ image }}" alt="" loading="lazy">{% endif %}
+{% endmacro %}
+
 {% block content %}
 <h1>Deck check</h1>
 
 <div class="panel">
   <h2>Which cards of a deck do you already own?</h2>
-  <form method="post" action="/deck">
-    <p><input name="archidekt_url" type="url" size="50" value="{{ archidekt_url or '' }}" placeholder="https://archidekt.com/decks/123456/my-deck"></p>
+  <form method="post" action="/deck" enctype="multipart/form-data">
+    <div class="row deck-sources">
+      <label>Archidekt deck URL<input name="archidekt_url" type="url" size="44" value="{{ archidekt_url or '' }}" placeholder="https://archidekt.com/decks/123456/my-deck"></label>
+      <label>…or upload a deck file (.txt or .csv)<input name="file" type="file" accept=".txt,.csv,.dek,text/plain,text/csv"></label>
+    </div>
     <p class="muted">…or paste a decklist (one card per line, e.g. <code>1 Sol Ring</code>):</p>
     <textarea name="decklist" placeholder="1 Sol Ring&#10;1 Arcane Signet&#10;1 Fire // Ice">{{ decklist or '' }}</textarea>
     <p><button>Check deck</button></p>
@@ -15,11 +33,42 @@
 </div>
 
 {% if rows is not none %}
-{% set missing = rows | selectattr('missing') | list %}
-{% set addable = missing | rejectattr('on_wishlist') | list %}
+{% set have = rows | rejectattr('missing') | list %}
+{% set need = rows | selectattr('missing') | list %}
+{% set addable = need | rejectattr('on_wishlist') | list %}
+{% set total = rows | sum(attribute='needed') %}
+{% set usable = rows | sum(attribute='usable') %}
+{% set pct = (usable / total * 100) | round | int if total else 0 %}
+
+<div class="panel">
+  <h2>You own {{ usable }} of the {{ total }} cards in this deck ({{ pct }}%)</h2>
+  <div class="progress"><div style="width: {{ pct }}%"></div></div>
+  <p class="muted">{{ have | length }} different cards ready to pull from your collection · {{ need | length }} still to get</p>
+</div>
+
+<div class="panel table-wrap">
+  <h2 class="up">In your collection ({{ have | length }})</h2>
+  {% if have %}
+  <table>
+    <tr><th></th><th>Card</th><th class="num">Needed</th><th class="num">Owned</th><th>Where to find it</th></tr>
+    {% for row in have %}
+    <tr>
+      <td>{{ thumb(row) }}</td>
+      <td>{{ row.name }}</td>
+      <td class="num">{{ row.needed }}</td>
+      <td class="num">{{ row.owned }}</td>
+      <td>{{ printings(row) }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}
+  <p class="muted">You don't own any of these cards yet.</p>
+  {% endif %}
+</div>
+
 <div class="panel table-wrap">
   <div class="toolbar">
-    <h2>{{ rows | length - missing | length }} of {{ rows | length }} cards owned · {{ missing | length }} missing</h2>
+    <h2>Still missing ({{ need | length }})</h2>
     {% if addable %}
     <form class="row" method="post" action="/deck/wishlist">
       {% for row in addable %}<input type="hidden" name="names" value="{{ row.name }}">{% endfor %}
@@ -28,21 +77,27 @@
     </form>
     {% endif %}
   </div>
+  {% if need %}
   <table>
-    <tr><th>Card</th><th class="num">Needed</th><th class="num">Owned</th><th>Status</th></tr>
-    {% for row in rows %}
+    <tr><th></th><th>Card</th><th class="num">Needed</th><th class="num">Owned</th><th class="num">Missing</th><th>Status</th></tr>
+    {% for row in need %}
     <tr>
-      <td>{{ row.name }}</td>
+      <td>{{ thumb(row) }}</td>
+      <td>{{ row.name }}{% if row.printings %}<div>{{ printings(row) }}</div>{% endif %}</td>
       <td class="num">{{ row.needed }}</td>
       <td class="num">{{ row.owned }}</td>
+      <td class="num down">{{ row.missing }}</td>
       <td>
-        {% if not row.missing %}<span class="badge hit">have</span>
-        {% elif row.on_wishlist %}<span class="badge">missing {{ row.missing }} · on wishlist</span>
-        {% else %}<span class="badge">missing {{ row.missing }}</span>{% endif %}
+        {% if row.on_wishlist %}<span class="badge">on wishlist</span>
+        {% elif row.owned %}<span class="badge">need more copies</span>
+        {% else %}<span class="badge">not owned</span>{% endif %}
       </td>
     </tr>
     {% endfor %}
   </table>
+  {% else %}
+  <p class="up">You own every card in this deck.</p>
+  {% endif %}
 </div>
 {% endif %}
 {% endblock %}
