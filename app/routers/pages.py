@@ -222,6 +222,27 @@ async def wishlist_targets(request: Request, session: Session = Depends(get_sess
     return redirect("/wishlist", f"Saved {changed} target price{'s' if changed != 1 else ''}")
 
 
+@router.post("/wishlist/{entry_id}/printing")
+async def wishlist_printing(
+    entry_id: int,
+    scryfall_id: str = Form(""),
+    session: Session = Depends(get_session),
+    scryfall: ScryfallClient = Depends(get_scryfall),
+):
+    entry = _active_entry(session, entry_id)
+    if entry is None or not scryfall_id.strip():
+        return redirect("/wishlist", "Choose a set first", error=True)
+    try:
+        await wishlist.change_printing(session, scryfall, entry, scryfall_id.strip())
+    except (ScryfallError, ValueError) as exc:
+        session.rollback()
+        return redirect("/wishlist", str(exc), error=True)
+    card = session.get(Card, entry.card_id)
+    stats.record_daily_total(session)
+    session.commit()
+    return redirect("/wishlist", f"Now watching {card.name} from {card.set_name} ({card.set_code.upper()})")
+
+
 @router.post("/wishlist/{entry_id}/target")
 def wishlist_target(entry_id: int, target_price: str = Form(...), session: Session = Depends(get_session)):
     entry, target = _active_entry(session, entry_id), parse_money(target_price)

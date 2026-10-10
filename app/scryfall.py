@@ -222,6 +222,13 @@ class ScryfallClient:
                 break
         return results
 
+    async def printings(self, name: str) -> list[ScryfallCard]:
+        """Every paper printing of a card, newest first."""
+        if '"' in name:
+            return []  # cannot be quoted in an exact-name search
+        results = await self.search(f'!"{name}" game:paper', unique="prints", order="released", dir="desc")
+        return [ScryfallCard.from_json(data) for data in results if name_key(data.get("name", "")) == name_key(name)]
+
     async def fill_missing_prices(self, cards: list[ScryfallCard], foil_ids: frozenset[str] | set[str] = frozenset()) -> int:
         """Give cards without a price the price of another printing with the same name.
 

@@ -26,11 +26,13 @@ from app.schemas import (
     DeckPrintingIn,
     DeckSaveIn,
     ImportOut,
+    PrintingOut,
     PurchaseIn,
     SummaryOut,
     WishlistAdd,
     WishlistItemOut,
     WishlistOut,
+    WishlistPrintingIn,
 )
 from app.scryfall import CardNotFound, InvalidCardRequest, ScryfallClient, ScryfallError
 from app.services import collection, decks, stats, wishlist
@@ -153,6 +155,45 @@ async def add_to_wishlist(
     stats.record_daily_total(session)
     session.commit()
     return WishlistItemOut.from_row(wishlist.wishlist_rows(session, entry.id)[0])
+
+
+@router.get("/printings", response_model=list[PrintingOut])
+async def list_printings(name: str, scryfall: ScryfallClient = Depends(get_scryfall)):
+    """Every paper printing of a card with its price, newest first; for choosing a set."""
+    try:
+        found = await scryfall.printings(name.strip())
+    except ScryfallError as exc:
+        raise _scryfall_http_error(exc) from exc
+    return [
+        PrintingOut(
+            scryfall_id=card.scryfall_id, set_code=card.set_code, set_name=card.set_name,
+            collector_number=card.collector_number, image_url=card.image_url,
+            price_eur=card.price_eur, price_eur_foil=card.price_eur_foil,
+        )
+        for card in found
+    ]
+
+
+@router.put("/wishlist/{entry_id}/printing", response_model=WishlistItemOut)
+async def change_wishlist_printing(
+    entry_id: int,
+    payload: WishlistPrintingIn,
+    session: Session = Depends(get_session),
+    scryfall: ScryfallClient = Depends(get_scryfall),
+):
+    """Watch another printing (set) of the same card. The target price stays as it is."""
+    entry = _wishlist_entry(session, entry_id)
+    try:
+        await wishlist.change_printing(session, scryfall, entry, payload.scryfall_id)
+    except ScryfallError as exc:
+        session.rollback()
+        raise _scryfall_http_error(exc) from exc
+    except ValueError as exc:
+        session.rollback()
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    stats.record_daily_total(session)
+    session.commit()
+    return WishlistItemOut.from_row(wishlist.wishlist_rows(session, entry_id)[0])
 
 
 @router.put("/wishlist/targets", response_model=WishlistOut)

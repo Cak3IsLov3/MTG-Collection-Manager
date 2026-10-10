@@ -104,6 +104,20 @@ class WishlistItemOut(BaseModel):
         )
 
 
+class PrintingOut(BaseModel):
+    scryfall_id: str
+    set_code: str
+    set_name: str
+    collector_number: str | None
+    image_url: str | None
+    price_eur: float | None
+    price_eur_foil: float | None
+
+
+class WishlistPrintingIn(BaseModel):
+    scryfall_id: str = Field(min_length=1)
+
+
 class WishlistOut(BaseModel):
     total_cost: float
     items: list[WishlistItemOut]

@@ -167,3 +167,11 @@ td.num, .badge { white-space: nowrap; }
 .actions { flex-wrap: nowrap; white-space: nowrap; align-items: center; }
 
 .bulk-targets { margin-bottom: 8px; font-size: 13px; }
+
+/* Wishlist: choose the set of a card */
+button.link { all: unset; cursor: pointer; font-size: 12px; color: var(--have); }
+button.link:hover { text-decoration: underline; }
+button.link:disabled { color: var(--muted); cursor: default; text-decoration: none; }
+.printing-form { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 2px; }
+.printing-form select { max-width: 340px; margin-top: 0; }
+[hidden] { display: none !important; }

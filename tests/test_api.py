@@ -249,3 +249,40 @@ def test_save_all_target_prices_at_once(client):
     assert api.status_code == 200 and targets() == {"Lim-Dûl's Vault": 7.0, "Sol Ring": 2.0, "Fire // Ice": 0.3}
     assert client.put("/api/wishlist/targets", json={str(vault["id"]): -1}).status_code == 400
     assert client.put("/api/wishlist/targets", json={"9999": 1}).status_code == 400
+
+
+def test_choose_the_set_of_a_wishlist_card(client):
+    entry = client.post("/api/wishlist", json={"name": "Sol Ring", "set_code": "cmm", "target_price": 1.2}).json()
+    assert (entry["card"]["set_code"], entry["card"]["collector_number"], entry["current_price"]) == ("cmm", "1", 1.5)
+
+    # The page offers "Change set"; the printings are loaded on demand.
+    page = client.get("/wishlist").text
+    assert f'action="/wishlist/{entry["id"]}/printing"' in page and "Change set" in page
+    printings = client.get("/api/printings", params={"name": "Sol Ring"}).json()
+    assert sorted((p["set_code"], p["collector_number"], p["price_eur"]) for p in printings) == [
+        ("cmm", "1", 1.5), ("cmm", "410", 6.0), ("lea", "1", 900.0),
+    ]
+    assert client.get("/api/printings", params={"name": "Definitely Not A Card"}).json() == []
+
+    lea = next(p for p in printings if p["set_code"] == "lea")
+    changed = client.post(f"/wishlist/{entry['id']}/printing", data={"scryfall_id": lea["scryfall_id"]})
+    assert "Now watching Sol Ring from Set LEA (LEA)" in changed.text
+    item = client.get("/api/wishlist").json()["items"][0]
+    assert (item["id"], item["card"]["set_code"], item["current_price"], item["target_price"]) == (entry["id"], "lea", 900.0, 1.2)
+    assert lea["scryfall_id"] in item["cardmarket_url"]  # the Cardmarket link follows the printing
+    assert client.get("/api/wishlist").json()["total_cost"] == 900.0
+
+    # Another card, or a printing that is already being watched, is refused.
+    vault = client.get("/api/printings", params={"name": "Lim-Dûl's Vault"}).json()[0]
+    wrong = client.put(f"/api/wishlist/{entry['id']}/printing", json={"scryfall_id": vault["scryfall_id"]})
+    assert wrong.status_code == 400 and "is not a printing of Sol Ring" in wrong.json()["detail"]
+    second = client.post("/api/wishlist", json={"name": "Sol Ring", "set_code": "cmm", "target_price": 1}).json()
+    duplicate = client.put(f"/api/wishlist/{second['id']}/printing", json={"scryfall_id": lea["scryfall_id"]})
+    assert duplicate.status_code == 400 and "already on your wishlist" in duplicate.json()["detail"]
+    assert client.put(f"/api/wishlist/{entry['id']}/printing", json={"scryfall_id": "nope"}).status_code == 404
+    assert client.put("/api/wishlist/9999/printing", json={"scryfall_id": lea["scryfall_id"]}).status_code == 404
+    assert "Choose a set first" in client.post(f"/wishlist/{entry['id']}/printing", data={}).text
+
+    art = next(p for p in printings if p["collector_number"] == "410")
+    api = client.put(f"/api/wishlist/{entry['id']}/printing", json={"scryfall_id": art["scryfall_id"]}).json()
+    assert (api["card"]["collector_number"], api["current_price"], api["target_price"]) == ("410", 6.0, 1.2)

@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from sqlmodel import Session, select
 
 from app.models import Alert, Card, CollectionEntry, WishlistEntry
-from app.scryfall import ScryfallClient
+from app.scryfall import ScryfallClient, name_key
 from app.services.collection import add_to_collection
 from app.services.pricing import CARDMARKET, SCRYFALL, latest_snapshots, store_scryfall_card
 
@@ -101,6 +101,34 @@ async def add_wish_by_name(
     await scryfall.fill_missing_prices([data])
     card = store_scryfall_card(session, data)
     return add_to_wishlist(session, card, target_price, cardmarket_url or data.cardmarket_url)
+
+
+async def change_printing(
+    session: Session, scryfall: ScryfallClient, entry: WishlistEntry, scryfall_id: str
+) -> WishlistEntry:
+    """Watch another printing (set) of the same card; target price and alert history are kept.
+
+    Raises ValueError when the printing is a different card or is already on the wishlist.
+    """
+    current = session.get(Card, entry.card_id)
+    data = await scryfall.get_by_id(scryfall_id)
+    if name_key(data.name) != name_key(current.name):
+        raise ValueError(f"{data.name} is not a printing of {current.name}")
+    await scryfall.fill_missing_prices([data])
+    card = store_scryfall_card(session, data)
+    duplicate = session.exec(
+        select(WishlistEntry).where(
+            WishlistEntry.card_id == card.id, WishlistEntry.active == True, WishlistEntry.id != entry.id  # noqa: E712
+        )
+    ).first()
+    if duplicate is not None:
+        raise ValueError(f"{card.name} from {card.set_name} is already on your wishlist")
+    entry.card_id = card.id
+    if data.cardmarket_url:
+        entry.cardmarket_url = data.cardmarket_url
+    session.add(entry)
+    session.flush()
+    return entry
 
 
 def set_targets(session: Session, targets: dict[int, float]) -> int:

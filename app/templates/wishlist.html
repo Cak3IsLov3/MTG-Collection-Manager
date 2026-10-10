@@ -52,7 +52,13 @@
       <td>{% if row.card.image_url %}<img class="thumb" src="{{ row.card.image_url }}" alt="" loading="lazy">{% endif %}</td>
       <td>
         <a href="/cards/{{ row.card.id }}">{{ row.card.name }}</a>
-        <div class="muted">{{ row.card.set_name }} ({{ row.card.set_code | upper }})</div>
+        <div class="muted">{{ row.card.set_name }} ({{ row.card.set_code | upper }}{% if row.card.collector_number %} #{{ row.card.collector_number }}{% endif %})</div>
+        <form class="printing-form" method="post" action="/wishlist/{{ row.entry.id }}/printing" data-keep-scroll
+              data-name="{{ row.card.name }}" data-current="{{ row.card.scryfall_id }}">
+          <button type="button" class="link change-set" title="Pick the set you want this card from">Change set</button>
+          <select name="scryfall_id" hidden aria-label="Set for {{ row.card.name }}"></select>
+          <button class="small" hidden>Use this set</button>
+        </form>
       </td>
       <td class="num">
         {{ row.current_price | eur }}{% if row.price_from_set %} <span class="badge est" title="This printing has no price. Shown is the cheapest printing with a price: {{ row.price_from_set | upper }}.">≈ {{ row.price_from_set | upper }}</span>{% endif %}
@@ -152,6 +158,41 @@
       markTargets();
     });
   }
+</script>
+<script>
+  // "Change set": load the printings of that card on demand and let the user pick one.
+  const euroPrice = (value) => (value === null ? "no price" : "€" + value.toFixed(2));
+  document.addEventListener("click", async (event) => {
+    const opener = event.target.closest("button.change-set");
+    if (!opener) return;
+    const form = opener.closest("form");
+    const select = form.querySelector("select");
+    opener.disabled = true;
+    opener.textContent = "Loading sets…";
+    try {
+      const response = await fetch(`/api/printings?name=${encodeURIComponent(form.dataset.name)}`);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const printings = await response.json();
+      if (!printings.length) throw new Error("no printings");
+      select.replaceChildren(
+        ...printings.map((printing) => {
+          const option = document.createElement("option");
+          option.value = printing.scryfall_id;
+          option.selected = printing.scryfall_id === form.dataset.current;
+          const number = printing.collector_number ? ` #${printing.collector_number}` : "";
+          option.textContent = `${printing.set_name} (${printing.set_code.toUpperCase()}${number}) · ${euroPrice(printing.price_eur)}`;
+          return option;
+        })
+      );
+      opener.hidden = true;
+      select.hidden = false;
+      form.querySelector("button:not(.change-set)").hidden = false;
+      select.focus();
+    } catch (error) {
+      opener.disabled = false;
+      opener.textContent = "Could not load the sets, try again";
+    }
+  });
 </script>
 <script>
   // Click a column header to sort; click again to reverse. The choice is remembered in this browser.
