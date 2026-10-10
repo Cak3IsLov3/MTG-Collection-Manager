@@ -9,7 +9,15 @@ price.
 
 > "Your collection is worth €850, your wishlist still costs €120."
 
-<!-- Screenshots: add docs/dashboard.png, docs/wishlist.png and docs/card.png -->
+![Dashboard: collection value, wishlist cost and value over time](docs/dashboard.jpg)
+
+| Top cards and weekly movers | Wishlist with targets and alert history |
+| --- | --- |
+| ![Top 10 most valuable cards, risers and fallers](docs/dashboard-cards.jpg) | ![Wishlist](docs/wishlist.jpg) |
+
+![Card detail page with price history chart](docs/card.jpg)
+
+<sub>Screenshots use demo data: real cards and current prices, with a generated price history.</sub>
 
 ## Features
 
