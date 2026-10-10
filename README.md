@@ -11,9 +11,9 @@ price.
 
 ![Dashboard: collection value, wishlist cost and value over time](docs/dashboard.jpg)
 
-| Top cards and weekly movers | Wishlist with targets and alert history |
+| Top cards and weekly movers | Wishlist with targets, sorted by current price |
 | --- | --- |
-| ![Top 10 most valuable cards, risers and fallers](docs/dashboard-cards.jpg) | ![Wishlist](docs/wishlist.jpg) |
+| ![Top 10 most valuable cards, risers and fallers](docs/dashboard-cards.jpg) | ![Wishlist sorted from expensive to cheap](docs/wishlist.jpg) |
 
 | Collection: add by name or card number, edit quantities | Saved decks, and the randomizer picking a deck for three players |
 | --- | --- |
@@ -54,6 +54,7 @@ price.
 - Watch cards with a maximum price
 - Periodic price check against Cardmarket, with Scryfall as a fallback
 - Discord webhook alert when a price is at or below your target, at most once per card per 24 hours
+- Sort the wishlist by card name, current price, target price or difference, in either direction
 - Alert history
 
 **Both**

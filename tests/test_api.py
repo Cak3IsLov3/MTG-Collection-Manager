@@ -202,3 +202,14 @@ def test_add_exact_printing_by_set_and_collector_number(client):
     form = client.post("/collection/add", data={"set_code": "cmm", "collector_number": "#410", "quantity": "1"})
     assert "Added Sol Ring (CMM #410)" in form.text and "(CMM #410)" in client.get("/collection").text
     assert "Fill in the set" in client.post("/collection/add", data={"name": "Sol Ring", "collector_number": "410"}).text
+
+
+def test_wishlist_table_is_sortable(client):
+    client.post("/api/wishlist", json={"name": "Lim-Dûl's Vault", "target_price": 10})
+    client.post("/api/wishlist", json={"name": "Black Lotus", "target_price": 500})  # no price in the fake data
+    page = client.get("/wishlist").text
+    for key in ("name", "current", "target", "difference"):
+        assert f'data-sort="{key}"' in page
+    assert 'data-name="Lim-Dûl&#39;s Vault" data-current="12.34"' in page
+    assert 'data-target="10.0" data-difference="2.34"' in page
+    assert 'data-name="Black Lotus" data-current=""' in page  # sorts last, whatever the direction

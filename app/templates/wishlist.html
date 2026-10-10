@@ -22,13 +22,21 @@
 
 <div class="panel table-wrap">
   {% if rows %}
-  <table>
+  <table id="wishlist-table">
+    <thead>
     <tr>
-      <th></th><th>Card</th><th class="num">Current</th><th class="num">Target</th>
-      <th class="num">Difference</th><th>Status</th><th></th>
+      <th></th>
+      <th><button class="sort" data-sort="name" data-type="text" title="Sort by card name">Card</button></th>
+      <th class="num"><button class="sort" data-sort="current" data-type="number" title="Sort by current price">Current</button></th>
+      <th class="num"><button class="sort" data-sort="target" data-type="number" title="Sort by target price">Target</button></th>
+      <th class="num"><button class="sort" data-sort="difference" data-type="number" title="Sort by difference with your target">Difference</button></th>
+      <th>Status</th><th></th>
     </tr>
+    </thead>
+    <tbody>
     {% for row in rows %}
-    <tr>
+    <tr data-name="{{ row.card.name }}" data-current="{{ row.current_price if row.current_price is not none else '' }}"
+        data-target="{{ row.entry.target_price }}" data-difference="{{ row.difference if row.difference is not none else '' }}">
       <td>{% if row.card.image_url %}<img class="thumb" src="{{ row.card.image_url }}" alt="" loading="lazy">{% endif %}</td>
       <td>
         <a href="/cards/{{ row.card.id }}">{{ row.card.name }}</a>
@@ -65,6 +73,7 @@
       </td>
     </tr>
     {% endfor %}
+    </tbody>
   </table>
   {% else %}
   <p class="muted">Nothing on your wishlist yet.</p>
@@ -89,4 +98,49 @@
   <p class="muted">No alerts yet. You get one (at most once per 24 hours per card) when a price drops to your target.</p>
   {% endif %}
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  // Click a column header to sort; click again to reverse. The choice is remembered in this browser.
+  const wishlistTable = document.getElementById("wishlist-table");
+  if (wishlistTable) {
+    const body = wishlistTable.tBodies[0];
+    const buttons = [...wishlistTable.querySelectorAll("button.sort")];
+    const fold = (text) => text.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
+
+    function sortBy(key, descending) {
+      const button = buttons.find((candidate) => candidate.dataset.sort === key);
+      if (!button) return;
+      const numeric = button.dataset.type === "number";
+      const rows = [...body.rows];
+      const value = (row) => (numeric ? (row.dataset[key] === "" ? null : Number(row.dataset[key])) : fold(row.dataset[key]));
+      rows.sort((a, b) => {
+        const [x, y] = [value(a), value(b)];
+        if (x === null || y === null) return (x === null) - (y === null);  // cards without a price always last
+        const order = numeric ? x - y : x.localeCompare(y);
+        return descending ? -order : order;
+      });
+      body.append(...rows);
+      for (const other of buttons) {
+        other.closest("th").removeAttribute("aria-sort");
+      }
+      button.closest("th").setAttribute("aria-sort", descending ? "descending" : "ascending");
+      try { localStorage.setItem("wishlist-sort", JSON.stringify({ key, descending })); } catch (error) {}
+    }
+
+    for (const button of buttons) {
+      button.addEventListener("click", () => {
+        const current = button.closest("th").getAttribute("aria-sort");
+        sortBy(button.dataset.sort, current === "ascending");
+      });
+    }
+
+    try {
+      const saved = JSON.parse(localStorage.getItem("wishlist-sort") || "null");
+      if (saved) sortBy(saved.key, saved.descending);
+      else wishlistTable.querySelector('button[data-sort="name"]').closest("th").setAttribute("aria-sort", "ascending");
+    } catch (error) {}
+  }
+</script>
 {% endblock %}

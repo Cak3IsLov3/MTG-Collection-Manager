@@ -153,3 +153,15 @@ button:disabled { opacity: .45; cursor: default; filter: none; }
 @keyframes land { from { transform: scale(.92); } 60% { transform: scale(1.04); } to { transform: scale(1); } }
 
 .badge.est { border-style: dashed; cursor: help; }
+
+/* Sortable column headers */
+button.sort { all: unset; cursor: pointer; font: inherit; color: inherit; letter-spacing: inherit; text-transform: inherit; }
+button.sort:hover, button.sort:focus-visible { color: var(--text); }
+button.sort::after { content: " ↕"; opacity: .35; }
+th[aria-sort="ascending"] button.sort::after { content: " ▲"; opacity: 1; color: var(--accent); }
+th[aria-sort="descending"] button.sort::after { content: " ▼"; opacity: 1; color: var(--accent); }
+th[aria-sort] button.sort { color: var(--text); }
+
+/* Keep prices, badges and row buttons on one line; long card and set names wrap instead. */
+td.num, .badge { white-space: nowrap; }
+.actions { flex-wrap: nowrap; white-space: nowrap; align-items: center; }
