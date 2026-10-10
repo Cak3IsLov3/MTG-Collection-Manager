@@ -73,9 +73,9 @@ img.thumb { width: 36px; aspect-ratio: 5 / 7; background: var(--bg); border-radi
 .badge.foil { border-color: var(--accent); color: var(--accent); }
 
 form.inline { display: inline; }
-form.row { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; }
-form.row label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
-form.row label.check { flex-direction: row; align-items: center; padding-bottom: 8px; }
+.row { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; }
+.row label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
+.row label.check { flex-direction: row; align-items: center; padding-bottom: 8px; }
 
 input, textarea, button {
   font: inherit;
@@ -135,3 +135,10 @@ details.snow summary { cursor: pointer; font-size: 12px; padding-bottom: 8px; }
 .actions select { margin-top: 0; }
 
 .notice { align-items: center; margin-top: 10px; padding: 8px 12px; border: 1px solid var(--accent); border-radius: 6px; font-size: 13px; }
+
+/* Deck page: one save for all edits. */
+button:disabled { opacity: .45; cursor: default; filter: none; }
+.changed { border-color: var(--accent) !important; }
+.unsaved-bar { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); display: flex; align-items: center; gap: 14px;
+  padding: 10px 16px; background: var(--panel); border: 1px solid var(--accent); border-radius: 10px; box-shadow: 0 6px 24px rgba(0, 0, 0, .5); z-index: 10; }
+.unsaved-bar[hidden] { display: none; }

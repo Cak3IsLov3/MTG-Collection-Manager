@@ -426,3 +426,35 @@ def test_move_basic_lands_out_of_an_older_deck(client):
 
     again = client.post(f"/api/decks/{deck['id']}/basic-lands/move").json()  # nothing left to move
     assert again["basic_lands"] == {"Island": 4, "Forest": 31}
+
+
+def test_save_button_stores_all_deck_changes_at_once(client):
+    cheap = client.post("/api/collection", json={"name": "Sol Ring", "set_code": "cmm"}).json()
+    pricey = client.post("/api/collection", json={"name": "Sol Ring", "set_code": "lea"}).json()
+    deck = client.post("/api/decks", json={"name": "Ramp", "decklist": "1 Sol Ring"}).json()
+    entry_id = deck["cards"][0]["entry_id"]
+    url = f"/decks/{deck['id']}/save"
+
+    page = client.get(f"/decks/{deck['id']}")
+    assert 'id="deck-form"' in page.text and "Save changes" in page.text and "Save lands" not in page.text
+    assert f'name="pick:{entry_id}" form="deck-form"' in page.text
+    assert "onchange" not in page.text  # nothing is saved until the button is pressed
+
+    saved = client.post(url, data={"bracket": "3", "basic:Plains": "10", "basic:Forest": "", f"pick:{entry_id}": str(pricey["id"])})
+    assert "Changes saved" in saved.text
+    detail = client.get(f"/api/decks/{deck['id']}").json()
+    assert (detail["bracket"], detail["basic_lands"], detail["value"]) == (3, {"Plains": 10}, 900.0)
+    assert detail["cards"][0]["chosen_collection_entry_id"] == pricey["id"]
+
+    # Fields that are cleared go back to "not set" / automatic.
+    client.post(url, data={"bracket": "", "basic:Plains": "0", f"pick:{entry_id}": ""})
+    detail = client.get(f"/api/decks/{deck['id']}").json()
+    assert (detail["bracket"], detail["basic_lands"], detail["cards"][0]["chosen_collection_entry_id"]) == (None, {}, None)
+
+    # One invalid field and nothing at all is stored.
+    failed = client.post(url, data={"bracket": "4", "basic:Plains": "-2", f"pick:{entry_id}": str(cheap["id"])})
+    assert "Nothing was saved" in failed.text
+    detail = client.get(f"/api/decks/{deck['id']}").json()
+    assert (detail["bracket"], detail["basic_lands"]) == (None, {})
+    assert "Nothing was saved" in client.post(url, data={"bracket": "9"}).text
+    assert "Deck not found" in client.post("/decks/9999/save", data={}).text

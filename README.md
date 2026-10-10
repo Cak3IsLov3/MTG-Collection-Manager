@@ -23,6 +23,8 @@ price.
 
 ![A saved deck: its bracket, basic lands per land, search, and the printing each card uses](docs/deck.jpg)
 
+![Unsaved changes in a deck: the changed fields are highlighted and one button saves them all](docs/deck-unsaved.jpg)
+
 ![Searching inside a deck on a set name](docs/deck-search.jpg)
 
 ![Deleting a deck asks for a second click instead of a pop-up](docs/deck-delete.jpg)
@@ -57,6 +59,7 @@ price.
 - Basic lands and tokens are left out of the tracked cards by default, so they do not show up as missing or end up on your wishlist; tick a box to include them
 - Basic lands per deck: fill in how many of each basic land a deck runs, whatever the printing. Imported decks start with the numbers from the list, and older decks can move their lands over in one click
 - Search inside a deck on card name or set
+- One "Save changes" button per deck: bracket, basic lands and chosen printings are edited freely and stored together, with a reminder while there are unsaved changes
 - Commander bracket per deck: taken from Archidekt when the deck has one, and changeable at any time
 - Choose the printing: if you own a card in several printings you pick which one is in the deck (say, the foil); otherwise the cheapest free copy is used
 - Deck value: every saved deck shows what the copies in it are worth

@@ -13,8 +13,8 @@
   </div>
   {% endfor %}
   {% if deck and row.entry_id and row.printings | length > 1 %}
-  <form class="inline" method="post" action="/decks/{{ deck.id }}/cards/{{ row.entry_id }}/printing" data-keep-scroll>
-    <select name="collection_entry_id" onchange="this.form.requestSubmit()" title="Choose which printing this deck uses">
+  <div>
+    <select name="pick:{{ row.entry_id }}" form="deck-form" title="Choose which printing this deck uses">
       <option value="">Choose for me (cheapest free copy)</option>
       {% for p in row.printings %}
       {% set free = row.free.get(p.entry.id, 0) %}
@@ -23,7 +23,7 @@
       </option>
       {% endfor %}
     </select>
-  </form>
+  </div>
   {% endif %}
   {% if row.used_by %}<div class="printing muted">{{ row.reserved }} in use by {{ row.used_by | join(', ') }}</div>{% endif %}
 {% endmacro %}
@@ -38,16 +38,17 @@
 <div class="toolbar">
   <h1>{{ deck.name }}</h1>
   <div class="actions">
-    <form class="inline" method="post" action="/decks/{{ deck.id }}/bracket" data-keep-scroll>
-      <label class="muted">Bracket
-        <select name="bracket" onchange="this.form.requestSubmit()" title="Commander bracket; change it when the deck changes">
-          <option value="">Not set</option>
-          {% for number, label in brackets.items() %}
-          <option value="{{ number }}" {{ 'selected' if deck.bracket == number }}>{{ number }} · {{ label }}</option>
-          {% endfor %}
-        </select>
-      </label>
-    </form>
+    {# Every editable field on this page belongs to this one form, so a single button saves them all. #}
+    <form id="deck-form" class="inline" method="post" action="/decks/{{ deck.id }}/save" data-keep-scroll></form>
+    <label class="muted">Bracket
+      <select name="bracket" form="deck-form" title="Commander bracket; change it when the deck changes">
+        <option value="">Not set</option>
+        {% for number, label in brackets.items() %}
+        <option value="{{ number }}" {{ 'selected' if deck.bracket == number }}>{{ number }} · {{ label }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <button form="deck-form" class="deck-save small">Save changes</button>
     <a href="/deck">← All decks</a>
     <form class="inline" method="post" action="/decks/{{ deck.id }}/delete" data-confirm="Click again to delete">
       <button class="secondary small">Delete deck</button>
@@ -146,20 +147,19 @@
 {% if deck %}
 <div class="panel">
   <h2>Basic lands <span class="muted">· {{ basics }} in this deck</span></h2>
-  <form class="row" method="post" action="/decks/{{ deck.id }}/basics" data-keep-scroll>
+  <div class="row">
     {% for land in basic_names[:6] %}
-    <label>{{ land }}<input class="qty" name="basic:{{ land }}" type="number" min="0" step="1" value="{{ left_out.basics.get(land, 0) }}"></label>
+    <label>{{ land }}<input class="qty" name="basic:{{ land }}" type="number" min="0" step="1" value="{{ left_out.basics.get(land, 0) }}" form="deck-form"></label>
     {% endfor %}
     <details class="snow" {{ 'open' if left_out.basics.keys() | select('in', basic_names[6:]) | list }}>
       <summary class="muted">Snow-covered</summary>
       <div class="row">
         {% for land in basic_names[6:] %}
-        <label>{{ land | replace('Snow-Covered ', '') }}<input class="qty" name="basic:{{ land }}" type="number" min="0" step="1" value="{{ left_out.basics.get(land, 0) }}"></label>
+        <label>{{ land | replace('Snow-Covered ', '') }}<input class="qty" name="basic:{{ land }}" type="number" min="0" step="1" value="{{ left_out.basics.get(land, 0) }}" form="deck-form"></label>
         {% endfor %}
       </div>
     </details>
-    <button class="secondary">Save lands</button>
-  </form>
+  </div>
   <p class="muted">Fill in how many of each basic land this deck runs. Any printing counts, so they are not matched against your collection.</p>
   {% if tracked_basics %}
   <form class="row notice" method="post" action="/decks/{{ deck.id }}/basics/move">
@@ -197,7 +197,7 @@
     </tr>
     {% endfor %}
   </table>
-  {% if deck %}<p class="muted">Own a card in several printings? Pick the one that is in this deck; otherwise the cheapest free copy is used.</p>{% endif %}
+  {% if deck %}<p class="muted">Own a card in several printings? Pick the one that is in this deck; otherwise the cheapest free copy is used. Changes take effect when you save.</p>{% endif %}
   {% else %}
   <p class="muted">None of these cards are available in your collection yet.</p>
   {% endif %}
@@ -242,6 +242,42 @@
 {% endblock %}
 
 {% block scripts %}
+{% if deck %}
+<div id="unsaved-bar" class="unsaved-bar" hidden>
+  <span>You have unsaved changes in this deck.</span>
+  <a href="/decks/{{ deck.id }}">Discard</a>
+  <button form="deck-form">Save changes</button>
+</div>
+<script>
+  // One save for the whole deck: the button lights up as soon as a field differs from what is stored.
+  const deckFields = [...document.querySelectorAll('[form="deck-form"][name]')];
+  // What the server sent, not what the field shows now: a browser may restore edited values on reload.
+  const storedValue = (field) =>
+    field.tagName === "SELECT"
+      ? ([...field.options].find((option) => option.defaultSelected) ?? field.options[0]).value
+      : field.defaultValue;
+  const stored = new Map(deckFields.map((field) => [field, storedValue(field)]));
+  const saveButtons = document.querySelectorAll('button[form="deck-form"]');
+  const unsavedBar = document.getElementById("unsaved-bar");
+
+  function markUnsaved() {
+    let dirty = false;
+    for (const field of deckFields) {
+      const changed = field.value !== stored.get(field);
+      field.classList.toggle("changed", changed);
+      dirty = dirty || changed;
+    }
+    for (const button of saveButtons) button.disabled = !dirty;
+    unsavedBar.hidden = !dirty;
+  }
+
+  for (const field of deckFields) {
+    field.addEventListener("input", markUnsaved);
+    field.addEventListener("change", markUnsaved);
+  }
+  markUnsaved();
+</script>
+{% endif %}
 {% if rows is not none %}
 <script>
   // Instant search over the cards of this deck (name or set), ignoring accents.

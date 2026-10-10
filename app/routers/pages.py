@@ -322,6 +322,35 @@ def _basic_lands_from(form) -> dict[str, int]:
     )
 
 
+@router.post("/decks/{deck_id}/save")
+async def saved_deck_save(deck_id: int, request: Request, session: Session = Depends(get_session)):
+    """The "Save changes" button: bracket, basic lands and chosen printings together."""
+    deck = session.get(Deck, deck_id)
+    if deck is None:
+        return redirect("/deck", "Deck not found", error=True)
+    form = await request.form()
+    try:
+        bracket = str(form.get("bracket", "")).strip()
+        printings = {
+            int(key.removeprefix("pick:")): int(value) if str(value).strip() else None
+            for key, value in form.items()
+            if key.startswith("pick:")
+        }
+        decks.update_deck(
+            session,
+            deck,
+            int(bracket) if bracket else None,
+            {key.removeprefix("basic:"): value for key, value in form.items() if key.startswith("basic:")},
+            printings,
+        )
+    except (ValueError, decks.DeckError) as exc:
+        session.rollback()
+        message = str(exc) if isinstance(exc, decks.DeckError) else "That is not a valid value"
+        return redirect(f"/decks/{deck_id}", f"Nothing was saved: {message}", error=True)
+    session.commit()
+    return redirect(f"/decks/{deck_id}", "Changes saved")
+
+
 @router.post("/decks/{deck_id}/basics")
 async def saved_deck_basics(deck_id: int, request: Request, session: Session = Depends(get_session)):
     deck = session.get(Deck, deck_id)

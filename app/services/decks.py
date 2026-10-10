@@ -467,6 +467,25 @@ def set_basic_lands(session: Session, deck: Deck, counts: dict[str, object]) -> 
     return basics
 
 
+def update_deck(
+    session: Session,
+    deck: Deck,
+    bracket: int | None,
+    basic_lands: dict[str, object],
+    printings: dict[int, int | None],
+) -> None:
+    """Save everything that can be edited on a deck in one go.
+
+    `printings` maps a deck entry id to the chosen collection entry id (None = let the app choose).
+    Nothing is stored when any part is invalid.
+    """
+    basics = parse_basic_lands(basic_lands)
+    set_bracket(session, deck, bracket)
+    set_basic_lands(session, deck, basics)
+    for entry_id, collection_entry_id in printings.items():
+        choose_printing(session, deck, entry_id, collection_entry_id)
+
+
 def tracked_basic_lands(session: Session, deck: Deck) -> int:
     """Basic lands that are still in the deck's card list (decks saved before lands were counted apart)."""
     entries = session.exec(select(DeckEntry).where(DeckEntry.deck_id == deck.id))
