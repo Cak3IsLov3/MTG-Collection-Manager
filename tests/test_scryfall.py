@@ -112,3 +112,15 @@ async def test_rate_limiter_spaces_out_calls():
     for _ in range(3):
         await limiter.wait()
     assert time.monotonic() - start >= 0.09  # 2 gaps of 50 ms
+
+
+async def test_bulk_and_lookup_endpoints_use_the_slow_lane(fake_scryfall):
+    client = ScryfallClient(transport=httpx.MockTransport(fake_scryfall), min_interval=0.01, slow_interval=0.05)
+    start = time.monotonic()
+    for _ in range(3):
+        await client.get_by_id("id-sol")  # fast lane
+    fast = time.monotonic() - start
+    for _ in range(3):
+        await client.get_collection([{"id": "id-sol"}])
+    slow = time.monotonic() - start - fast
+    assert fast < 0.09 <= slow

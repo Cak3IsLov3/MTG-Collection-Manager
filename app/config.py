@@ -28,6 +28,7 @@ class Settings:
     wishlist_check_hours: int
     alert_cooldown_hours: int
     scryfall_min_interval: float
+    scryfall_slow_interval: float
     cardmarket_min_interval: float
     cardmarket_enabled: bool
     user_agent: str = "MTGCollectionManager/1.0"
@@ -43,6 +44,7 @@ def get_settings() -> Settings:
         wishlist_check_hours=int(os.getenv("WISHLIST_CHECK_HOURS", "6")),
         alert_cooldown_hours=int(os.getenv("ALERT_COOLDOWN_HOURS", "24")),
         scryfall_min_interval=float(os.getenv("SCRYFALL_MIN_INTERVAL", "0.1")),
+        scryfall_slow_interval=float(os.getenv("SCRYFALL_SLOW_INTERVAL", "0.6")),
         cardmarket_min_interval=float(os.getenv("CARDMARKET_MIN_INTERVAL", "5")),
         cardmarket_enabled=_bool("CARDMARKET_ENABLED", True),
     )

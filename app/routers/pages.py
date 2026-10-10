@@ -108,12 +108,13 @@ async def collection_add(
 @router.post("/collection/import")
 async def collection_import(
     file: UploadFile = File(...),
+    replace: bool = Form(False),
     session: Session = Depends(get_session),
     scryfall: ScryfallClient = Depends(get_scryfall),
 ):
     try:
         parsed = parse_collection_csv(await file.read())
-        result = await collection.import_rows(session, scryfall, parsed.rows)
+        result = await collection.import_rows(session, scryfall, parsed.rows, replace)
     except (CsvFormatError, ScryfallError) as exc:
         return redirect("/collection", str(exc), error=True)
     stats.record_daily_total(session)

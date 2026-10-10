@@ -23,7 +23,7 @@ price.
 
 **Collection (HAVE)**
 - Add cards by name (optionally a specific set, foil or non-foil)
-- CSV import with automatic format detection (Archidekt, Moxfield, or any CSV with a quantity and name column)
+- CSV import with automatic format detection (Archidekt, Moxfield, or any CSV with a quantity and name column); adds to your collection or replaces it
 - Daily price snapshots, total value over time, top 10 most valuable cards, weekly risers and fallers
 - Price history chart per card
 
@@ -70,6 +70,7 @@ All settings are environment variables (see [.env.example](.env.example)).
 | `WISHLIST_CHECK_HOURS` | `6` | Interval of the wishlist check |
 | `ALERT_COOLDOWN_HOURS` | `24` | Minimum time between two alerts for the same card |
 | `SCRYFALL_MIN_INTERVAL` | `0.1` | Seconds between Scryfall requests (their limit is 10/s) |
+| `SCRYFALL_SLOW_INTERVAL` | `0.6` | Seconds between Scryfall name lookups and bulk requests, which have a much lower limit |
 | `CARDMARKET_MIN_INTERVAL` | `5` | Seconds between Cardmarket requests (plus random jitter) |
 | `CARDMARKET_ENABLED` | `true` | Set to `false` to skip scraping and use Scryfall prices only |
 

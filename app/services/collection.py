@@ -69,9 +69,17 @@ async def add_card_by_name(
     return add_to_collection(session, card, quantity, is_foil)
 
 
-async def import_rows(session: Session, scryfall: ScryfallClient, rows: list[ImportRow]) -> ImportResult:
+async def import_rows(
+    session: Session, scryfall: ScryfallClient, rows: list[ImportRow], replace: bool = False
+) -> ImportResult:
+    """Add rows to the collection; with `replace` the import becomes the whole collection."""
     result = ImportResult()
     resolved = await scryfall.resolve(rows)
+    if replace:
+        # Only after Scryfall answered, so a failed lookup never empties the collection.
+        for entry in session.exec(select(CollectionEntry)).all():
+            session.delete(entry)
+        session.flush()
     for row, data in zip(rows, resolved):
         if data is None:
             result.not_found.append(row.name)

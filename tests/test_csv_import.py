@@ -68,3 +68,13 @@ async def test_import_rows_into_collection(session, scryfall):
     assert rows["Sol Ring"].total_price == 3.0  # 2 x 1.50
     assert rows["Fire // Ice"].unit_price == 0.8  # foil price
     assert rows["Lim-Dûl's Vault"].unit_price is None  # foil, but no foil price known
+
+
+async def test_import_twice_adds_up_unless_replace(session, scryfall):
+    rows = parse_collection_csv(MOXFIELD).rows
+    await import_rows(session, scryfall, rows)
+    await import_rows(session, scryfall, rows)
+    assert sum(row.entry.quantity for row in collection_rows(session)) == 8
+
+    await import_rows(session, scryfall, rows, replace=True)
+    assert sum(row.entry.quantity for row in collection_rows(session)) == 4

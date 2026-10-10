@@ -14,7 +14,10 @@ logger = logging.getLogger(__name__)
 
 BASE_URL = "https://api.scryfall.com"
 COLLECTION_BATCH_SIZE = 75  # hard limit of POST /cards/collection
-MAX_RETRIES = 2
+MAX_RETRIES = 3
+MAX_RETRY_DELAY = 90.0
+# Scryfall allows far fewer requests on these endpoints than on the rest of the API.
+SLOW_PATHS = ("/cards/collection", "/cards/named", "/cards/search")
 
 
 class ScryfallError(Exception):
@@ -121,11 +124,15 @@ class ScryfallClient:
         self,
         transport: httpx.AsyncBaseTransport | None = None,
         min_interval: float | None = None,
+        slow_interval: float | None = None,
     ) -> None:
         settings = get_settings()
         if min_interval is None:
             min_interval = settings.scryfall_min_interval
+        if slow_interval is None:
+            slow_interval = max(min_interval, settings.scryfall_slow_interval) if min_interval else 0.0
         self._limiter = RateLimiter(min_interval)
+        self._slow_limiter = RateLimiter(slow_interval)
         self._client = httpx.AsyncClient(
             base_url=BASE_URL,
             headers={"User-Agent": settings.user_agent, "Accept": "application/json"},
@@ -138,14 +145,17 @@ class ScryfallClient:
 
     async def _request(self, method: str, path: str, **kwargs) -> dict:
         for attempt in range(MAX_RETRIES + 1):
-            await self._limiter.wait()
+            await (self._slow_limiter if path in SLOW_PATHS else self._limiter).wait()
             try:
                 response = await self._client.request(method, path, **kwargs)
             except httpx.HTTPError as exc:
                 raise ScryfallError(f"Scryfall request failed: {exc}") from exc
             if response.status_code == 429 and attempt < MAX_RETRIES:
                 delay = _to_float(response.headers.get("Retry-After"))
-                await asyncio.sleep(1.0 if delay is None else delay)
+                # Hitting the limit again right away makes Scryfall extend the block, so wait it out.
+                delay = 1.0 if delay is None else delay
+                logger.warning("Scryfall rate limit hit, waiting %.0f s", delay)
+                await asyncio.sleep(min(max(delay, 1.0), MAX_RETRY_DELAY))
                 continue
             if response.status_code == 404:
                 raise CardNotFound(f"Card not found on Scryfall ({path})")

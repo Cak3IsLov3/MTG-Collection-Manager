@@ -69,12 +69,14 @@ async def add_to_collection(
 @router.post("/collection/import", response_model=ImportOut)
 async def import_collection(
     file: UploadFile = File(...),
+    replace: bool = False,
     session: Session = Depends(get_session),
     scryfall: ScryfallClient = Depends(get_scryfall),
 ):
+    """Importing adds to the collection; `?replace=true` replaces it with the file's contents."""
     try:
         parsed = parse_collection_csv(await file.read())
-        result = await collection.import_rows(session, scryfall, parsed.rows)
+        result = await collection.import_rows(session, scryfall, parsed.rows, replace)
     except CsvFormatError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except ScryfallError as exc:

@@ -19,10 +19,15 @@
   </div>
   <div class="panel">
     <h2>Import CSV</h2>
-    <form class="row" method="post" action="/collection/import" enctype="multipart/form-data">
+    <form class="row" method="post" action="/collection/import" enctype="multipart/form-data"
+          onsubmit="const b = this.querySelector('button'); b.disabled = true; b.textContent = 'Importing… (large files take a minute)';">
       <label>Archidekt or Moxfield export<input name="file" type="file" accept=".csv,text/csv" required></label>
+      <label class="check" title="Without this, the cards in the file are added on top of what you already have">
+        <input name="replace" type="checkbox">&nbsp;Replace my current collection
+      </label>
       <button>Import</button>
     </form>
+    <p class="muted">Importing the same file twice adds every card twice, unless you tick "Replace".</p>
   </div>
 </div>
 
