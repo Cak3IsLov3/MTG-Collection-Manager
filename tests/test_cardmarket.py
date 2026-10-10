@@ -100,3 +100,55 @@ async def test_fetch_price_network_error():
 async def test_fetch_price_rejects_other_hosts():
     with pytest.raises(CardmarketError):
         await _scraper(lambda r: httpx.Response(200, text=PRODUCT_PAGE)).fetch_price("https://example.com/")
+
+
+async def test_stops_asking_after_three_refusals_in_a_row():
+    from app.cardmarket import CardmarketPaused
+
+    calls = []
+
+    def handler(request):
+        calls.append(request)
+        return httpx.Response(403)
+
+    scraper = _scraper(handler)
+    for _ in range(3):
+        with pytest.raises(CardmarketBlocked):
+            await scraper.fetch_price(URL)
+    assert scraper.paused
+
+    # From now on no request is made at all, so a long wishlist is done in an instant.
+    for _ in range(50):
+        with pytest.raises(CardmarketPaused):
+            await scraper.fetch_price(URL)
+    assert len(calls) == 3
+
+    scraper._paused_until = 0.0  # the pause is over: it tries again
+    with pytest.raises(CardmarketBlocked):
+        await scraper.fetch_price(URL)
+    assert len(calls) == 4
+
+
+async def test_a_successful_request_resets_the_refusal_count():
+    responses = [403, 403, 200, 403, 403]
+
+    def handler(request):
+        status = responses.pop(0)
+        return httpx.Response(status, text=PRODUCT_PAGE if status == 200 else "")
+
+    scraper = _scraper(handler)
+    for expected in (CardmarketBlocked, CardmarketBlocked, None, CardmarketBlocked, CardmarketBlocked):
+        if expected is None:
+            assert (await scraper.fetch_price(URL)).low == 11.95
+        else:
+            with pytest.raises(expected):
+                await scraper.fetch_price(URL)
+    assert not scraper.paused  # never three in a row
+
+
+async def test_bot_protection_pages_count_as_refusals():
+    scraper = _scraper(lambda r: httpx.Response(200, text="<title>Just a moment...</title>"))
+    for _ in range(3):
+        with pytest.raises(CardmarketBlocked):
+            await scraper.fetch_price(URL)
+    assert scraper.paused

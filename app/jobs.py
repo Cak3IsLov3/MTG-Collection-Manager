@@ -7,12 +7,12 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from sqlmodel import Session, select
 
 from app import deps
-from app.cardmarket import CardmarketError, CardmarketScraper
+from app.cardmarket import CardmarketError, CardmarketPaused, CardmarketScraper
 from app.config import get_settings
 from app.database import engine
 from app.discord import DiscordNotifier
 from app.models import Alert, Card, CollectionEntry, WishlistEntry, utcnow
-from app.scryfall import ScryfallClient
+from app.scryfall import ScryfallClient, ScryfallError
 from app.services.pricing import CARDMARKET, SCRYFALL, latest_snapshots, record_snapshot
 from app.services.stats import record_daily_total
 from app.services.wishlist import recently_alerted
@@ -51,16 +51,18 @@ async def check_wishlist(
     notifier: DiscordNotifier,
     now: dt.datetime | None = None,
     cooldown_hours: int | None = None,
+    scryfall: ScryfallClient | None = None,
 ) -> list[Alert]:
     """Fetch current wishlist prices and alert for every card at or below its target.
 
-    Cardmarket is the preferred source; when scraping fails (or is disabled) the
-    latest Scryfall price is used instead so alerts keep working.
+    With `scryfall`, today's Scryfall prices of the wishlist cards are fetched
+    first (one bulk request per 75 cards). Cardmarket is the preferred source
+    on top of that; when scraping fails, is paused or is disabled, the Scryfall
+    price is used so alerts keep working.
     """
     now = now or utcnow()
     if cooldown_hours is None:
         cooldown_hours = get_settings().alert_cooldown_hours
-    scryfall_prices = latest_snapshots(session, SCRYFALL)
     alerts: list[Alert] = []
 
     entries = session.exec(
@@ -68,11 +70,25 @@ async def check_wishlist(
         .join(Card, WishlistEntry.card_id == Card.id)
         .where(WishlistEntry.active == True)  # noqa: E712
     ).all()
+    if scryfall is not None and entries:
+        try:
+            found, _ = await scryfall.get_collection([{"id": card.scryfall_id} for _, card in entries])
+        except ScryfallError as exc:
+            logger.warning("Could not refresh Scryfall prices for the wishlist: %s", exc)
+        else:
+            fresh = {data.scryfall_id: data for data in found}
+            for _, card in entries:
+                data = fresh.get(card.scryfall_id)
+                if data is not None:
+                    record_snapshot(session, card.id, SCRYFALL, data.price_eur, data.price_eur_foil)
+    scryfall_prices = latest_snapshots(session, SCRYFALL)
     for entry, card in entries:
         price, source = None, CARDMARKET
         if cardmarket is not None and entry.cardmarket_url:
             try:
                 price = (await cardmarket.fetch_price(entry.cardmarket_url)).low
+            except CardmarketPaused:
+                pass  # already reported once, when the pause started
             except CardmarketError as exc:
                 logger.warning("Cardmarket check failed for %s: %s", card.name, exc)
         if price is not None:
@@ -109,7 +125,9 @@ async def run_collection_update() -> None:
 async def run_wishlist_check() -> None:
     try:
         with Session(engine) as session:
-            alerts = await check_wishlist(session, deps.get_cardmarket(), deps.get_notifier())
+            alerts = await check_wishlist(
+                session, deps.get_cardmarket(), deps.get_notifier(), scryfall=deps.get_scryfall()
+            )
         logger.info("Wishlist check done: %s alerts", len(alerts))
     except Exception:
         logger.exception("Wishlist check failed")

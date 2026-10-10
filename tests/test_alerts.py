@@ -124,3 +124,43 @@ async def test_daily_price_update_snapshots_and_totals(session, scryfall, fake_s
     assert (total.collection_value, total.wishlist_cost) == (4.0, 9.0)
     # Same day, same source: the snapshot is overwritten instead of duplicated.
     assert len(session.exec(select(PriceSnapshot)).all()) == 2
+
+
+async def test_check_fetches_fresh_scryfall_prices_first(session, scryfall, fake_scryfall, vault):
+    # Stored price is 12.34 and the target 10.00; Scryfall now says 9.50.
+    fake_scryfall.set_price("id-vault", "9.50")
+    notifier = FakeNotifier()
+    blocked = FakeCardmarket(error=CardmarketBlocked("403"))
+
+    assert await check_wishlist(session, blocked, notifier, now=NOW) == []  # without a refresh: still 12.34
+    alerts = await check_wishlist(session, blocked, notifier, now=NOW, scryfall=scryfall)
+    assert [a.price_at_alert for a in alerts] == [9.5] and notifier.sent[0][3] == "scryfall"
+    assert wishlist_rows(session)[0].current_price == 9.5
+
+    posts = [r for r in fake_scryfall.requests if r.url.path == "/cards/collection"]
+    assert len(posts) == 1  # one bulk request, not one per card
+
+
+async def test_check_survives_a_scryfall_outage(session, vault):
+    import httpx
+
+    from app.scryfall import ScryfallClient
+
+    down = ScryfallClient(transport=httpx.MockTransport(lambda r: httpx.Response(500)), min_interval=0)
+    vault.target_price = 15.0
+    session.add(vault)
+    session.commit()
+    alerts = await check_wishlist(session, None, FakeNotifier(), now=NOW, scryfall=down)
+    assert [a.price_at_alert for a in alerts] == [12.34]  # falls back to the stored price
+
+
+async def test_paused_cardmarket_is_skipped_quietly(session, vault, caplog):
+    from app.cardmarket import CardmarketPaused
+
+    vault.target_price = 15.0
+    session.add(vault)
+    session.commit()
+    paused = FakeCardmarket(error=CardmarketPaused("paused"))
+    with caplog.at_level("WARNING"):
+        alerts = await check_wishlist(session, paused, FakeNotifier(), now=NOW)
+    assert len(alerts) == 1 and "Cardmarket check failed" not in caplog.text

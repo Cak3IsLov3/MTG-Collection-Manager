@@ -115,7 +115,11 @@ product page. Two things to know:
 - **Cardmarket sits behind bot protection** and at the time of writing answers
   plain HTTP clients with `403`. The app does not try to get around that. When
   a scrape fails, the wishlist check falls back to Scryfall's EUR price, which
-  is Cardmarket's own price trend updated once a day. Alerts therefore keep
+  is Cardmarket's own price trend updated once a day. After three refusals
+  in a row the scraper leaves Cardmarket alone for an hour, so a long wishlist
+  is checked in seconds instead of waiting out the rate limit for every card.
+  Every check first fetches today's Scryfall prices for the whole wishlist in
+  bulk. Alerts therefore keep
   working; they just react to the trend price rather than the cheapest listing.
   The source of every price is shown in the wishlist.
 

@@ -8,6 +8,7 @@ selector and label lives in cardmarket_selectors.json instead of in code.
 import json
 import logging
 import re
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import urlparse
@@ -21,6 +22,11 @@ from app.rate_limit import RateLimiter
 logger = logging.getLogger(__name__)
 
 SELECTORS_PATH = BASE_DIR / "cardmarket_selectors.json"
+
+# When Cardmarket refuses this many requests in a row it is blocking us, not one page.
+# Asking for the remaining cards would only take minutes (the rate limit) and risk a longer ban.
+BLOCKED_LIMIT = 3
+BLOCKED_PAUSE_SECONDS = 60 * 60
 
 BROWSER_HEADERS = {
     "User-Agent": (
@@ -38,6 +44,10 @@ class CardmarketError(Exception):
 
 class CardmarketBlocked(CardmarketError):
     """Rate limited or stopped by bot protection."""
+
+
+class CardmarketPaused(CardmarketBlocked):
+    """Not even tried: Cardmarket refused several requests in a row, so we leave it alone for a while."""
 
 
 class CardmarketParseError(CardmarketError):
@@ -117,6 +127,8 @@ class CardmarketScraper:
             min_interval = get_settings().cardmarket_min_interval
         self._limiter = RateLimiter(min_interval, jitter=min_interval * 0.5)
         self._selectors = selectors
+        self._blocked_in_a_row = 0
+        self._paused_until = 0.0
         self._client = httpx.AsyncClient(
             headers=BROWSER_HEADERS, timeout=20.0, follow_redirects=True, transport=transport
         )
@@ -127,13 +139,33 @@ class CardmarketScraper:
     async def fetch_price(self, url: str) -> CardmarketPrice:
         if not is_cardmarket_url(url):
             raise CardmarketError(f"Not a Cardmarket URL: {url}")
+        if self.paused:
+            raise CardmarketPaused("Cardmarket is refusing requests; not asking again for a while")
         await self._limiter.wait()
         try:
             response = await self._client.get(url)
         except httpx.HTTPError as exc:
             raise CardmarketError(f"Cardmarket request failed: {exc}") from exc
-        if response.status_code in (403, 429, 503):
-            raise CardmarketBlocked(f"Cardmarket refused the request (HTTP {response.status_code})")
-        if response.status_code >= 400:
-            raise CardmarketError(f"Cardmarket returned HTTP {response.status_code}")
-        return parse_product_page(response.text, self._selectors)
+        try:
+            if response.status_code in (403, 429, 503):
+                raise CardmarketBlocked(f"Cardmarket refused the request (HTTP {response.status_code})")
+            if response.status_code >= 400:
+                raise CardmarketError(f"Cardmarket returned HTTP {response.status_code}")
+            price = parse_product_page(response.text, self._selectors)
+        except CardmarketBlocked:
+            self._blocked_in_a_row += 1
+            if self._blocked_in_a_row >= BLOCKED_LIMIT:
+                self._paused_until = time.monotonic() + BLOCKED_PAUSE_SECONDS
+                logger.warning(
+                    "Cardmarket refused %s requests in a row; skipping it for %s minutes",
+                    self._blocked_in_a_row,
+                    BLOCKED_PAUSE_SECONDS // 60,
+                )
+            raise
+        self._blocked_in_a_row = 0
+        return price
+
+    @property
+    def paused(self) -> bool:
+        """True while Cardmarket is being left alone after refusing several requests in a row."""
+        return time.monotonic() < self._paused_until
