@@ -26,8 +26,7 @@
   <h1>{{ deck.name }}</h1>
   <div class="actions">
     <a href="/deck">← All decks</a>
-    <form class="inline" method="post" action="/decks/{{ deck.id }}/delete"
-          onsubmit="return confirm('Delete this deck? Its cards become available for other decks again.')">
+    <form class="inline" method="post" action="/decks/{{ deck.id }}/delete" data-confirm="Click again to delete">
       <button class="secondary small">Delete deck</button>
     </form>
   </div>

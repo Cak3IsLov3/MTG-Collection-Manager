@@ -51,8 +51,7 @@
       <td class="num">{{ row.total_price | eur }}</td>
       <td>
         <div class="actions">
-          <form class="inline" method="post" action="/collection/{{ row.entry.id }}/delete"
-                onsubmit="return confirm('Remove {{ row.card.name | replace("'", "\\'") }} from your collection?')">
+          <form class="inline" method="post" action="/collection/{{ row.entry.id }}/delete" data-confirm="Click again to remove">
             <button class="secondary small">Remove</button>
           </form>
         </div>

@@ -22,6 +22,25 @@
     {% if msg %}<div class="flash {{ 'error' if error }}">{{ msg }}</div>{% endif %}
     {% block content %}{% endblock %}
   </main>
+  <script>
+    // Two-click confirmation for destructive buttons: the first click arms the button, the second submits.
+    // (Not window.confirm(): embedded browsers suppress native dialogs, which silently cancels the action.)
+    document.addEventListener("submit", (event) => {
+      const form = event.target;
+      if (!form.dataset.confirm || form.dataset.armed) return;
+      event.preventDefault();
+      const button = form.querySelector("button");
+      const label = button.textContent;
+      form.dataset.armed = "1";
+      button.textContent = form.dataset.confirm;
+      button.classList.add("danger");
+      setTimeout(() => {
+        delete form.dataset.armed;
+        button.textContent = label;
+        button.classList.remove("danger");
+      }, 4000);
+    });
+  </script>
   {% block scripts %}{% endblock %}
 </body>
 </html>

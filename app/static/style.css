@@ -113,3 +113,5 @@ button:hover { filter: brightness(1.1); }
 h2.up { color: var(--up); }
 
 .progress.slim { height: 6px; margin: 0; }
+
+button.danger { background: var(--down); border-color: var(--down); color: #fff; }
