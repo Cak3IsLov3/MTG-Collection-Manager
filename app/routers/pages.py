@@ -361,12 +361,20 @@ async def saved_deck_save(deck_id: int, request: Request, session: Session = Dep
             {key.removeprefix("basic:"): value for key, value in form.items() if key.startswith("basic:")},
             printings,
         )
+        # The "Remove" / "Put back" buttons submit the same form, so pending edits are saved along.
+        message = "Changes saved"
+        for field, assigned in (("unassign", False), ("assign", True)):
+            if str(form.get(field, "")).strip():
+                entry = decks.set_assigned(session, deck, int(form[field]), assigned)
+                message = (
+                    f"{entry.name} is back in this deck" if assigned else f"{entry.name} moved to Still missing"
+                )
     except (ValueError, decks.DeckError) as exc:
         session.rollback()
         message = str(exc) if isinstance(exc, decks.DeckError) else "That is not a valid value"
         return redirect(f"/decks/{deck_id}", f"Nothing was saved: {message}", error=True)
     session.commit()
-    return redirect(f"/decks/{deck_id}", "Changes saved")
+    return redirect(f"/decks/{deck_id}", message)
 
 
 @router.post("/decks/{deck_id}/basics")

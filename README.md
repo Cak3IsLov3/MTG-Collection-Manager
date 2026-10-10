@@ -27,6 +27,8 @@ price.
 
 ![Searching inside a deck on a set name](docs/deck-search.jpg)
 
+![A card taken out of a deck: it moved to Still missing and can be put back](docs/deck-removed.jpg)
+
 ![Deleting a deck asks for a second click instead of a pop-up](docs/deck-delete.jpg)
 
 <sub>Destructive buttons use a two-click confirmation: the first click turns the button red ("Click again to delete"), a second click within four seconds confirms.</sub>
@@ -59,6 +61,7 @@ price.
 - Basic lands and tokens are left out of the tracked cards by default, so they do not show up as missing or end up on your wishlist; tick a box to include them
 - Basic lands per deck: fill in how many of each basic land a deck runs, whatever the printing. Imported decks start with the numbers from the list, and older decks can move their lands over in one click
 - Deck randomizer: can't decide what to play? Pick a random deck, or a different one for every player at the table, optionally only from one bracket or only decks you can build right now
+- Take a card out of a deck: "Remove" moves it from "In this deck" to "Still missing" and frees your copies for other decks; "Put back" undoes it
 - Search inside a deck on card name or set
 - One "Save changes" button per deck: bracket, basic lands and chosen printings are edited freely and stored together, with a reminder while there are unsaved changes
 - Commander bracket per deck: taken from Archidekt when the deck has one, and changeable at any time
@@ -134,6 +137,7 @@ product page. Two things to know:
 | `GET` | `/api/decks/random` | Pick random decks (`count`, `bracket`, `complete_only`) |
 | `GET` / `DELETE` | `/api/decks/{id}` | A saved deck with its cards / delete it and free its cards |
 | `PUT` | `/api/decks/{id}/cards/{entry_id}/printing` | Choose which printing a deck uses for a card |
+| `PUT` | `/api/decks/{id}/cards/{entry_id}/assigned` | Take your copies of a card out of a deck, or put them back |
 | `PUT` | `/api/decks/{id}/basic-lands` | Set how many of each basic land a deck runs |
 | `PUT` | `/api/decks/{id}/bracket` | Set or clear the Commander bracket of a deck |
 | `POST` | `/api/jobs/update-prices`, `/api/jobs/check-wishlist` | Run a background job now |

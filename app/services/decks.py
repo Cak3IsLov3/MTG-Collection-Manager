@@ -55,6 +55,7 @@ class DeckCard:
     quantity: int = 1
     entry_id: int | None = None  # set for the cards of a saved deck
     kind: str = "card"  # CARD, BASIC or TOKEN, when the source says so
+    unassigned: bool = False  # the user took their copies out of the deck
 
 
 @dataclass
@@ -85,6 +86,8 @@ class DeckRow:
     free: dict[int, int] = field(default_factory=dict)
     entry_id: int | None = None
     pinned_id: int | None = None  # collection entry id the user chose, if any
+    # The user took their copies out of this deck: it uses none, so the card counts as missing.
+    unassigned: bool = False
 
     @property
     def owned(self) -> int:
@@ -296,6 +299,7 @@ class _Need:
     quantity: int
     entry_id: int | None = None
     pin: int | None = None
+    unassigned: bool = False
 
 
 class _CardPool:
@@ -328,7 +332,9 @@ class _CardPool:
         self.decks = list(session.exec(select(Deck).order_by(Deck.id)))
         cards: dict[int, list[DeckCard]] = {deck.id: [] for deck in self.decks}
         for entry in session.exec(select(DeckEntry).order_by(DeckEntry.id)):
-            cards.setdefault(entry.deck_id, []).append(DeckCard(entry.name, entry.quantity, entry.id))
+            cards.setdefault(entry.deck_id, []).append(
+                DeckCard(entry.name, entry.quantity, entry.id, unassigned=entry.unassigned)
+            )
         self.needs = {deck.id: self._needs(cards[deck.id], pins) for deck in self.decks}
 
         # claims[deck id][card key][collection entry id] = copies
@@ -336,11 +342,13 @@ class _CardPool:
         self.claims: dict[int, dict[str, dict[int, int]]] = {deck.id: {} for deck in self.decks}
         for deck in self.decks:  # chosen printings first
             for key, need in self.needs[deck.id].items():
-                if need.pin is not None:
+                if need.pin is not None and not need.unassigned:
                     self._take([need.pin], need.quantity, self.remaining, self.claims[deck.id].setdefault(key, {}))
         for deck in self.decks:  # then whatever is still needed
             for key, need in self.needs[deck.id].items():
                 claimed = self.claims[deck.id].setdefault(key, {})
+                if need.unassigned:
+                    continue
                 self._take(self._ids(key), need.quantity - sum(claimed.values()), self.remaining, claimed)
 
     def _key(self, name: str) -> str:
@@ -365,6 +373,7 @@ class _CardPool:
             key = self._key(card.name)
             need = needs.setdefault(key, _Need(card.name, 0, card.entry_id))
             need.quantity += card.quantity
+            need.unassigned = need.unassigned or card.unassigned
             pin = (pins or {}).get(card.entry_id)
             # A chosen printing only counts while it is still in the collection as this card.
             if need.pin is None and pin in self._ids(key):
@@ -402,6 +411,7 @@ class _CardPool:
                     else {},
                     entry_id=need.entry_id,
                     pinned_id=need.pin,
+                    unassigned=need.unassigned,
                 )
             )
         return sorted(rows, key=lambda row: name_key(row.name))
@@ -466,6 +476,17 @@ def set_basic_lands(session: Session, deck: Deck, counts: dict[str, object]) -> 
         session.add(DeckBasicLand(deck_id=deck.id, name=land, quantity=quantity))
     session.flush()
     return basics
+
+
+def set_assigned(session: Session, deck: Deck, entry_id: int, assigned: bool) -> DeckEntry:
+    """Take your copies of a card out of a deck (it then counts as missing), or put them back."""
+    entry = session.get(DeckEntry, entry_id)
+    if entry is None or entry.deck_id != deck.id:
+        raise DeckError("That card is not in this deck")
+    entry.unassigned = not assigned
+    session.add(entry)
+    session.flush()
+    return entry
 
 
 def update_deck(

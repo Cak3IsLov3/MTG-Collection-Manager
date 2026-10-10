@@ -12,7 +12,7 @@
     <span class="muted">{{ p.unit_price | eur }}</span>
   </div>
   {% endfor %}
-  {% if deck and row.entry_id and row.printings | length > 1 %}
+  {% if deck and row.entry_id and row.printings | length > 1 and not row.unassigned %}
   <div>
     <select name="pick:{{ row.entry_id }}" form="deck-form" title="Choose which printing this deck uses">
       <option value="">Choose for me (cheapest free copy)</option>
@@ -201,7 +201,7 @@
   <table>
     <tr>
       <th></th><th>Card</th><th class="num">Needed</th><th class="num">Owned</th><th class="num">Free</th>
-      <th>{{ 'Printing in this deck' if deck else 'Copies to use' }}</th><th class="num">Value</th>
+      <th>{{ 'Printing in this deck' if deck else 'Copies to use' }}</th><th class="num">Value</th>{% if deck %}<th></th>{% endif %}
     </tr>
     {% for row in have %}
     <tr data-deck-row="{{ row.name }} {% for p, n in row.picks %}{{ p.card.set_name }} {{ p.card.set_code }} {% endfor %}">
@@ -212,10 +212,19 @@
       <td class="num">{{ row.available }}</td>
       <td>{{ using(row) }}</td>
       <td class="num">{{ row.value | eur }}</td>
+      {% if deck %}
+      <td>
+        {% if row.entry_id and row.usable %}
+        <button form="deck-form" name="unassign" value="{{ row.entry_id }}" class="secondary small"
+                title="Take your copies out of this deck. The card stays on the list as missing.">Remove</button>
+        {% endif %}
+      </td>
+      {% endif %}
     </tr>
     {% endfor %}
   </table>
-  {% if deck %}<p class="muted">Own a card in several printings? Pick the one that is in this deck; otherwise the cheapest free copy is used. Changes take effect when you save.</p>{% endif %}
+  {% if deck %}<p class="muted">Own a card in several printings? Pick the one that is in this deck; otherwise the cheapest free copy is used. Changes take effect when you save.
+    "Remove" takes your copies of a card out of this deck: it moves to Still missing and the copies are free for other decks.</p>{% endif %}
   {% else %}
   <p class="muted">None of these cards are available in your collection yet.</p>
   {% endif %}
@@ -244,7 +253,12 @@
       <td class="num">{{ row.available }}</td>
       <td class="num down">{{ row.missing }}</td>
       <td>
-        {% if row.on_wishlist %}<span class="badge">on wishlist</span>
+        {% if row.unassigned %}<span class="badge">taken out of this deck</span>
+        {% if row.entry_id %}
+        <button form="deck-form" name="assign" value="{{ row.entry_id }}" class="secondary small"
+                title="Use your copies for this deck again">Put back</button>
+        {% endif %}
+        {% elif row.on_wishlist %}<span class="badge">on wishlist</span>
         {% elif row.owned and not row.available %}<span class="badge">all copies in other decks</span>
         {% elif row.owned %}<span class="badge">need more copies</span>
         {% else %}<span class="badge">not owned</span>{% endif %}
@@ -345,14 +359,14 @@
 </div>
 <script>
   // One save for the whole deck: the button lights up as soon as a field differs from what is stored.
-  const deckFields = [...document.querySelectorAll('[form="deck-form"][name]')];
+  const deckFields = [...document.querySelectorAll('[form="deck-form"][name]:not(button)')];
   // What the server sent, not what the field shows now: a browser may restore edited values on reload.
   const storedValue = (field) =>
     field.tagName === "SELECT"
       ? ([...field.options].find((option) => option.defaultSelected) ?? field.options[0]).value
       : field.defaultValue;
   const stored = new Map(deckFields.map((field) => [field, storedValue(field)]));
-  const saveButtons = document.querySelectorAll('button[form="deck-form"]');
+  const saveButtons = document.querySelectorAll('button[form="deck-form"]:not([name])');
   const unsavedBar = document.getElementById("unsaved-bar");
 
   function markUnsaved() {

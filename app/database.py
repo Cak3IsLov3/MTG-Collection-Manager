@@ -25,10 +25,16 @@ def add_missing_columns(target=None) -> None:
     target = target or engine
     if target.dialect.name != "sqlite":
         return
+    added = {
+        "deck": {"bracket": "INTEGER"},
+        "deckentry": {"unassigned": "BOOLEAN NOT NULL DEFAULT 0"},
+    }
     with target.begin() as connection:
-        columns = {row[1] for row in connection.exec_driver_sql("PRAGMA table_info(deck)")}
-        if columns and "bracket" not in columns:
-            connection.exec_driver_sql("ALTER TABLE deck ADD COLUMN bracket INTEGER")
+        for table, new_columns in added.items():
+            columns = {row[1] for row in connection.exec_driver_sql(f"PRAGMA table_info({table})")}
+            for column, definition in new_columns.items():
+                if columns and column not in columns:
+                    connection.exec_driver_sql(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
 
 
 def init_db() -> None:

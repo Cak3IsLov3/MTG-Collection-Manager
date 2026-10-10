@@ -77,6 +77,8 @@ class DeckEntry(SQLModel, table=True):
     deck_id: int = Field(foreign_key="deck.id", index=True)
     name: str
     quantity: int = 1
+    # True when the user took their copies out of the deck: the card is still on the list, but missing.
+    unassigned: bool = False
 
 
 class DeckBasicLand(SQLModel, table=True):

@@ -504,3 +504,94 @@ def test_random_deck_page_and_api(client):
     too_many = client.get("/api/decks/random", params={"count": 3})
     assert too_many.status_code == 400 and "only 2 decks match" in too_many.json()["detail"]
     assert client.get(f"/api/decks/{first['id']}").json()["name"] == "Ramp"  # /decks/random does not shadow this
+
+
+async def test_take_a_card_out_of_a_deck(session, scryfall):
+    from sqlmodel import select
+
+    from app.models import DeckEntry
+    from app.services.decks import set_assigned
+
+    await add_card_by_name(session, scryfall, "Sol Ring", quantity=1)
+    first = save_deck(session, "First", [DeckCard("Sol Ring", 1), DeckCard("Fire // Ice", 1)])
+    second = save_deck(session, "Second", [DeckCard("Sol Ring", 1)])
+    entry = session.exec(select(DeckEntry).where(DeckEntry.deck_id == first.id, DeckEntry.name == "Sol Ring")).one()
+
+    def sol(deck):
+        return {row.name: row for row in saved_deck_rows(session, deck)}["Sol Ring"]
+
+    assert (sol(first).missing, sol(second).missing) == (0, 1)
+
+    # Taken out: still on the list, but missing, and the copy goes to the next deck that wants it.
+    set_assigned(session, first, entry.id, False)
+    row = sol(first)
+    assert (row.unassigned, row.usable, row.missing, row.picks, row.used_by) == (True, 0, 1, [], ["Second"])
+    assert sol(second).missing == 0
+    assert [(s.deck.name, s.usable, s.needed) for s in deck_summaries(session)] == [("First", 0, 2), ("Second", 1, 1)]
+
+    # Put back: the older deck gets its copy again.
+    set_assigned(session, first, entry.id, True)
+    assert (sol(first).missing, sol(second).missing) == (0, 1)
+
+    with pytest.raises(DeckError):
+        set_assigned(session, second, entry.id, False)  # a card of another deck
+
+
+def test_remove_and_put_back_through_the_deck_page(client):
+    client.post("/api/collection", json={"name": "Sol Ring"})
+    deck = client.post("/api/decks", json={"name": "Ramp", "decklist": "1 Sol Ring\n1 Fire // Ice"}).json()
+    sol = next(c for c in deck["cards"] if c["name"] == "Sol Ring")
+    url = f"/decks/{deck['id']}/save"
+
+    page = client.get(f"/decks/{deck['id']}")
+    assert f'name="unassign" value="{sol["entry_id"]}"' in page.text
+    assert page.text.count('name="unassign"') == 1  # no button for the card that is missing anyway
+
+    # The button submits the whole form, so an edit made just before is saved along.
+    removed = client.post(url, data={"bracket": "3", "unassign": str(sol["entry_id"])})
+    assert "Sol Ring moved to Still missing" in removed.text
+    assert "In this deck (0)" in removed.text and "Still missing (2)" in removed.text
+    assert "taken out of this deck" in removed.text and f'name="assign" value="{sol["entry_id"]}"' in removed.text
+    detail = client.get(f"/api/decks/{deck['id']}").json()
+    card = next(c for c in detail["cards"] if c["name"] == "Sol Ring")
+    assert (detail["bracket"], detail["cards_usable"], card["unassigned"], card["missing"], card["available"]) == (3, 0, True, 1, 1)
+
+    back = client.post(url, data={"bracket": "3", "assign": str(sol["entry_id"])})
+    assert "Sol Ring is back in this deck" in back.text and "In this deck (1)" in back.text
+
+    api = f"/api/decks/{deck['id']}/cards/{sol['entry_id']}/assigned"
+    assert client.put(api, json={"assigned": False}).json()["cards_usable"] == 0
+    assert client.put(api, json={"assigned": True}).json()["cards_usable"] == 1
+    assert client.put(f"/api/decks/{deck['id']}/cards/9999/assigned", json={"assigned": False}).status_code == 400
+    assert "Nothing was saved" in client.post(url, data={"unassign": "9999"}).text
+
+
+def test_unassigned_column_is_added_to_an_existing_database():
+    from sqlalchemy import create_engine
+
+    from app.database import add_missing_columns
+
+    old = create_engine("sqlite://")
+    with old.begin() as connection:
+        connection.exec_driver_sql("CREATE TABLE deck (id INTEGER PRIMARY KEY, name VARCHAR NOT NULL, bracket INTEGER)")
+        connection.exec_driver_sql("CREATE TABLE deckentry (id INTEGER PRIMARY KEY, deck_id INTEGER, name VARCHAR, quantity INTEGER)")
+        connection.exec_driver_sql("INSERT INTO deckentry (deck_id, name, quantity) VALUES (1, 'Sol Ring', 1)")
+    add_missing_columns(old)
+    add_missing_columns(old)
+    with old.begin() as connection:
+        assert connection.exec_driver_sql("SELECT name, unassigned FROM deckentry").all() == [("Sol Ring", 0)]
+
+
+def test_put_back_is_offered_even_when_another_deck_took_the_copy(client):
+    client.post("/api/collection", json={"name": "Sol Ring"})
+    first = client.post("/api/decks", json={"name": "First", "decklist": "1 Sol Ring"}).json()
+    second = client.post("/api/decks", json={"name": "Second", "decklist": "1 Sol Ring"}).json()
+    entry = first["cards"][0]["entry_id"]
+
+    removed = client.post(f"/decks/{first['id']}/save", data={"unassign": str(entry)})
+    assert client.get(f"/api/decks/{second['id']}").json()["complete"] is True  # the copy moved on
+    assert f'name="assign" value="{entry}"' in removed.text and "1 in use by Second" in removed.text
+
+    client.post(f"/decks/{first['id']}/save", data={"assign": str(entry)})
+    assert client.get(f"/api/decks/{first['id']}").json()["complete"] is True  # the older deck has it back
+    assert client.get(f"/api/decks/{second['id']}").json()["complete"] is False

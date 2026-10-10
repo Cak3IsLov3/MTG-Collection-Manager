@@ -20,6 +20,7 @@ from app.schemas import (
     DeckCardOut,
     DeckCheckIn,
     DeckDetailOut,
+    DeckAssignedIn,
     DeckBracketIn,
     DeckOut,
     DeckPrintingIn,
@@ -283,6 +284,18 @@ def choose_printing(
         raise HTTPException(status_code=404, detail="Deck not found")
     try:
         decks.choose_printing(session, deck, entry_id, payload.collection_entry_id)
+    except decks.DeckError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    session.commit()
+    return _deck_detail(session, deck)
+
+
+@router.put("/decks/{deck_id}/cards/{entry_id}/assigned", response_model=DeckDetailOut)
+def set_assigned(deck_id: int, entry_id: int, payload: DeckAssignedIn, session: Session = Depends(get_session)):
+    """Take your copies of a card out of a deck, so it counts as missing, or put them back."""
+    deck = _saved_deck(session, deck_id)
+    try:
+        decks.set_assigned(session, deck, entry_id, payload.assigned)
     except decks.DeckError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     session.commit()

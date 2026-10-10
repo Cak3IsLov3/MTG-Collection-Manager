@@ -139,6 +139,11 @@ class DeckPickOut(BaseModel):
     printing: CollectionItemOut
 
 
+class DeckAssignedIn(BaseModel):
+    # False takes your copies out of the deck (the card then counts as missing); True puts them back.
+    assigned: bool
+
+
 class DeckPrintingIn(BaseModel):
     # A collection entry id, or null to let the app choose again.
     collection_entry_id: int | None = None
@@ -155,6 +160,7 @@ class DeckCardOut(BaseModel):
     on_wishlist: bool
     used_by: list[str] = []
     value: float = 0.0
+    unassigned: bool = False
     chosen_collection_entry_id: int | None = None
     using: list[DeckPickOut] = []
     printings: list[CollectionItemOut] = []
@@ -166,6 +172,7 @@ class DeckCardOut(BaseModel):
             available=row.available, missing=row.missing, on_wishlist=row.on_wishlist,
             used_by=row.used_by, printings=[CollectionItemOut.from_row(p) for p in row.printings],
             entry_id=row.entry_id, value=row.value, chosen_collection_entry_id=row.pinned_id,
+            unassigned=row.unassigned,
             using=[DeckPickOut(quantity=n, printing=CollectionItemOut.from_row(p)) for p, n in row.picks],
         )
 
