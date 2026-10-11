@@ -129,8 +129,18 @@ class DeckSummary:
         return self.usable >= self.needed
 
     @property
+    def total_cards(self) -> int:
+        """Deck size: the tracked cards plus the basic lands (a Commander deck has 100)."""
+        return self.needed + self.basic_lands
+
+    @property
+    def total_owned(self) -> int:
+        """Cards of the deck you have; basic lands are counted as owned."""
+        return self.usable + self.basic_lands
+
+    @property
     def percent(self) -> int:
-        return round(self.usable / self.needed * 100) if self.needed else 0
+        return round(self.total_owned / self.total_cards * 100) if self.total_cards else 0
 
 
 def card_kind(name: str, kind: str = CARD) -> str:

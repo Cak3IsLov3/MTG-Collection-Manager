@@ -31,11 +31,11 @@ price.
 
 ![The saved decks filtered on bracket 3: two of the five decks are left](docs/decks-filter.jpg)
 
-![A saved deck: its bracket, basic lands per land, search, and the printing each card uses](docs/deck.jpg)
+![A saved deck of exactly 100 cards: its bracket, deck size, basic lands per land, search, and the printing each card uses](docs/deck.jpg)
 
 ![Unsaved changes in a deck: the changed fields are highlighted and one button saves them all](docs/deck-unsaved.jpg)
 
-![Searching inside a deck on a set name](docs/deck-search.jpg)
+![Searching inside a deck](docs/deck-search.jpg)
 
 ![A card taken out of a deck: it moved to Still missing and can be put back](docs/deck-removed.jpg)
 
@@ -74,6 +74,7 @@ price.
 - Deck check: paste a decklist, upload a deck file or give an Archidekt URL. You see which cards you already own and in which printing (set, foil, quantity), so you can pull them from your collection, and you can add the missing cards to your wishlist in one click
 - Saved decks: save a deck and the cards you own are set aside for it. Every copy can only be in one deck, so a second deck does not count the same Sol Ring again; it shows which deck is using it instead
 - Basic lands and tokens are left out of the tracked cards by default, so they do not show up as missing or end up on your wishlist; tick a box to include them
+- Deck size: basic lands count towards the cards of a deck, so you can see at a glance whether a Commander deck has exactly 100 cards, or how many it is short or over
 - Basic lands per deck: fill in how many of each basic land a deck runs, whatever the printing. Imported decks start with the numbers from the list, and older decks can move their lands over in one click
 - Deck randomizer: can't decide what to play? Pick a random deck, or a different one for every player at the table, optionally only from one bracket or only decks you can build right now
 - Take a card out of a deck: "Remove" moves it from "In this deck" to "Still missing" and frees your copies for other decks; "Put back" undoes it

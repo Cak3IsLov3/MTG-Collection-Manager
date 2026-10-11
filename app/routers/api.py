@@ -282,6 +282,7 @@ def _deck_out(summary: decks.DeckSummary) -> DeckOut:
         id=summary.deck.id, name=summary.deck.name, cards_needed=summary.needed,
         cards_usable=summary.usable, complete=summary.complete, value=summary.value,
         bracket=summary.deck.bracket, bracket_name=summary.bracket_name, basic_land_count=summary.basic_lands,
+        deck_size=summary.total_cards, deck_owned=summary.total_owned,
     )
 
 

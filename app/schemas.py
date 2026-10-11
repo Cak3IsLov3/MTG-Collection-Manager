@@ -216,6 +216,9 @@ class DeckOut(BaseModel):
     bracket: int | None = None
     bracket_name: str | None = None
     basic_land_count: int = 0
+    # Deck size including basic lands (a Commander deck has 100), and how many of those you have.
+    deck_size: int = 0
+    deck_owned: int = 0
 
 
 class DeckDetailOut(DeckOut):

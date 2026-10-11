@@ -291,15 +291,18 @@ def test_saved_deck_keeps_its_basic_lands_per_land(client):
     decklist = "1 Sol Ring\n20 Forest\n10 Plains\n2 Treasure Token"
 
     checked = client.post("/deck", data={"decklist": decklist, "action": "check"})
-    assert "You have 1 of the 1 cards for this deck available (100%)" in checked.text
-    assert "30 basic lands (10 Plains, 20 Forest) and 2 tokens" in checked.text
+    assert "You have 31 of the 31 cards for this deck available (100%)" in checked.text  # 1 card + 30 lands
+    assert "includes 30 basic lands (10 Plains, 20 Forest), counted as owned" in checked.text
+    assert "2 tokens not counted" in checked.text and "69 short of 100 for Commander" in checked.text
     assert 'name="basic:Forest" value="20"' in checked.text
 
     saved = client.post("/deck", data={"decklist": decklist, "deck_name": "Ramp", "action": "save"})
-    assert "This deck is complete." in saved.text and "30 basic lands and 2 tokens" in saved.text
-    assert "31 cards in total" in saved.text  # tokens are extras, not part of the deck size
+    assert "This deck is complete." in saved.text and "includes 30 basic lands, counted as owned" in saved.text
+    assert "31 of the 31 cards are set aside for this deck (100%)" in saved.text
+    assert "Deck size: <strong>31 cards</strong>" in saved.text  # tokens are extras, not part of the deck size
     deck = client.get("/api/decks").json()[0]
     assert (deck["cards_needed"], deck["complete"], deck["basic_land_count"]) == (1, True, 30)
+    assert (deck["deck_size"], deck["deck_owned"]) == (31, 31)
     detail = client.get(f"/api/decks/{deck['id']}").json()
     assert detail["basic_lands"] == {"Plains": 10, "Forest": 20} and detail["untracked"] == {"basic": 30, "token": 2}
 
@@ -308,7 +311,7 @@ def test_saved_deck_keeps_its_basic_lands_per_land(client):
 
     # Saving after "Only check" keeps the lands and the bracket; deleting a deck cleans up.
     again = client.post("/deck/save", data={"name": "Later", "decklist": "1 Sol Ring", "basic:Island": "7", "skipped_token": "0", "bracket": "4"})
-    assert "7 basic lands." in again.text
+    assert "includes 7 basic lands, counted as owned" in again.text
     later = client.get("/api/decks").json()[-1]
     assert (later["basic_land_count"], later["bracket"], later["bracket_name"]) == (7, 4, "Optimized")
     for d in client.get("/api/decks").json():
@@ -331,7 +334,7 @@ def test_edit_basic_lands_of_a_saved_deck(client):
     page = client.get(f"/decks/{deck['id']}")
     assert 'name="basic:Plains" type="number" min="0" step="1" value="10"' in page.text
     assert 'name="basic:Swamp" type="number" min="0" step="1" value="0"' in page.text
-    assert "14 cards in total" in page.text
+    assert "Deck size: <strong>14 cards</strong>" in page.text
 
     form = client.post(f"/decks/{deck['id']}/basics", data={"basic:Plains": "8", "basic:Snow-Covered Forest": "2", "basic:Forest": ""})
     assert "Basic lands updated" in form.text
@@ -623,3 +626,30 @@ def test_filter_decks_by_bracket(client):
     assert [d["name"] for d in client.get("/api/decks", params={"bracket": 4}).json()] == ["Burn"]
     assert client.get("/api/decks", params={"bracket": 3}).json() == []
     assert len(client.get("/api/decks").json()) == 3
+
+
+def test_basic_lands_count_towards_the_deck_size(client):
+    # A 100-card Commander deck: 64 different cards you may or may not own, plus 36 basic lands.
+    client.post("/api/collection", json={"name": "Sol Ring"})
+    decklist = "1 Sol Ring\n63 Fire // Ice\n20 Forest\n16 Island"
+    deck = client.post("/api/decks", json={"name": "Commander", "decklist": decklist}).json()
+    assert (deck["cards_needed"], deck["cards_usable"], deck["basic_land_count"]) == (64, 1, 36)
+    assert (deck["deck_size"], deck["deck_owned"], deck["complete"]) == (100, 37, False)
+
+    listing = client.get("/deck").text
+    assert ">37 / 100</td>" in listing  # the list counts the lands too
+
+    page = client.get(f"/decks/{deck['id']}").text
+    assert "37 of the 100 cards are set aside for this deck (37%)" in page
+    assert "Deck size: <strong>100 cards</strong>" in page and "exactly 100, a full Commander deck" in page
+
+    # Changing the lands changes the deck size straight away.
+    client.put(f"/api/decks/{deck['id']}/basic-lands", json={"Forest": 20, "Island": 14})
+    page = client.get(f"/decks/{deck['id']}").text
+    assert "Deck size: <strong>98 cards</strong>" in page and "2 short of 100 for Commander" in page
+    client.put(f"/api/decks/{deck['id']}/basic-lands", json={"Forest": 20, "Island": 19})
+    assert "3 over 100 for Commander" in client.get(f"/decks/{deck['id']}").text
+
+    checked = client.post("/deck", data={"decklist": decklist, "action": "check"}).text
+    # The only Sol Ring is in the saved deck now, so a second deck gets the 36 lands and nothing else.
+    assert "You have 36 of the 100 cards for this deck available (36%)" in checked

@@ -81,7 +81,7 @@
     <tr data-bracket="{{ s.deck.bracket if s.deck.bracket else 'none' }}" data-complete="{{ 1 if s.complete else 0 }}">
       <td><a href="/decks/{{ s.deck.id }}">{{ s.deck.name }}</a></td>
       <td>{% if s.bracket_name %}<span class="badge bracket">{{ s.deck.bracket }} · {{ s.bracket_name }}</span>{% else %}<span class="muted">–</span>{% endif %}</td>
-      <td class="num">{{ s.usable }} / {{ s.needed }}</td>
+      <td class="num" title="Cards you have / cards in the deck, basic lands included">{{ s.total_owned }} / {{ s.total_cards }}</td>
       <td style="width: 35%"><div class="progress slim"><div style="width: {{ s.percent }}%"></div></div></td>
       <td class="num">{{ s.value | eur }}</td>
       <td>{% if s.complete %}<span class="badge hit">complete</span>{% else %}<span class="badge">{{ s.needed - s.usable }} missing</span>{% endif %}</td>
@@ -138,8 +138,11 @@
 {% set have = rows | rejectattr('missing') | list %}
 {% set need = rows | selectattr('missing') | list %}
 {% set addable = need | rejectattr('on_wishlist') | list %}
-{% set total = rows | sum(attribute='needed') %}
-{% set usable = rows | sum(attribute='usable') %}
+{# Basic lands count as cards of the deck (and as owned); tokens are extras and do not. #}
+{% set basics = left_out.basic_total if left_out else 0 %}
+{% set tokens = left_out.tokens if left_out else 0 %}
+{% set total = (rows | sum(attribute='needed')) + basics %}
+{% set usable = (rows | sum(attribute='usable')) + basics %}
 {% set value = rows | sum(attribute='value') %}
 {% set pct = (usable / total * 100) | round | int if total else 0 %}
 
@@ -154,15 +157,14 @@
     {{ have | length }} different cards {{ 'set aside for this deck' if deck else 'ready to pull from your collection' }} · {{ need | length }} still to get
     · the copies you have for it are worth <strong>{{ value | eur }}</strong>
   </p>
-  {% set basics = left_out.basic_total if left_out else 0 %}
-  {% set tokens = left_out.tokens if left_out else 0 %}
-  {% if basics or tokens %}
-  <p class="muted">
-    Not tracked:
-    {% if basics %}{{ basics }} basic land{{ 's' if basics != 1 }}{% if not deck %} ({% for land, count in left_out.basics.items() %}{{ count }} {{ land }}{{ ', ' if not loop.last }}{% endfor %}){% endif %}{% endif %}{{ ' and ' if basics and tokens }}{% if tokens %}{{ tokens }} token{{ 's' if tokens != 1 }}{% endif %}.
-    They are part of the deck ({{ total + basics }} cards in total) but not counted above.
+  <p class="muted deck-size">
+    Deck size: <strong>{{ total }} cards</strong>
+    {% if total == 100 %}<span class="badge hit">exactly 100, a full Commander deck</span>
+    {% elif total < 100 %}<span class="badge">{{ 100 - total }} short of 100 for Commander</span>
+    {% else %}<span class="badge">{{ total - 100 }} over 100 for Commander</span>{% endif %}
+    {% if basics %}· includes {{ basics }} basic land{{ 's' if basics != 1 }}{% if not deck %} ({% for land, count in left_out.basics.items() %}{{ count }} {{ land }}{{ ', ' if not loop.last }}{% endfor %}){% endif %}, counted as owned{% endif %}
+    {% if tokens %}· {{ tokens }} token{{ 's' if tokens != 1 }} not counted{% endif %}
   </p>
-  {% endif %}
   {% if not deck %}
   <form class="row" method="post" action="/deck/save">
     <input type="hidden" name="decklist" value="{{ decklist }}">
