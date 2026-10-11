@@ -309,3 +309,60 @@ def test_remove_all_from_the_wishlist(client):
     client.post("/api/wishlist", json={"name": "Fire // Ice", "target_price": 2})
     assert client.delete("/api/wishlist").json() == {"removed": 2}
     assert client.delete("/api/wishlist").json() == {"removed": 0}
+
+
+def test_mark_a_collection_card_as_foil(client):
+    entry = client.post("/api/collection", json={"name": "Sol Ring", "set_code": "cmm", "quantity": 2}).json()
+    assert (entry["is_foil"], entry["unit_price"]) == (False, 1.5)
+    url = f"/api/collection/{entry['id']}"
+
+    page = client.get("/collection").text
+    assert f'class="foil" data-entry="{entry["id"]}"' in page and "checked" not in page.split('class="foil"')[1][:80]
+
+    foil = client.patch(url, json={"is_foil": True}).json()
+    assert (foil["id"], foil["is_foil"], foil["quantity"], foil["unit_price"], foil["total_price"]) == (entry["id"], True, 2, 4.0, 8.0)
+    assert client.get("/api/collection").json()["total_value"] == 8.0
+    assert "checked" in client.get("/collection").text.split('class="foil"')[1][:80]
+
+    back = client.patch(url, json={"is_foil": False, "quantity": 3}).json()  # both at once
+    assert (back["is_foil"], back["quantity"], back["total_price"]) == (False, 3, 4.5)
+    assert client.patch(url, json={"is_foil": False}).json()["quantity"] == 3  # no change is fine
+
+    assert client.patch(url, json={}).status_code == 400
+    assert client.patch("/api/collection/9999", json={"is_foil": True}).status_code == 404
+
+
+def test_marking_foil_merges_with_the_foil_copies_you_already_have(client):
+    regular = client.post("/api/collection", json={"name": "Sol Ring", "set_code": "cmm", "quantity": 2}).json()
+    foil = client.post("/api/collection", json={"name": "Sol Ring", "set_code": "cmm", "is_foil": True}).json()
+    deck = client.post("/api/decks", json={"name": "Ramp", "decklist": "1 Sol Ring"}).json()
+    card = deck["cards"][0]
+    client.put(f"/api/decks/{deck['id']}/cards/{card['entry_id']}/printing", json={"collection_entry_id": regular["id"]})
+
+    merged = client.patch(f"/api/collection/{regular['id']}", json={"is_foil": True}).json()
+    assert (merged["id"], merged["quantity"], merged["is_foil"]) == (foil["id"], 3, True)
+    items = client.get("/api/collection").json()["items"]
+    assert len(items) == 1 and items[0]["total_price"] == 12.0
+
+    # The deck that had picked those copies follows them to the merged entry.
+    after = client.get(f"/api/decks/{deck['id']}").json()["cards"][0]
+    assert (after["chosen_collection_entry_id"], after["missing"]) == (foil["id"], 0)
+
+
+def test_foil_without_a_foil_price_borrows_one(client, fake_scryfall):
+    from tests.conftest import scryfall_json
+
+    fake_scryfall.cards.append(scryfall_json("Lim-Dûl's Vault", "id-vault-foil", "c13", eur="3.00", eur_foil="8.00"))
+    entry = client.post("/api/collection", json={"name": "Lim-Dûl's Vault", "set_code": "all"}).json()
+    foil = client.patch(f"/api/collection/{entry['id']}", json={"is_foil": True}).json()
+    assert (foil["unit_price"], foil["price_from_set"]) == (8.0, "c13")
+
+
+def test_stylesheet_link_changes_with_the_file(client):
+    import re
+
+    from app.config import BASE_DIR
+
+    version = int((BASE_DIR / "static" / "style.css").stat().st_mtime)
+    assert re.search(rf'href="/static/style\.css\?v={version}"', client.get("/").text)
+    assert client.get(f"/static/style.css?v={version}").status_code == 200

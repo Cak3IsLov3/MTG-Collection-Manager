@@ -28,7 +28,9 @@ class CollectionAdd(BaseModel):
 
 
 class CollectionUpdate(BaseModel):
-    quantity: int = Field(ge=1)
+    # Send what should change: the number of copies, the finish, or both.
+    quantity: int | None = Field(default=None, ge=1)
+    is_foil: bool | None = None
 
 
 class CollectionItemOut(BaseModel):

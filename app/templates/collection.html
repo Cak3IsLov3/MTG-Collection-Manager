@@ -52,7 +52,10 @@
       <td>{% if row.card.image_url %}<img class="thumb" src="{{ row.card.image_url }}" alt="" loading="lazy">{% endif %}</td>
       <td>
         <a href="/cards/{{ row.card.id }}">{{ row.card.name }}</a>
-        {% if row.entry.is_foil %}<span class="badge foil">foil</span>{% endif %}
+        <label class="foil-toggle {{ 'on' if row.entry.is_foil }}" title="Tick if your copies of this card are foil">
+          <input type="checkbox" class="foil" data-entry="{{ row.entry.id }}" {{ 'checked' if row.entry.is_foil }}
+                 aria-label="{{ row.card.name }} is foil">foil
+        </label>
       </td>
       <td class="muted">{{ row.card.set_name }} ({{ row.card.set_code | upper }}{% if row.card.collector_number %} #{{ row.card.collector_number }}{% endif %})</td>
       <td class="num">
@@ -164,8 +167,29 @@
       }
     }
 
+    // Foil or not: saved right away. Price, totals and a possible merge with the same card in the
+    // other finish all change, so the page is reloaded at the same spot.
+    async function saveFoil(box) {
+      box.disabled = true;
+      try {
+        const response = await fetch(`/api/collection/${box.dataset.entry}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ is_foil: box.checked }),
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        try { sessionStorage.setItem("scroll:" + location.pathname, String(window.scrollY)); } catch (error) {}
+        location.reload();
+      } catch (error) {
+        box.checked = !box.checked;
+        box.disabled = false;
+        box.closest("label").classList.add("failed");
+      }
+    }
+
     table.addEventListener("change", (event) => {
       if (event.target.matches("input.qty")) saveQuantity(event.target);
+      if (event.target.matches("input.foil")) saveFoil(event.target);
     });
     table.addEventListener("submit", (event) => {
       if (!event.target.matches(".qty-form")) return;

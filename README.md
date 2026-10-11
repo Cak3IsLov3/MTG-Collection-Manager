@@ -15,7 +15,7 @@ price.
 | --- | --- |
 | ![Top 10 most valuable cards, risers and fallers](docs/dashboard-cards.jpg) | ![Wishlist sorted from expensive to cheap](docs/wishlist.jpg) |
 
-| Collection: add by name or card number, edit quantities | Saved decks, and the randomizer picking a deck for three players |
+| Collection: add by name or card number, edit quantities, tick foil | Saved decks, and the randomizer picking a deck for three players |
 | --- | --- |
 | ![Collection](docs/collection.jpg) | ![Saved decks with their number, bracket, progress and value, and a random deck for each of three players](docs/decks.jpg) |
 
@@ -55,6 +55,7 @@ price.
 - Add cards by name (optionally a specific set, foil or non-foil), or by set + collector number to get one exact version when a set has several
 - CSV import with automatic format detection (Archidekt, Moxfield, or any CSV with a quantity and name column); adds to your collection or replaces it
 - Change the quantity of a card in place, without removing and re-adding it
+- Tick or untick "foil" on a card you already have; price and totals follow, and it merges with the same card in the other finish
 - Instant search in the collection on card name or set (accents and word order do not matter), with a foil-only filter
 - A printing without a price borrows the price of the cheapest printing with the same name, marked "≈ SET"
 - Daily price snapshots, total value over time, top 10 most valuable cards, weekly risers and fallers
@@ -149,7 +150,7 @@ product page. Two things to know:
 | --- | --- | --- |
 | `GET` / `POST` | `/api/collection` | List the collection (`?q=` searches name and set) / add a card and fetch its price |
 | `POST` | `/api/collection/import` | Upload an Archidekt or Moxfield CSV |
-| `PATCH` / `DELETE` | `/api/collection/{id}` | Change the quantity of an entry / remove it |
+| `PATCH` / `DELETE` | `/api/collection/{id}` | Change the quantity or the foil finish of an entry / remove it |
 | `GET` / `POST` | `/api/wishlist` | List the wishlist / watch a card with a max price |
 | `POST` | `/api/wishlist/{id}/purchase` | Move a card from WANT to HAVE |
 | `PUT` | `/api/wishlist/targets` | Set several target prices at once |

@@ -109,15 +109,29 @@ async def import_collection(
 
 
 @router.patch("/collection/{entry_id}", response_model=CollectionItemOut)
-def update_collection_entry(entry_id: int, payload: CollectionUpdate, session: Session = Depends(get_session)):
-    """Change the number of copies of a card in the collection."""
+async def update_collection_entry(
+    entry_id: int,
+    payload: CollectionUpdate,
+    session: Session = Depends(get_session),
+    scryfall: ScryfallClient = Depends(get_scryfall),
+):
+    """Change the number of copies of a card in the collection, or whether they are foil.
+
+    Changing the finish can merge the entry into an existing one for the same
+    printing; the response is the entry that holds the copies afterwards.
+    """
+    if payload.quantity is None and payload.is_foil is None:
+        raise HTTPException(status_code=400, detail="Send a quantity, is_foil, or both")
     entry = session.get(CollectionEntry, entry_id)
     if entry is None:
         raise HTTPException(status_code=404, detail="Collection entry not found")
-    collection.set_quantity(session, entry, payload.quantity)
+    if payload.quantity is not None:
+        collection.set_quantity(session, entry, payload.quantity)
+    if payload.is_foil is not None:
+        entry = await collection.change_finish(session, scryfall, entry, payload.is_foil)
     stats.record_daily_total(session)
     session.commit()
-    return CollectionItemOut.from_row(collection.collection_rows(session, entry_id)[0])
+    return CollectionItemOut.from_row(collection.collection_rows(session, entry.id)[0])
 
 
 @router.delete("/collection/{entry_id}", status_code=204)

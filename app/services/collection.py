@@ -6,8 +6,8 @@ from dataclasses import dataclass, field
 from sqlmodel import Session, select
 
 from app.csv_import import ImportRow
-from app.models import Card, CollectionEntry
-from app.scryfall import InvalidCardRequest, ScryfallCard, ScryfallClient
+from app.models import Card, CollectionEntry, DeckPick
+from app.scryfall import InvalidCardRequest, ScryfallCard, ScryfallClient, ScryfallError
 from app.services.pricing import SCRYFALL, latest_snapshots, price_for, price_origin, store_scryfall_card
 
 
@@ -51,6 +51,51 @@ def set_quantity(session: Session, entry: CollectionEntry, quantity: int) -> Col
     entry.quantity = quantity
     session.add(entry)
     session.flush()
+    return entry
+
+
+def set_foil(session: Session, entry: CollectionEntry, is_foil: bool) -> CollectionEntry:
+    """Mark the copies of an entry as foil or non-foil; returns the entry that holds them afterwards.
+
+    If the collection already has this printing in the other finish, the two are
+    merged into that entry, and decks that used these copies follow along.
+    """
+    if entry.is_foil == is_foil:
+        return entry
+    other = session.exec(
+        select(CollectionEntry).where(
+            CollectionEntry.card_id == entry.card_id, CollectionEntry.is_foil == is_foil, CollectionEntry.id != entry.id
+        )
+    ).first()
+    if other is None:
+        entry.is_foil = is_foil
+        session.add(entry)
+        session.flush()
+        return entry
+    other.quantity += entry.quantity
+    session.add(other)
+    for pick in session.exec(select(DeckPick).where(DeckPick.collection_entry_id == entry.id)).all():
+        pick.collection_entry_id = other.id
+        session.add(pick)
+    session.delete(entry)
+    session.flush()
+    return other
+
+
+async def change_finish(
+    session: Session, scryfall: ScryfallClient, entry: CollectionEntry, is_foil: bool
+) -> CollectionEntry:
+    """set_foil, and make sure the new finish has a price (borrowed from another printing if need be)."""
+    entry = set_foil(session, entry, is_foil)
+    snapshot = latest_snapshots(session, SCRYFALL).get(entry.card_id)
+    if price_for(snapshot, entry.is_foil) is None:
+        card = session.get(Card, entry.card_id)
+        try:
+            data = await scryfall.get_by_id(card.scryfall_id)
+            await scryfall.fill_missing_prices([data], {data.scryfall_id} if entry.is_foil else set())
+        except ScryfallError:
+            return entry  # the finish is changed; the price follows with the next update
+        store_scryfall_card(session, data)
     return entry
 
 

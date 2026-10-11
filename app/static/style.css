@@ -175,3 +175,10 @@ button.link:disabled { color: var(--muted); cursor: default; text-decoration: no
 .printing-form { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 2px; }
 .printing-form select { max-width: 340px; margin-top: 0; }
 [hidden] { display: none !important; }
+
+/* Collection: foil checkbox next to the card name */
+.foil-toggle { display: inline-flex; align-items: center; gap: 3px; margin-left: 6px; padding: 0 7px 0 4px; font-size: 11px;
+  border: 1px solid var(--border); border-radius: 10px; color: var(--muted); cursor: pointer; white-space: nowrap; }
+.foil-toggle.on { border-color: var(--accent); color: var(--accent); }
+.foil-toggle.failed { border-color: var(--down); color: var(--down); }
+.foil-toggle input { margin: 0; padding: 0; width: 11px; height: 11px; accent-color: var(--accent); }

@@ -30,6 +30,14 @@ def format_eur(value: float | None) -> str:
 templates.env.filters["eur"] = format_eur
 
 
+def asset_version() -> int:
+    """Changes whenever the stylesheet does, so browsers never keep showing an old cached copy."""
+    return int((BASE_DIR / "static" / "style.css").stat().st_mtime)
+
+
+templates.env.globals["asset_version"] = asset_version
+
+
 def render(request: Request, template: str, **context):
     context.setdefault("msg", request.query_params.get("msg"))
     context.setdefault("error", request.query_params.get("error") == "1")
