@@ -7,7 +7,7 @@ from sqlmodel import Session, select
 
 from app.csv_import import ImportRow
 from app.models import Card, CollectionEntry
-from app.scryfall import InvalidCardRequest, ScryfallClient
+from app.scryfall import InvalidCardRequest, ScryfallCard, ScryfallClient
 from app.services.pricing import SCRYFALL, latest_snapshots, price_for, price_origin, store_scryfall_card
 
 
@@ -96,6 +96,25 @@ def collection_value(rows: list[CollectionRow]) -> float:
     return round(sum(row.total_price or 0.0 for row in rows), 2)
 
 
+async def find_card(
+    scryfall: ScryfallClient, name: str, set_code: str | None = None, collector_number: str | None = None
+) -> ScryfallCard:
+    """Look a card up the way the "Add a card" forms describe it: by name, or by set + collector number."""
+    if collector_number:
+        if not set_code:
+            raise InvalidCardRequest("Fill in the set as well when you use a card number")
+        data = await scryfall.get_by_number(set_code, collector_number)
+        # A name is optional here, but if it is given it has to be the card that number points to.
+        if name and _fold(name) not in _fold(data.name):
+            raise InvalidCardRequest(
+                f"{set_code.upper()} #{collector_number} is {data.name}, not {name}. Check the set and number."
+            )
+        return data
+    if name:
+        return await scryfall.get_by_name(name, set_code)
+    raise InvalidCardRequest("Fill in a card name, or a set and card number")
+
+
 async def add_card_by_name(
     session: Session,
     scryfall: ScryfallClient,
@@ -106,19 +125,7 @@ async def add_card_by_name(
     collector_number: str | None = None,
 ) -> CollectionEntry:
     """Add a card by name, or one exact printing by set code + collector number."""
-    if collector_number:
-        if not set_code:
-            raise InvalidCardRequest("Fill in the set as well when you use a card number")
-        data = await scryfall.get_by_number(set_code, collector_number)
-        # A name is optional here, but if it is given it has to be the card that number points to.
-        if name and _fold(name) not in _fold(data.name):
-            raise InvalidCardRequest(
-                f"{set_code.upper()} #{collector_number} is {data.name}, not {name}. Check the set and number."
-            )
-    elif name:
-        data = await scryfall.get_by_name(name, set_code)
-    else:
-        raise InvalidCardRequest("Fill in a card name, or a set and card number")
+    data = await find_card(scryfall, name, set_code, collector_number)
     await scryfall.fill_missing_prices([data], {data.scryfall_id} if is_foil else set())
     return add_to_collection(session, store_scryfall_card(session, data), quantity, is_foil)
 

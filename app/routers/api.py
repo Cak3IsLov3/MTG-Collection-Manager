@@ -22,6 +22,7 @@ from app.schemas import (
     DeckDetailOut,
     DeckAssignedIn,
     DeckBracketIn,
+    DeckCardAdd,
     DeckOut,
     DeckPrintingIn,
     DeckSaveIn,
@@ -354,6 +355,30 @@ def choose_printing(
     try:
         decks.choose_printing(session, deck, entry_id, payload.collection_entry_id)
     except decks.DeckError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    session.commit()
+    return _deck_detail(session, deck)
+
+
+@router.post("/decks/{deck_id}/cards", response_model=DeckDetailOut, status_code=201)
+async def add_deck_card(
+    deck_id: int,
+    payload: DeckCardAdd,
+    session: Session = Depends(get_session),
+    scryfall: ScryfallClient = Depends(get_scryfall),
+):
+    """Add a card to a saved deck: by name, or by set + collector number for one exact printing."""
+    deck = _saved_deck(session, deck_id)
+    try:
+        await decks.add_card(
+            session, scryfall, deck, (payload.name or "").strip(), (payload.set_code or "").strip() or None,
+            (payload.collector_number or "").strip() or None, payload.quantity,
+        )
+    except ScryfallError as exc:
+        session.rollback()
+        raise _scryfall_http_error(exc) from exc
+    except decks.DeckError as exc:
+        session.rollback()
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     session.commit()
     return _deck_detail(session, deck)

@@ -20,7 +20,7 @@ from app.models import (
     WishlistEntry,
 )
 from app.scryfall import CardRef, ScryfallClient, name_key
-from app.services.collection import CollectionRow, collection_rows
+from app.services.collection import CollectionRow, collection_rows, find_card
 from app.services.pricing import store_scryfall_card
 from app.services.wishlist import add_to_wishlist
 
@@ -486,6 +486,53 @@ def set_basic_lands(session: Session, deck: Deck, counts: dict[str, object]) -> 
         session.add(DeckBasicLand(deck_id=deck.id, name=land, quantity=quantity))
     session.flush()
     return basics
+
+
+async def add_card(
+    session: Session,
+    scryfall: ScryfallClient,
+    deck: Deck,
+    name: str,
+    set_code: str | None = None,
+    collector_number: str | None = None,
+    quantity: int = 1,
+) -> str:
+    """Add a card to a saved deck, looked up like in the collection; returns a message for the user.
+
+    A card that is already in the deck gets more copies; a basic land goes to the
+    deck's land counts. When a set is given and that printing is in the collection,
+    the deck is set to use that printing.
+    """
+    if quantity < 1:
+        raise DeckError("Add at least one copy")
+    data = await find_card(scryfall, name, set_code, collector_number)
+
+    if name_key(data.name) in BASIC_LANDS:
+        land = BASIC_LANDS[name_key(data.name)]
+        counts = dict(deck_left_out(session, deck).basics)
+        counts[land] = counts.get(land, 0) + quantity
+        set_basic_lands(session, deck, counts)
+        return f"Added {quantity}× {land} to the basic lands of this deck"
+
+    entries = session.exec(select(DeckEntry).where(DeckEntry.deck_id == deck.id)).all()
+    entry = next((e for e in entries if _names(e.name) & _names(data.name)), None)
+    if entry is None:
+        entry = DeckEntry(deck_id=deck.id, name=data.name, quantity=0)
+    entry.quantity += quantity
+    session.add(entry)
+    session.flush()
+
+    if set_code:
+        owned = session.exec(
+            select(CollectionEntry)
+            .join(Card, CollectionEntry.card_id == Card.id)
+            .where(Card.scryfall_id == data.scryfall_id)
+            .order_by(CollectionEntry.is_foil)
+        ).first()
+        if owned is not None:
+            choose_printing(session, deck, entry.id, owned.id)
+    total = f" (now {entry.quantity} in this deck)" if entry.quantity != quantity else ""
+    return f"Added {quantity}× {data.name} to this deck{total}"
 
 
 def set_assigned(session: Session, deck: Deck, entry_id: int, assigned: bool) -> DeckEntry:

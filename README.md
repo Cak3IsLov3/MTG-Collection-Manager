@@ -31,7 +31,9 @@ price.
 
 ![The saved decks filtered on bracket 3: two of the five decks are left](docs/decks-filter.jpg)
 
-![A saved deck of exactly 100 cards: its bracket, deck size, basic lands per land, search, and the printing each card uses](docs/deck.jpg)
+![A saved deck of exactly 100 cards: its bracket, deck size, adding a card, and basic lands per land](docs/deck.jpg)
+
+![The cards of a deck: the printing each card uses, a choice of printing where you own several, and Remove](docs/deck-cards.jpg)
 
 ![Unsaved changes in a deck: the changed fields are highlighted and one button saves them all](docs/deck-unsaved.jpg)
 
@@ -77,6 +79,7 @@ price.
 - Deck size: basic lands count towards the cards of a deck, so you can see at a glance whether a Commander deck has exactly 100 cards, or how many it is short or over
 - Basic lands per deck: fill in how many of each basic land a deck runs, whatever the printing. Imported decks start with the numbers from the list, and older decks can move their lands over in one click
 - Deck randomizer: can't decide what to play? Pick a random deck, or a different one for every player at the table, optionally only from one bracket or only decks you can build right now
+- Add cards to a saved deck the same way as to the collection: by name, or by set and card number for one exact version
 - Take a card out of a deck: "Remove" moves it from "In this deck" to "Still missing" and frees your copies for other decks; "Put back" undoes it
 - Search inside a deck on card name or set
 - One "Save changes" button per deck: bracket, basic lands and chosen printings are edited freely and stored together, with a reminder while there are unsaved changes
@@ -162,6 +165,7 @@ product page. Two things to know:
 | `GET` | `/api/decks/random` | Pick random decks (`count`, `bracket`, `complete_only`) |
 | `GET` / `DELETE` | `/api/decks/{id}` | A saved deck with its cards / delete it and free its cards |
 | `PUT` | `/api/decks/{id}/cards/{entry_id}/printing` | Choose which printing a deck uses for a card |
+| `POST` | `/api/decks/{id}/cards` | Add a card to a saved deck |
 | `PUT` | `/api/decks/{id}/cards/{entry_id}/assigned` | Take your copies of a card out of a deck, or put them back |
 | `PUT` | `/api/decks/{id}/basic-lands` | Set how many of each basic land a deck runs |
 | `PUT` | `/api/decks/{id}/bracket` | Set or clear the Commander bracket of a deck |

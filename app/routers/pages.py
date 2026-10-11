@@ -394,6 +394,32 @@ def _basic_lands_from(form) -> dict[str, int]:
     )
 
 
+@router.post("/decks/{deck_id}/cards")
+async def saved_deck_add_card(
+    deck_id: int,
+    name: str = Form(""),
+    set_code: str = Form(""),
+    collector_number: str = Form(""),
+    quantity: int = Form(1),
+    session: Session = Depends(get_session),
+    scryfall: ScryfallClient = Depends(get_scryfall),
+):
+    """The "Add a card" form on a deck page; works like the one in the collection."""
+    deck = session.get(Deck, deck_id)
+    if deck is None:
+        return redirect("/deck", "Deck not found", error=True)
+    try:
+        message = await decks.add_card(
+            session, scryfall, deck, name.strip(), set_code.strip() or None,
+            collector_number.strip().lstrip("#") or None, max(1, quantity),
+        )
+    except (ScryfallError, decks.DeckError) as exc:
+        session.rollback()
+        return redirect(f"/decks/{deck_id}", str(exc), error=True)
+    session.commit()
+    return redirect(f"/decks/{deck_id}", message)
+
+
 @router.post("/decks/{deck_id}/save")
 async def saved_deck_save(deck_id: int, request: Request, session: Session = Depends(get_session)):
     """The "Save changes" button: bracket, basic lands and chosen printings together."""

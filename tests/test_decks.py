@@ -17,6 +17,7 @@ from app.services.decks import (
     delete_deck,
 )
 from app.services.wishlist import wishlist_rows
+from tests.conftest import scryfall_json
 
 DECKLIST = """
 // Commander
@@ -653,3 +654,66 @@ def test_basic_lands_count_towards_the_deck_size(client):
     checked = client.post("/deck", data={"decklist": decklist, "action": "check"}).text
     # The only Sol Ring is in the saved deck now, so a second deck gets the 36 lands and nothing else.
     assert "You have 36 of the 100 cards for this deck available (36%)" in checked
+
+
+def test_add_cards_to_a_saved_deck(client):
+    client.post("/api/collection", json={"set_code": "cmm", "collector_number": "410"})  # the pricier Sol Ring
+    client.post("/api/collection", json={"name": "Sol Ring", "set_code": "cmm"})
+    deck = client.post("/api/decks", json={"name": "Ramp", "decklist": "1 Fire // Ice"}).json()
+    url = f"/decks/{deck['id']}/cards"
+
+    page = client.get(f"/decks/{deck['id']}").text
+    assert f'action="{url}"' in page and "Add a card to this deck" in page
+
+    def cards():
+        detail = client.get(f"/api/decks/{deck['id']}").json()
+        return {c["name"]: c for c in detail["cards"]}, detail
+
+    # By name: a card you own goes straight into "In this deck".
+    added = client.post(url, data={"name": "Sol Ring", "quantity": "1"})
+    assert "Added 1× Sol Ring to this deck" in added.text and "In this deck (1)" in added.text
+    by_name, detail = cards()
+    assert (by_name["Sol Ring"]["missing"], by_name["Sol Ring"]["chosen_collection_entry_id"]) == (0, None)
+    assert detail["deck_size"] == 2
+
+    # A card you do not own lands under "Still missing"; a typo is corrected by Scryfall.
+    assert "Added 1× Lim-Dûl&#39;s Vault to this deck" in client.post(url, data={"name": "Lim-Dûl"}).text
+    assert cards()[0]["Lim-Dûl's Vault"]["missing"] == 1
+
+    # The same card again adds copies instead of a second line, also by one of its faces.
+    again = client.post(url, data={"name": "Fire // Ice", "quantity": "2"})
+    assert "Added 2× Fire // Ice to this deck (now 3 in this deck)" in again.text
+    assert cards()[0]["Fire // Ice"]["needed"] == 3 and len(cards()[0]) == 3
+
+    # By set + card number: that exact printing, if you own it, is the one the deck uses.
+    client.post(f"/api/decks/{deck['id']}/cards", json={"set_code": "cmm", "collector_number": "410"})
+    sol = cards()[0]["Sol Ring"]
+    chosen = next(p for p in sol["printings"] if p["id"] == sol["chosen_collection_entry_id"])
+    assert (sol["needed"], chosen["card"]["collector_number"]) == (2, "410")
+    assert {u["printing"]["card"]["collector_number"] for u in sol["using"]} == {"1", "410"}  # needs both copies now
+
+    # A basic land goes to the land counts, not to the card list.
+    client.post(url, data={"name": "Forest", "quantity": "8"})  # not in the fake Scryfall -> not found
+    assert "Forest" not in cards()[0]
+
+    assert "Card not found" in client.post(url, data={"name": "Definitely Not A Card"}).text
+    assert "Fill in a card name" in client.post(url, data={"name": ""}).text
+    assert "Fill in the set" in client.post(url, data={"collector_number": "410"}).text
+    api = f"/api/decks/{deck['id']}/cards"
+    assert client.post(api, json={"name": "Definitely Not A Card"}).status_code == 404
+    assert client.post(api, json={}).status_code == 400
+    assert client.post(api, json={"name": "Sol Ring", "quantity": 0}).status_code == 422
+    assert client.post("/api/decks/9999/cards", json={"name": "Sol Ring"}).status_code == 404
+    assert len(client.get("/api/collection").json()["items"]) == 2  # the collection itself is untouched
+
+
+async def test_adding_a_basic_land_to_a_deck_counts_it_as_a_land(session, fake_scryfall, scryfall):
+    from app.services.decks import add_card, deck_left_out
+
+    fake_scryfall.cards.append(scryfall_json("Forest", "id-forest", "blb", eur="0.10"))
+    deck = save_deck(session, "Green", [DeckCard("Sol Ring", 1)])
+    message = await add_card(session, scryfall, deck, "forest", quantity=8)
+    assert message == "Added 8× Forest to the basic lands of this deck"
+    await add_card(session, scryfall, deck, "Forest", quantity=2)
+    assert deck_left_out(session, deck).basics == {"Forest": 10}
+    assert [row.name for row in saved_deck_rows(session, deck)] == ["Sol Ring"]

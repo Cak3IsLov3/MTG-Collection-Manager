@@ -180,6 +180,19 @@
 
 {% if deck %}
 <div class="panel">
+  <h2>Add a card to this deck</h2>
+  <form class="row" method="post" action="/decks/{{ deck.id }}/cards" data-keep-scroll>
+    <label>Card name<input name="name" placeholder="Lim-Dûl's Vault"></label>
+    <label>Set (optional)<input name="set_code" class="narrow" placeholder="cmm"></label>
+    <label>Card number (optional)<input name="collector_number" class="narrow" placeholder="410"></label>
+    <label>Quantity<input name="quantity" type="number" min="1" value="1"></label>
+    <button>Add</button>
+  </form>
+  <p class="muted">Works like adding to your collection: a name, or a set and card number for one exact version.
+    The card is only added to this deck. If you own it, it is set aside for the deck; otherwise it shows up under Still missing.</p>
+</div>
+
+<div class="panel">
   <h2>Basic lands <span class="muted">· {{ basics }} in this deck</span></h2>
   <div class="row">
     {% for land in basic_names[:6] %}

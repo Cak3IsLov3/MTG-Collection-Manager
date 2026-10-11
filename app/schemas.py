@@ -158,6 +158,14 @@ class DeckPickOut(BaseModel):
     printing: CollectionItemOut
 
 
+class DeckCardAdd(BaseModel):
+    # Either a name (optionally with a set), or a set + collector number, like adding to the collection.
+    name: str | None = None
+    set_code: str | None = None
+    collector_number: str | None = None
+    quantity: int = Field(default=1, ge=1)
+
+
 class DeckAssignedIn(BaseModel):
     # False takes your copies out of the deck (the card then counts as missing); True puts them back.
     assigned: bool
