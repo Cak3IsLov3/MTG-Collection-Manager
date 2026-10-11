@@ -29,6 +29,8 @@ price.
 
 ![Printings without a price of their own borrow one from another printing, marked ≈ SET (Dragon Egg and Fellwar Stone)](docs/collection-borrowed.jpg)
 
+![The saved decks filtered on bracket 3: two of the five decks are left](docs/decks-filter.jpg)
+
 ![A saved deck: its bracket, basic lands per land, search, and the printing each card uses](docs/deck.jpg)
 
 ![Unsaved changes in a deck: the changed fields are highlighted and one button saves them all](docs/deck-unsaved.jpg)
@@ -78,6 +80,7 @@ price.
 - Search inside a deck on card name or set
 - One "Save changes" button per deck: bracket, basic lands and chosen printings are edited freely and stored together, with a reminder while there are unsaved changes
 - Commander bracket per deck: taken from Archidekt when the deck has one, and changeable at any time
+- Filter the list of saved decks by bracket, or show only the decks that are complete
 - Choose the printing: if you own a card in several printings you pick which one is in the deck (say, the foil); otherwise the cheapest free copy is used
 - Deck value: every saved deck shows what the copies in it are worth
 

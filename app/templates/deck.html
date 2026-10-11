@@ -62,10 +62,23 @@
 <div class="panel table-wrap">
   {% set complete = summaries | selectattr('complete') | list | length %}
   <h2>Your saved decks ({{ summaries | length }}) <span class="muted">· {{ complete }} complete, {{ summaries | length - complete }} still missing cards</span></h2>
-  <table>
+  <div class="toolbar search-bar">
+    <label class="muted" for="deck-bracket-filter">Show</label>
+    <select id="deck-bracket-filter" aria-label="Filter decks by bracket">
+      <option value="">All brackets</option>
+      {% for number, label in brackets.items() %}{% if summaries | selectattr('deck.bracket', 'equalto', number) | list %}
+      <option value="{{ number }}">{{ number }} · {{ label }}</option>
+      {% endif %}{% endfor %}
+      {% if summaries | selectattr('deck.bracket', 'none') | list %}<option value="none">No bracket</option>{% endif %}
+    </select>
+    <label class="check muted"><input id="deck-complete-filter" type="checkbox">&nbsp;Only complete decks</label>
+    <span id="deck-filter-count" class="muted"></span>
+  </div>
+  <p id="deck-filter-empty" class="muted" hidden>No decks match that filter.</p>
+  <table id="deck-list">
     <tr><th>Deck</th><th>Bracket</th><th class="num">Cards</th><th>Owned</th><th class="num">Value</th><th></th></tr>
     {% for s in summaries %}
-    <tr>
+    <tr data-bracket="{{ s.deck.bracket if s.deck.bracket else 'none' }}" data-complete="{{ 1 if s.complete else 0 }}">
       <td><a href="/decks/{{ s.deck.id }}">{{ s.deck.name }}</a></td>
       <td>{% if s.bracket_name %}<span class="badge bracket">{{ s.deck.bracket }} · {{ s.bracket_name }}</span>{% else %}<span class="muted">–</span>{% endif %}</td>
       <td class="num">{{ s.usable }} / {{ s.needed }}</td>
@@ -276,6 +289,36 @@
 
 {% block scripts %}
 {% if not deck and summaries %}
+<script>
+  // Filter the list of saved decks by bracket; the choice is remembered in this browser.
+  const bracketFilter = document.getElementById("deck-bracket-filter");
+  const completeFilter = document.getElementById("deck-complete-filter");
+  const deckListRows = [...document.querySelectorAll("#deck-list tr[data-bracket]")];
+
+  function filterDecks() {
+    let shown = 0;
+    for (const row of deckListRows) {
+      const match =
+        (!bracketFilter.value || row.dataset.bracket === bracketFilter.value) &&
+        (!completeFilter.checked || row.dataset.complete === "1");
+      row.hidden = !match;
+      if (match) shown += 1;
+    }
+    const filtered = bracketFilter.value || completeFilter.checked;
+    document.getElementById("deck-filter-count").textContent = filtered ? `${shown} of ${deckListRows.length} decks` : "";
+    document.getElementById("deck-filter-empty").hidden = shown > 0;
+    document.getElementById("deck-list").hidden = shown === 0;
+    try { localStorage.setItem("deck-bracket-filter", bracketFilter.value); } catch (error) {}
+  }
+
+  try {
+    const saved = localStorage.getItem("deck-bracket-filter");
+    if (saved && [...bracketFilter.options].some((option) => option.value === saved)) bracketFilter.value = saved;
+  } catch (error) {}
+  bracketFilter.addEventListener("change", filterDecks);
+  completeFilter.addEventListener("change", filterDecks);
+  filterDecks();
+</script>
 <script>
   // Deck randomizer: one random deck, or a different one for every player at the table.
   const savedDecks = {{ deck_data | tojson }};

@@ -296,8 +296,13 @@ def _deck_detail(session: Session, deck: Deck) -> DeckDetailOut:
 
 
 @router.get("/decks", response_model=list[DeckOut])
-def list_decks(session: Session = Depends(get_session)):
-    return [_deck_out(summary) for summary in decks.deck_summaries(session)]
+def list_decks(bracket: int | None = None, session: Session = Depends(get_session)):
+    """The saved decks; `bracket` (1-5) keeps only the decks in that Commander bracket."""
+    return [
+        _deck_out(summary)
+        for summary in decks.deck_summaries(session)
+        if bracket is None or summary.deck.bracket == bracket
+    ]
 
 
 @router.post("/decks", response_model=DeckDetailOut, status_code=201)

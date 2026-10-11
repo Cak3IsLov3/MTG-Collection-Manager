@@ -605,3 +605,21 @@ def test_decks_page_shows_how_many_decks_there_are(client):
     page = client.get("/deck").text
     assert "· 2 saved" in page and "Your saved decks (2)" in page
     assert "1 complete, 1 still missing cards" in page
+
+
+def test_filter_decks_by_bracket(client):
+    client.post("/api/collection", json={"name": "Sol Ring"})
+    client.post("/api/decks", json={"name": "Ramp", "decklist": "1 Sol Ring", "bracket": 2})
+    client.post("/api/decks", json={"name": "Burn", "decklist": "4 Fire // Ice", "bracket": 4})
+    client.post("/api/decks", json={"name": "Brew", "decklist": "1 Fire // Ice"})
+
+    page = client.get("/deck").text
+    filter_html = page[page.index('id="deck-bracket-filter"'):page.index('id="deck-list"')]
+    assert '<option value="2">2 · Core</option>' in filter_html and '<option value="4">4 · Optimized</option>' in filter_html
+    assert '<option value="3">' not in filter_html  # only brackets you actually have decks in
+    assert '<option value="none">No bracket</option>' in filter_html
+    assert page.count('data-bracket="2" data-complete="1"') == 1 and page.count('data-bracket="none"') == 1
+
+    assert [d["name"] for d in client.get("/api/decks", params={"bracket": 4}).json()] == ["Burn"]
+    assert client.get("/api/decks", params={"bracket": 3}).json() == []
+    assert len(client.get("/api/decks").json()) == 3
