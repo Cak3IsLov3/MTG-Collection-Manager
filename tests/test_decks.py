@@ -595,3 +595,13 @@ def test_put_back_is_offered_even_when_another_deck_took_the_copy(client):
     client.post(f"/decks/{first['id']}/save", data={"assign": str(entry)})
     assert client.get(f"/api/decks/{first['id']}").json()["complete"] is True  # the older deck has it back
     assert client.get(f"/api/decks/{second['id']}").json()["complete"] is False
+
+
+def test_decks_page_shows_how_many_decks_there_are(client):
+    assert "· 0 saved" in client.get("/deck").text
+    client.post("/api/collection", json={"name": "Sol Ring"})
+    client.post("/api/decks", json={"name": "Ramp", "decklist": "1 Sol Ring"})
+    client.post("/api/decks", json={"name": "Burn", "decklist": "4 Fire // Ice"})
+    page = client.get("/deck").text
+    assert "· 2 saved" in page and "Your saved decks (2)" in page
+    assert "1 complete, 1 still missing cards" in page

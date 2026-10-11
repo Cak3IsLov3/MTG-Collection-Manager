@@ -56,11 +56,12 @@
   </div>
 </div>
 {% else %}
-<h1>Decks</h1>
+<h1>Decks <span class="muted">· {{ summaries | length }} saved</span></h1>
 
 {% if summaries %}
 <div class="panel table-wrap">
-  <h2>Your saved decks</h2>
+  {% set complete = summaries | selectattr('complete') | list | length %}
+  <h2>Your saved decks ({{ summaries | length }}) <span class="muted">· {{ complete }} complete, {{ summaries | length - complete }} still missing cards</span></h2>
   <table>
     <tr><th>Deck</th><th>Bracket</th><th class="num">Cards</th><th>Owned</th><th class="num">Value</th><th></th></tr>
     {% for s in summaries %}

@@ -17,7 +17,7 @@ price.
 
 | Collection: add by name or card number, edit quantities | Saved decks, and the randomizer picking a deck for three players |
 | --- | --- |
-| ![Collection](docs/collection.jpg) | ![Saved decks with bracket, progress and value, and a random deck for each of three players](docs/decks.jpg) |
+| ![Collection](docs/collection.jpg) | ![Saved decks with their number, bracket, progress and value, and a random deck for each of three players](docs/decks.jpg) |
 
 ![Wishlist targets set to 85% of the current price: the changed prices are highlighted until you save them all](docs/wishlist-targets.jpg)
 
