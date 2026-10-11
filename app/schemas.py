@@ -33,6 +33,12 @@ class CollectionUpdate(BaseModel):
     is_foil: bool | None = None
 
 
+class DeckUseOut(BaseModel):
+    id: int
+    name: str
+    quantity: int  # copies of this collection entry the deck uses
+
+
 class CollectionItemOut(BaseModel):
     id: int
     card: CardOut
@@ -43,6 +49,8 @@ class CollectionItemOut(BaseModel):
     total_price: float | None
     # Set code when the printing has no price of its own and another printing's price is used.
     price_from_set: str | None = None
+    # Saved decks these copies are set aside for (filled in by the collection list).
+    in_decks: list[DeckUseOut] = []
 
     @classmethod
     def from_row(cls, row: CollectionRow) -> "CollectionItemOut":

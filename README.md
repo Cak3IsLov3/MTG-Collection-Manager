@@ -25,7 +25,9 @@ price.
 
 ![Remove all asks for a second click before it empties the wishlist](docs/wishlist-remove-all.jpg)
 
-![Searching the collection: four versions of Sol Ring, told apart by set and card number](docs/collection-search.jpg)
+![Searching the collection: five versions of Sol Ring, told apart by set and card number](docs/collection-search.jpg)
+
+![Which decks a card is in: the label opened for two Sol Ring printings](docs/collection-decks.jpg)
 
 ![Printings without a price of their own borrow one from another printing, marked ≈ SET (Dragon Egg and Fellwar Stone)](docs/collection-borrowed.jpg)
 
@@ -56,7 +58,8 @@ price.
 - CSV import with automatic format detection (Archidekt, Moxfield, or any CSV with a quantity and name column); adds to your collection or replaces it
 - Change the quantity of a card in place, without removing and re-adding it
 - Tick or untick "foil" on a card you already have; price and totals follow, and it merges with the same card in the other finish
-- Instant search in the collection on card name or set (accents and word order do not matter), with a foil-only filter
+- See which decks a card is in: cards that are set aside for a deck carry an "in N decks" label that opens the list of decks, and how many copies are still free
+- Instant search in the collection on card name, set or deck (accents and word order do not matter), with a foil-only filter
 - A printing without a price borrows the price of the cheapest printing with the same name, marked "≈ SET"
 - Daily price snapshots, total value over time, top 10 most valuable cards, weekly risers and fallers
 - Price history chart per card

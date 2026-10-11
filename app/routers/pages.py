@@ -90,7 +90,8 @@ def card_page(card_id: int, request: Request, session: Session = Depends(get_ses
 @router.get("/collection")
 def collection_page(request: Request, session: Session = Depends(get_session)):
     rows = collection.collection_rows(session)
-    return render(request, "collection.html", rows=rows, total=collection.collection_value(rows))
+    return render(request, "collection.html", rows=rows, total=collection.collection_value(rows),
+                  usage=decks.deck_usage(session))
 
 
 @router.post("/collection/add")

@@ -182,3 +182,13 @@ button.link:disabled { color: var(--muted); cursor: default; text-decoration: no
 .foil-toggle.on { border-color: var(--accent); color: var(--accent); }
 .foil-toggle.failed { border-color: var(--down); color: var(--down); }
 .foil-toggle input { margin: 0; padding: 0; width: 11px; height: 11px; accent-color: var(--accent); }
+
+/* Collection: which decks use a card */
+details.in-decks { display: inline-block; vertical-align: top; margin-left: 6px; font-size: 11px; }
+details.in-decks summary { display: inline-block; padding: 0 7px; border: 1px solid var(--have); border-radius: 10px; color: var(--have);
+  cursor: pointer; list-style: none; white-space: nowrap; }
+details.in-decks summary::-webkit-details-marker { display: none; }
+details.in-decks summary::after { content: " ▾"; }
+details.in-decks[open] summary::after { content: " ▴"; }
+details.in-decks ul { margin: 4px 0 2px; padding: 6px 10px; list-style: none; background: var(--bg); border: 1px solid var(--border);
+  border-radius: 6px; font-size: 12px; line-height: 1.6; }

@@ -366,3 +366,32 @@ def test_stylesheet_link_changes_with_the_file(client):
     version = int((BASE_DIR / "static" / "style.css").stat().st_mtime)
     assert re.search(rf'href="/static/style\.css\?v={version}"', client.get("/").text)
     assert client.get(f"/static/style.css?v={version}").status_code == 200
+
+
+def test_collection_shows_which_decks_use_a_card(client):
+    sol = client.post("/api/collection", json={"name": "Sol Ring", "set_code": "cmm", "quantity": 3}).json()
+    client.post("/api/collection", json={"name": "Fire // Ice"})
+    first = client.post("/api/decks", json={"name": "Ramp & Go", "decklist": "1 Sol Ring"}).json()
+    second = client.post("/api/decks", json={"name": "Artifacts", "decklist": "1 Sol Ring"}).json()
+
+    items = {i["card"]["name"]: i for i in client.get("/api/collection").json()["items"]}
+    assert items["Sol Ring"]["in_decks"] == [
+        {"id": first["id"], "name": "Ramp & Go", "quantity": 1},
+        {"id": second["id"], "name": "Artifacts", "quantity": 1},
+    ]
+    assert items["Fire // Ice"]["in_decks"] == []
+
+    page = client.get("/collection").text
+    assert page.count('<details class="in-decks">') == 1  # only the card that is in a deck gets the label
+    assert "in 2 decks</summary>" in page
+    assert f'<a href="/decks/{first["id"]}">Ramp &amp; Go</a>' in page and f'<a href="/decks/{second["id"]}">Artifacts</a>' in page
+    assert "1 of 3 copies free" in page
+    assert "Sol Ring Set CMM cmm #1 Ramp &amp; Go Artifacts" in page  # deck names are searchable too
+
+    # Taking the card out of a deck, or deleting the deck, updates the label.
+    entry_id = second["cards"][0]["entry_id"]
+    client.put(f"/api/decks/{second['id']}/cards/{entry_id}/assigned", json={"assigned": False})
+    client.delete(f"/api/decks/{first['id']}")
+    assert '<details class="in-decks">' not in client.get("/collection").text
+    assert client.get("/api/collection").json()["items"][1]["in_decks"] == []
+    assert sol["in_decks"] == []  # a single entry response does not list decks

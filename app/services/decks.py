@@ -426,6 +426,21 @@ class _CardPool:
             )
         return sorted(rows, key=lambda row: name_key(row.name))
 
+def deck_usage(session: Session) -> dict[int, list[tuple[Deck, int]]]:
+    """Which saved decks use the copies of each collection entry: {collection entry id: [(deck, copies)]}."""
+    pool = _CardPool(session)
+    usage: dict[int, list[tuple[Deck, int]]] = {}
+    for deck in pool.decks:
+        per_entry: dict[int, int] = {}
+        for claimed in pool.claims[deck.id].values():
+            for entry_id, copies in claimed.items():
+                per_entry[entry_id] = per_entry.get(entry_id, 0) + copies
+        for entry_id, copies in per_entry.items():
+            if copies:
+                usage.setdefault(entry_id, []).append((deck, copies))
+    return usage
+
+
 def check_deck(session: Session, cards: list[DeckCard], deck_id: int | None = None) -> list[DeckRow]:
     """Compare a deck with the collection by card name (any printing counts).
 

@@ -37,7 +37,7 @@
   {% if rows %}
   <div class="toolbar search-bar">
     <input id="collection-search" type="search" size="40" autocomplete="off" value="{{ request.query_params.get('q', '') }}"
-           placeholder="Search by card name or set…" aria-label="Search your collection">
+           placeholder="Search by card name, set or deck…" aria-label="Search your collection">
     <label class="check muted"><input id="collection-foil" type="checkbox">&nbsp;Foil only</label>
     <span id="collection-count" class="muted"></span>
   </div>
@@ -48,7 +48,8 @@
       <th class="num">Price</th><th class="num">Total</th><th></th>
     </tr>
     {% for row in rows %}
-    <tr data-search="{{ row.card.name }} {{ row.card.set_name }} {{ row.card.set_code }} #{{ row.card.collector_number or '' }}" data-foil="{{ 1 if row.entry.is_foil else 0 }}" data-qty="{{ row.entry.quantity }}">
+    {% set used = usage.get(row.entry.id, []) %}
+    <tr data-search="{{ row.card.name }} {{ row.card.set_name }} {{ row.card.set_code }} #{{ row.card.collector_number or '' }}{% for deck, count in used %} {{ deck.name }}{% endfor %}" data-foil="{{ 1 if row.entry.is_foil else 0 }}" data-qty="{{ row.entry.quantity }}">
       <td>{% if row.card.image_url %}<img class="thumb" src="{{ row.card.image_url }}" alt="" loading="lazy">{% endif %}</td>
       <td>
         <a href="/cards/{{ row.card.id }}">{{ row.card.name }}</a>
@@ -56,6 +57,18 @@
           <input type="checkbox" class="foil" data-entry="{{ row.entry.id }}" {{ 'checked' if row.entry.is_foil }}
                  aria-label="{{ row.card.name }} is foil">foil
         </label>
+        {% if used %}
+        {% set copies = used | sum(attribute=1) %}
+        <details class="in-decks">
+          <summary title="Click to see which decks use this card">in {{ used | length }} deck{{ 's' if used | length != 1 }}</summary>
+          <ul>
+            {% for deck, count in used %}
+            <li>{{ count }}× <a href="/decks/{{ deck.id }}">{{ deck.name }}</a></li>
+            {% endfor %}
+            <li class="muted">{{ row.entry.quantity - copies }} of {{ row.entry.quantity }} cop{{ 'y' if row.entry.quantity == 1 else 'ies' }} free</li>
+          </ul>
+        </details>
+        {% endif %}
       </td>
       <td class="muted">{{ row.card.set_name }} ({{ row.card.set_code | upper }}{% if row.card.collector_number %} #{{ row.card.collector_number }}{% endif %})</td>
       <td class="num">

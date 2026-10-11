@@ -26,6 +26,7 @@ from app.schemas import (
     DeckOut,
     DeckPrintingIn,
     DeckSaveIn,
+    DeckUseOut,
     ImportOut,
     PrintingOut,
     PurchaseIn,
@@ -58,10 +59,15 @@ def summary(session: Session = Depends(get_session)):
 def list_collection(q: str | None = None, session: Session = Depends(get_session)):
     """The collection; `q` filters on card name, set name or set code (every word must match)."""
     rows = collection.search_rows(collection.collection_rows(session), q)
-    return CollectionOut(
-        total_value=collection.collection_value(rows),
-        items=[CollectionItemOut.from_row(row) for row in rows],
-    )
+    usage = decks.deck_usage(session)
+    items = []
+    for row in rows:
+        item = CollectionItemOut.from_row(row)
+        item.in_decks = [
+            DeckUseOut(id=deck.id, name=deck.name, quantity=copies) for deck, copies in usage.get(row.entry.id, [])
+        ]
+        items.append(item)
+    return CollectionOut(total_value=collection.collection_value(rows), items=items)
 
 
 @router.post("/collection", response_model=CollectionItemOut, status_code=201)
