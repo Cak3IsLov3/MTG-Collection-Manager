@@ -76,9 +76,21 @@
   </div>
   <p id="deck-filter-empty" class="muted" hidden>No decks match that filter.</p>
   <table id="deck-list">
-    <tr><th>Deck</th><th>Bracket</th><th class="num">Cards</th><th>Owned</th><th class="num">Value</th><th></th></tr>
+    <thead>
+    <tr>
+      <th><button class="sort" data-sort="name" data-type="text" title="Sort by deck name">Deck</button></th>
+      <th><button class="sort" data-sort="bracketNumber" data-type="number" title="Sort by bracket">Bracket</button></th>
+      <th class="num"><button class="sort" data-sort="cards" data-type="number" title="Sort by deck size">Cards</button></th>
+      <th><button class="sort" data-sort="percent" data-type="number" title="Sort by how much of the deck you have">Owned</button></th>
+      <th class="num"><button class="sort" data-sort="value" data-type="number" title="Sort by value">Value</button></th>
+      <th><button class="sort" data-sort="missing" data-type="number" title="Sort by how many cards the deck still misses">Missing</button></th>
+    </tr>
+    </thead>
+    <tbody>
     {% for s in summaries %}
-    <tr data-bracket="{{ s.deck.bracket if s.deck.bracket else 'none' }}" data-complete="{{ 1 if s.complete else 0 }}">
+    <tr data-bracket="{{ s.deck.bracket if s.deck.bracket else 'none' }}" data-complete="{{ 1 if s.complete else 0 }}"
+        data-order="{{ loop.index }}" data-name="{{ s.deck.name }}" data-bracket-number="{{ s.deck.bracket or '' }}"
+        data-cards="{{ s.total_cards }}" data-percent="{{ s.percent }}" data-value="{{ s.value }}" data-missing="{{ s.needed - s.usable }}">
       <td><a href="/decks/{{ s.deck.id }}">{{ s.deck.name }}</a></td>
       <td>{% if s.bracket_name %}<span class="badge bracket">{{ s.deck.bracket }} · {{ s.bracket_name }}</span>{% else %}<span class="muted">–</span>{% endif %}</td>
       <td class="num" title="Cards you have / cards in the deck, basic lands included">{{ s.total_owned }} / {{ s.total_cards }}</td>
@@ -87,8 +99,11 @@
       <td>{% if s.complete %}<span class="badge hit">complete</span>{% else %}<span class="badge">{{ s.needed - s.usable }} missing</span>{% endif %}</td>
     </tr>
     {% endfor %}
+    </tbody>
   </table>
-  <p class="muted">Every copy you own can only be in one deck. Printings you chose yourself go first, then older decks get first pick.</p>
+  <p class="muted">Every copy you own can only be in one deck. Printings you chose yourself go first, then older decks get first pick.
+    Click a column to sort, for example on "Missing" to see which deck is closest to done.
+    <button type="button" class="link" id="deck-sort-reset" hidden>Back to the order the decks were added in</button></p>
 </div>
 
 <div class="panel randomizer">
@@ -304,6 +319,50 @@
 
 {% block scripts %}
 {% if not deck and summaries %}
+<script>
+  // Sort the list of saved decks by clicking a column; a second click reverses. Remembered in this browser.
+  const deckList = document.getElementById("deck-list");
+  const deckSortButtons = [...deckList.querySelectorAll("button.sort")];
+  const deckSortReset = document.getElementById("deck-sort-reset");
+  const foldName = (text) => text.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
+
+  function sortDecks(key, descending) {
+    const body = deckList.tBodies[0];
+    const button = deckSortButtons.find((candidate) => candidate.dataset.sort === key);
+    const rows = [...body.rows];
+    for (const other of deckSortButtons) other.closest("th").removeAttribute("aria-sort");
+    if (!button) {
+      rows.sort((a, b) => Number(a.dataset.order) - Number(b.dataset.order));  // the order they were added in
+      body.append(...rows);
+      deckSortReset.hidden = true;
+      try { localStorage.removeItem("deck-sort"); } catch (error) {}
+      return;
+    }
+    const numeric = button.dataset.type === "number";
+    const value = (row) => (numeric ? (row.dataset[key] === "" ? null : Number(row.dataset[key])) : foldName(row.dataset[key]));
+    rows.sort((a, b) => {
+      const [x, y] = [value(a), value(b)];
+      if (x === null || y === null) return (x === null) - (y === null);  // decks without a bracket last
+      const order = numeric ? x - y : x.localeCompare(y);
+      return (descending ? -order : order) || Number(a.dataset.order) - Number(b.dataset.order);
+    });
+    body.append(...rows);
+    button.closest("th").setAttribute("aria-sort", descending ? "descending" : "ascending");
+    deckSortReset.hidden = false;
+    try { localStorage.setItem("deck-sort", JSON.stringify({ key, descending })); } catch (error) {}
+  }
+
+  for (const button of deckSortButtons) {
+    button.addEventListener("click", () => {
+      sortDecks(button.dataset.sort, button.closest("th").getAttribute("aria-sort") === "ascending");
+    });
+  }
+  deckSortReset.addEventListener("click", () => sortDecks(null, false));
+  try {
+    const saved = JSON.parse(localStorage.getItem("deck-sort") || "null");
+    if (saved) sortDecks(saved.key, saved.descending);
+  } catch (error) {}
+</script>
 <script>
   // Filter the list of saved decks by bracket; the choice is remembered in this browser.
   const bracketFilter = document.getElementById("deck-bracket-filter");

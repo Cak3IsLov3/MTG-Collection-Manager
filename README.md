@@ -33,6 +33,8 @@ price.
 
 ![The saved decks filtered on bracket 3: two of the five decks are left](docs/decks-filter.jpg)
 
+![The saved decks sorted on missing cards: the decks closest to done first](docs/decks-sorted.jpg)
+
 ![A saved deck of exactly 100 cards: its bracket, deck size, adding a card, and basic lands per land](docs/deck.jpg)
 
 ![The cards of a deck: the printing each card uses, a choice of printing where you own several, and Remove](docs/deck-cards.jpg)
@@ -89,6 +91,7 @@ price.
 - One "Save changes" button per deck: bracket, basic lands and chosen printings are edited freely and stored together, with a reminder while there are unsaved changes
 - Commander bracket per deck: taken from Archidekt when the deck has one, and changeable at any time
 - Filter the list of saved decks by bracket, or show only the decks that are complete
+- Sort the saved decks by how many cards they still miss, or by name, bracket, size, progress or value
 - Choose the printing: if you own a card in several printings you pick which one is in the deck (say, the foil); otherwise the cheapest free copy is used
 - Deck value: every saved deck shows what the copies in it are worth
 
