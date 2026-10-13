@@ -26,6 +26,7 @@ class Settings:
     scheduler_enabled: bool
     daily_update_hour: int
     wishlist_check_hours: int
+    deck_sync_hours: int
     alert_cooldown_hours: int
     scryfall_min_interval: float
     scryfall_slow_interval: float
@@ -42,6 +43,7 @@ def get_settings() -> Settings:
         scheduler_enabled=_bool("SCHEDULER_ENABLED", True),
         daily_update_hour=int(os.getenv("DAILY_UPDATE_HOUR", "6")),
         wishlist_check_hours=int(os.getenv("WISHLIST_CHECK_HOURS", "6")),
+        deck_sync_hours=int(os.getenv("DECK_SYNC_HOURS", "6")),
         alert_cooldown_hours=int(os.getenv("ALERT_COOLDOWN_HOURS", "24")),
         scryfall_min_interval=float(os.getenv("SCRYFALL_MIN_INTERVAL", "0.1")),
         scryfall_slow_interval=float(os.getenv("SCRYFALL_SLOW_INTERVAL", "0.6")),

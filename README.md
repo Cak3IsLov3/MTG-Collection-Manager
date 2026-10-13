@@ -17,7 +17,7 @@ price.
 
 | Collection: add by name or card number, edit quantities, tick foil | Saved decks, and the randomizer picking a deck for three players |
 | --- | --- |
-| ![Collection](docs/collection.jpg) | ![Saved decks with their number, bracket, progress and value, and a random deck for each of three players](docs/decks.jpg) |
+| ![Collection](docs/collection.jpg) | ![Saved decks with their number, bracket, progress and value, the Archidekt badge and sync, and a random deck for each of three players](docs/decks.jpg) |
 
 ![Wishlist targets set to 85% of the current price: the changed prices are highlighted until you save them all](docs/wishlist-targets.jpg)
 
@@ -35,9 +35,13 @@ price.
 
 ![The saved decks sorted on missing cards: the decks closest to done first](docs/decks-sorted.jpg)
 
-![A saved deck of exactly 100 cards: its bracket, deck size, adding a card, and basic lands per land](docs/deck.jpg)
+![A saved deck of exactly 100 cards: its bracket, deck size, the Archidekt link, adding a card, and basic lands per land](docs/deck.jpg)
 
-![The cards of a deck: the printing each card uses, a choice of printing where you own several, and Remove](docs/deck-cards.jpg)
+![A deck that follows its Archidekt link: Sync now, and when it was last checked](docs/deck-archidekt.jpg)
+
+![The cards of a deck: the printing the deck list names (✓ when that is the one in the deck), a choice of printing where you own several, and Remove](docs/deck-cards.jpg)
+
+![A deck taken over from Archidekt with its sets: every card uses the exact printing the deck list names](docs/deck-printings.jpg)
 
 ![Unsaved changes in a deck: the changed fields are highlighted and one button saves them all](docs/deck-unsaved.jpg)
 
@@ -92,6 +96,8 @@ price.
 - Commander bracket per deck: taken from Archidekt when the deck has one, and changeable at any time
 - Filter the list of saved decks by bracket, or show only the decks that are complete
 - Sort the saved decks by how many cards they still miss, or by name, bracket, size, progress or value
+- Follow an Archidekt deck: a deck saved from an Archidekt link (or given one later) is brought up to date when the deck changes there, automatically every few hours or with "Sync now"; printings you chose and cards you took out are kept
+- The printing from the deck list comes along: an Archidekt deck (or a text list with sets) knows the set and card number of every card. If you own that printing it goes to that deck, also when another deck had taken it only because any copy would do, and missing cards go on the wishlist in that printing
 - Choose the printing: if you own a card in several printings you pick which one is in the deck (say, the foil); otherwise the cheapest free copy is used
 - Deck value: every saved deck shows what the copies in it are worth
 
@@ -125,6 +131,7 @@ All settings are environment variables (see [.env.example](.env.example)).
 | `SCHEDULER_ENABLED` | `true` | Run the background jobs |
 | `DAILY_UPDATE_HOUR` | `6` | Hour of the daily Scryfall price update |
 | `WISHLIST_CHECK_HOURS` | `6` | Interval of the wishlist check |
+| `DECK_SYNC_HOURS` | `6` | How often decks that follow an Archidekt link are brought up to date (`0` = never automatically) |
 | `ALERT_COOLDOWN_HOURS` | `24` | Minimum time between two alerts for the same card |
 | `SCRYFALL_MIN_INTERVAL` | `0.1` | Seconds between Scryfall requests (their limit is 10/s) |
 | `SCRYFALL_SLOW_INTERVAL` | `0.6` | Seconds between Scryfall name lookups and bulk requests, which have a much lower limit |
@@ -176,6 +183,8 @@ product page. Two things to know:
 | `PUT` | `/api/decks/{id}/cards/{entry_id}/assigned` | Take your copies of a card out of a deck, or put them back |
 | `PUT` | `/api/decks/{id}/basic-lands` | Set how many of each basic land a deck runs |
 | `PUT` | `/api/decks/{id}/bracket` | Set or clear the Commander bracket of a deck |
+| `PUT` | `/api/decks/{id}/archidekt` | Let a deck follow an Archidekt deck, or stop following |
+| `POST` | `/api/decks/{id}/sync`, `/api/decks/sync` | Bring one deck, or every linked deck, up to date with Archidekt |
 | `POST` | `/api/jobs/update-prices`, `/api/jobs/check-wishlist` | Run a background job now |
 
 ## How it works

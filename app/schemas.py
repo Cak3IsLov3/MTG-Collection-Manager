@@ -198,6 +198,11 @@ class DeckCardOut(BaseModel):
     used_by: list[str] = []
     value: float = 0.0
     unassigned: bool = False
+    # The printing the deck list asks for (e.g. from Archidekt), if it names one.
+    wanted_set_code: str | None = None
+    wanted_collector_number: str | None = None
+    wanted_foil: bool | None = None
+    uses_wanted_printing: bool = False
     chosen_collection_entry_id: int | None = None
     using: list[DeckPickOut] = []
     printings: list[CollectionItemOut] = []
@@ -210,6 +215,8 @@ class DeckCardOut(BaseModel):
             used_by=row.used_by, printings=[CollectionItemOut.from_row(p) for p in row.printings],
             entry_id=row.entry_id, value=row.value, chosen_collection_entry_id=row.pinned_id,
             unassigned=row.unassigned,
+            wanted_set_code=row.set_code, wanted_collector_number=row.collector_number, wanted_foil=row.foil,
+            uses_wanted_printing=row.uses_wanted_printing,
             using=[DeckPickOut(quantity=n, printing=CollectionItemOut.from_row(p)) for p, n in row.picks],
         )
 
@@ -237,6 +244,25 @@ class DeckOut(BaseModel):
     # Deck size including basic lands (a Commander deck has 100), and how many of those you have.
     deck_size: int = 0
     deck_owned: int = 0
+    # The Archidekt deck this deck follows, and when it was last brought up to date.
+    archidekt_url: str | None = None
+    synced_at: dt.datetime | None = None
+
+
+class DeckLinkIn(BaseModel):
+    # An Archidekt deck URL, or null to stop following one.
+    archidekt_url: str | None = None
+
+
+class DeckSyncOut(BaseModel):
+    deck_id: int
+    name: str
+    added: list[str] = []
+    removed: list[str] = []
+    changed: list[str] = []
+    other: list[str] = []
+    error: str | None = None
+    summary: str
 
 
 class DeckDetailOut(DeckOut):

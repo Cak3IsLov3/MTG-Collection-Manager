@@ -73,6 +73,9 @@ class Deck(SQLModel, table=True):
     name: str
     created_at: dt.datetime = Field(default_factory=utcnow)
     bracket: int | None = None  # Commander bracket 1-5, if known
+    # The Archidekt deck this one follows: changes made there are taken over here.
+    archidekt_id: int | None = None
+    synced_at: dt.datetime | None = None
 
 
 class DeckEntry(SQLModel, table=True):
@@ -82,6 +85,11 @@ class DeckEntry(SQLModel, table=True):
     quantity: int = 1
     # True when the user took their copies out of the deck: the card is still on the list, but missing.
     unassigned: bool = False
+    # The printing the deck list asks for (e.g. from Archidekt), when it names one.
+    set_code: str | None = None
+    collector_number: str | None = None
+    scryfall_id: str | None = None
+    foil: bool | None = None
 
 
 class DeckBasicLand(SQLModel, table=True):

@@ -26,8 +26,14 @@ def add_missing_columns(target=None) -> None:
     if target.dialect.name != "sqlite":
         return
     added = {
-        "deck": {"bracket": "INTEGER"},
-        "deckentry": {"unassigned": "BOOLEAN NOT NULL DEFAULT 0"},
+        "deck": {"bracket": "INTEGER", "archidekt_id": "INTEGER", "synced_at": "DATETIME"},
+        "deckentry": {
+            "unassigned": "BOOLEAN NOT NULL DEFAULT 0",
+            "set_code": "VARCHAR",
+            "collector_number": "VARCHAR",
+            "scryfall_id": "VARCHAR",
+            "foil": "BOOLEAN",
+        },
         "pricesnapshot": {"eur_from_set": "VARCHAR", "eur_foil_from_set": "VARCHAR"},
     }
     with target.begin() as connection:

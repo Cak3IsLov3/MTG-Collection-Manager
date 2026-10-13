@@ -1,5 +1,7 @@
 """Decks: which cards of a deck do you own, which are tied up in other decks, and which are missing."""
 
+import asyncio
+import logging
 import random
 import re
 from dataclasses import dataclass, field
@@ -10,6 +12,7 @@ from sqlmodel import Session, select
 from app.config import get_settings
 from app.csv_import import CsvFormatError, parse_collection_csv
 from app.models import (
+    utcnow,
     Card,
     CollectionEntry,
     Deck,
@@ -42,7 +45,12 @@ _CATEGORY = re.compile(r"\[([^\]]*)\]")
 _ARCHIDEKT_URL = re.compile(r"archidekt\.com/(?:api/)?decks/(\d+)", re.IGNORECASE)
 # "[Ramp]" categories, "^Have,#37d67a^" colour labels and "*F*" foil markers
 _ANNOTATIONS = re.compile(r"\s*(\[[^\]]*\]|\^[^^]*\^|\*[A-Z]\*)")
-_LINE = re.compile(r"^(?P<qty>\d+)\s*x?\s+(?P<name>.+?)(?:\s+\((?P<set>[A-Za-z0-9]{2,6})\)(?:\s+\S+)?)?$")
+_LINE = re.compile(r"^(?P<qty>\d+)\s*x?\s+(?P<name>.+?)(?:\s+\((?P<set>[A-Za-z0-9]{2,6})\)(?:\s+(?P<num>\S+))?)?$")
+
+
+logger = logging.getLogger(__name__)
+
+ARCHIDEKT_DECK_URL = "https://archidekt.com/decks/{deck_id}"
 
 
 class DeckError(Exception):
@@ -56,6 +64,15 @@ class DeckCard:
     entry_id: int | None = None  # set for the cards of a saved deck
     kind: str = "card"  # CARD, BASIC or TOKEN, when the source says so
     unassigned: bool = False  # the user took their copies out of the deck
+    # The printing the deck list asks for, when it names one (Archidekt does, plain names do not).
+    set_code: str | None = None
+    collector_number: str | None = None
+    scryfall_id: str | None = None
+    foil: bool | None = None
+
+    def wants(self, row: CollectionRow) -> bool:
+        """Is this collection entry the printing the deck list asks for?"""
+        return _same_printing(self, row)
 
 
 @dataclass
@@ -88,6 +105,27 @@ class DeckRow:
     pinned_id: int | None = None  # collection entry id the user chose, if any
     # The user took their copies out of this deck: it uses none, so the card counts as missing.
     unassigned: bool = False
+    # The printing the deck list asks for, when it names one.
+    set_code: str | None = None
+    collector_number: str | None = None
+    scryfall_id: str | None = None
+    foil: bool | None = None
+
+    @property
+    def wanted_printing(self) -> str | None:
+        """'CMM #410 foil', or None when the deck list does not name a printing."""
+        if not self.set_code:
+            return None
+        number = f" #{self.collector_number}" if self.collector_number else ""
+        return f"{self.set_code.upper()}{number}{' foil' if self.foil else ''}"
+
+    @property
+    def uses_wanted_printing(self) -> bool:
+        return any(_same_printing(self, row) for row, _ in self.picks)
+
+    def card_ref(self) -> CardRef:
+        """For looking the card up on Scryfall, in the printing the deck asks for if it names one."""
+        return CardRef(self.name, self.set_code, self.collector_number, self.scryfall_id)
 
     @property
     def owned(self) -> int:
@@ -143,6 +181,15 @@ class DeckSummary:
         return round(self.total_owned / self.total_cards * 100) if self.total_cards else 0
 
 
+def _same_printing(wanted, row: CollectionRow) -> bool:
+    """`wanted` is anything with scryfall_id / set_code / collector_number (a deck card, need or row)."""
+    if wanted.scryfall_id:
+        return row.card.scryfall_id == wanted.scryfall_id
+    if not wanted.set_code or row.card.set_code != wanted.set_code.lower():
+        return False
+    return not wanted.collector_number or row.card.collector_number == wanted.collector_number
+
+
 def card_kind(name: str, kind: str = CARD) -> str:
     """Recognise basic lands and tokens by name, for sources that do not say what a card is."""
     if kind != CARD:
@@ -180,7 +227,16 @@ def parse_decklist(text: str) -> list[DeckCard]:
             continue
         else:
             kind = CARD
-        cards.append(DeckCard(name=match["name"].strip(), quantity=int(match["qty"]), kind=kind))
+        cards.append(
+            DeckCard(
+                name=match["name"].strip(),
+                quantity=int(match["qty"]),
+                kind=kind,
+                set_code=match["set"].lower() if match["set"] else None,
+                collector_number=match["num"] if match["set"] else None,
+                foil=True if "*F*" in line else None,
+            )
+        )
     return cards
 
 
@@ -268,7 +324,19 @@ def parse_archidekt_deck(data: dict) -> tuple[str, list[DeckCard]]:
             kind = BASIC
         else:
             kind = CARD
-        cards.append(DeckCard(name=name, quantity=int(item.get("quantity") or 1), kind=kind))
+        printing = item.get("card") or {}
+        cards.append(
+            DeckCard(
+                name=name,
+                quantity=int(item.get("quantity") or 1),
+                kind=kind,
+                # Archidekt knows the exact printing of every card in the deck.
+                set_code=((printing.get("edition") or {}).get("editioncode") or "").lower() or None,
+                collector_number=str(printing.get("collectorNumber") or "") or None,
+                scryfall_id=printing.get("uid") or None,
+                foil={"foil": True, "etched": True, "normal": False}.get(str(item.get("modifier") or "").casefold()),
+            )
+        )
     return data.get("name") or "Archidekt deck", cards
 
 
@@ -310,13 +378,19 @@ class _Need:
     entry_id: int | None = None
     pin: int | None = None
     unassigned: bool = False
+    set_code: str | None = None
+    collector_number: str | None = None
+    scryfall_id: str | None = None
+    foil: bool | None = None
 
 
 class _CardPool:
     """The collection, shared out over the saved decks.
 
     Every physical copy can only be in one deck. Printings a user chose for a
-    deck are handed out first. After that saved decks claim what they still
+    deck are handed out first. Then every deck gets the printing its deck list
+    names, if you own it: that copy belongs in that deck, even when an older
+    deck could have used it too. After that saved decks claim what they still
     need in the order they were created, cheapest printing first. Whatever is
     left is available to a deck you are only checking.
     """
@@ -343,7 +417,10 @@ class _CardPool:
         cards: dict[int, list[DeckCard]] = {deck.id: [] for deck in self.decks}
         for entry in session.exec(select(DeckEntry).order_by(DeckEntry.id)):
             cards.setdefault(entry.deck_id, []).append(
-                DeckCard(entry.name, entry.quantity, entry.id, unassigned=entry.unassigned)
+                DeckCard(
+                    entry.name, entry.quantity, entry.id, unassigned=entry.unassigned, set_code=entry.set_code,
+                    collector_number=entry.collector_number, scryfall_id=entry.scryfall_id, foil=entry.foil,
+                )
             )
         self.needs = {deck.id: self._needs(cards[deck.id], pins) for deck in self.decks}
 
@@ -354,12 +431,37 @@ class _CardPool:
             for key, need in self.needs[deck.id].items():
                 if need.pin is not None and not need.unassigned:
                     self._take([need.pin], need.quantity, self.remaining, self.claims[deck.id].setdefault(key, {}))
+        for deck in self.decks:  # then the printing a deck list names
+            for key, need in self.needs[deck.id].items():
+                if need.unassigned or not need.set_code:
+                    continue
+                claimed = self.claims[deck.id].setdefault(key, {})
+                self._take(self._wanted_ids(key, need), need.quantity - sum(claimed.values()), self.remaining, claimed)
         for deck in self.decks:  # then whatever is still needed
             for key, need in self.needs[deck.id].items():
                 claimed = self.claims[deck.id].setdefault(key, {})
                 if need.unassigned:
                     continue
-                self._take(self._ids(key), need.quantity - sum(claimed.values()), self.remaining, claimed)
+                self._take(self._order(key, need), need.quantity - sum(claimed.values()), self.remaining, claimed)
+
+    @staticmethod
+    def _rank(need: _Need, row: CollectionRow) -> int:
+        """0: the printing the deck list names, in the finish it names; 1: that printing in the
+        other finish; 2: any other printing."""
+        if not _same_printing(need, row):
+            return 2
+        return 0 if need.foil is None or row.entry.is_foil == need.foil else 1
+
+    def _order(self, key: str, need: _Need) -> list[int]:
+        """Collection entries to take from: the printing the deck list asks for first, then the
+        rest from cheap to expensive."""
+        rows = self.printings.get(key, [])
+        return [row.entry.id for row in sorted(rows, key=lambda row: self._rank(need, row))]  # stable sort
+
+    def _wanted_ids(self, key: str, need: _Need) -> list[int]:
+        """Only the collection entries that are the printing the deck list names."""
+        rows = sorted(self.printings.get(key, []), key=lambda row: self._rank(need, row))
+        return [row.entry.id for row in rows if self._rank(need, row) < 2]
 
     def _key(self, name: str) -> str:
         key = name_key(name)
@@ -384,6 +486,9 @@ class _CardPool:
             need = needs.setdefault(key, _Need(card.name, 0, card.entry_id))
             need.quantity += card.quantity
             need.unassigned = need.unassigned or card.unassigned
+            if need.set_code is None and card.set_code:
+                need.set_code, need.collector_number = card.set_code, card.collector_number
+                need.scryfall_id, need.foil = card.scryfall_id, card.foil
             pin = (pins or {}).get(card.entry_id)
             # A chosen printing only counts while it is still in the collection as this card.
             if need.pin is None and pin in self._ids(key):
@@ -400,7 +505,7 @@ class _CardPool:
                 mine = self.claims[deck_id].get(key, {})
             else:
                 mine = {}
-                self._take(self._ids(key), need.quantity, leftover, mine)
+                self._take(self._order(key, need), need.quantity, leftover, mine)
             others = [
                 (deck.name, sum(self.claims[deck.id].get(key, {}).values()))
                 for deck in self.decks
@@ -422,6 +527,10 @@ class _CardPool:
                     entry_id=need.entry_id,
                     pinned_id=need.pin,
                     unassigned=need.unassigned,
+                    set_code=need.set_code,
+                    collector_number=need.collector_number,
+                    scryfall_id=need.scryfall_id,
+                    foil=need.foil,
                 )
             )
         return sorted(rows, key=lambda row: name_key(row.name))
@@ -450,32 +559,199 @@ def check_deck(session: Session, cards: list[DeckCard], deck_id: int | None = No
     return _CardPool(session).rows(cards, deck_id)
 
 
-def save_deck(
-    session: Session,
-    name: str,
-    cards: list[DeckCard],
-    left_out: LeftOut | None = None,
-    bracket: int | None = None,
-) -> Deck:
-    """Save a deck. `left_out` records its basic lands and tokens, which are not tracked as cards."""
-    deck = Deck(name=name.strip() or "Untitled deck", bracket=bracket if bracket in BRACKETS else None)
-    session.add(deck)
-    session.flush()
-    if left_out is not None:
-        set_basic_lands(session, deck, left_out.basics)
-        if left_out.tokens > 0:
-            session.add(DeckSkipped(deck_id=deck.id, kind=TOKEN, quantity=left_out.tokens))
+def _one_line_per_card(cards: list[DeckCard]) -> dict[str, DeckCard]:
+    """Merge the lines of a deck list by card name. The same card in several printings becomes
+    one line; the first printing is kept."""
     merged: dict[str, DeckCard] = {}
     for card in cards:
         key = name_key(card.name)
         if key in merged:
             merged[key].quantity += card.quantity
         else:
-            merged[key] = DeckCard(card.name.strip(), card.quantity)
+            merged[key] = DeckCard(
+                card.name.strip(), card.quantity, set_code=card.set_code, collector_number=card.collector_number,
+                scryfall_id=card.scryfall_id, foil=card.foil,
+            )
+    return merged
+
+
+def _set_tokens(session: Session, deck: Deck, tokens: int) -> None:
+    for row in session.exec(select(DeckSkipped).where(DeckSkipped.deck_id == deck.id, DeckSkipped.kind == TOKEN)).all():
+        session.delete(row)
+    session.flush()
+    if tokens > 0:
+        session.add(DeckSkipped(deck_id=deck.id, kind=TOKEN, quantity=tokens))
+
+
+def save_deck(
+    session: Session,
+    name: str,
+    cards: list[DeckCard],
+    left_out: LeftOut | None = None,
+    bracket: int | None = None,
+    archidekt_id: int | None = None,
+) -> Deck:
+    """Save a deck. `left_out` records its basic lands and tokens, which are not tracked as cards.
+
+    With `archidekt_id` the deck keeps following that Archidekt deck (see sync_deck).
+    """
+    deck = Deck(
+        name=name.strip() or "Untitled deck",
+        bracket=bracket if bracket in BRACKETS else None,
+        archidekt_id=archidekt_id,
+        synced_at=utcnow() if archidekt_id else None,
+    )
+    session.add(deck)
+    session.flush()
+    if left_out is not None:
+        set_basic_lands(session, deck, left_out.basics)
+        _set_tokens(session, deck, left_out.tokens)
+    merged = _one_line_per_card(cards)
     for card in merged.values():
-        session.add(DeckEntry(deck_id=deck.id, name=card.name, quantity=card.quantity))
+        session.add(
+            DeckEntry(
+                deck_id=deck.id, name=card.name, quantity=card.quantity, set_code=card.set_code,
+                collector_number=card.collector_number, scryfall_id=card.scryfall_id, foil=card.foil,
+            )
+        )
     session.flush()
     return deck
+
+
+@dataclass
+class SyncResult:
+    """What changed in a deck when it was brought up to date with Archidekt."""
+
+    deck: Deck
+    added: list[str] = field(default_factory=list)
+    removed: list[str] = field(default_factory=list)
+    changed: list[str] = field(default_factory=list)  # quantity or printing
+    other: list[str] = field(default_factory=list)  # name, bracket, basic lands, tokens
+    error: str | None = None
+
+    @property
+    def anything(self) -> bool:
+        return bool(self.added or self.removed or self.changed or self.other)
+
+    def summary(self) -> str:
+        if self.error:
+            return f"{self.deck.name}: could not sync ({self.error})"
+        if not self.anything:
+            return f"{self.deck.name} is already up to date with Archidekt"
+        parts = []
+        for label, names in (("added", self.added), ("removed", self.removed), ("changed", self.changed)):
+            if names:
+                shown = ", ".join(names[:5]) + (f" and {len(names) - 5} more" if len(names) > 5 else "")
+                parts.append(f"{label} {shown}")
+        parts += self.other
+        return f"{self.deck.name} updated from Archidekt: " + "; ".join(parts)
+
+
+def deck_url(deck: Deck) -> str | None:
+    return ARCHIDEKT_DECK_URL.format(deck_id=deck.archidekt_id) if deck.archidekt_id else None
+
+
+def apply_archidekt(session: Session, deck: Deck, data: dict) -> SyncResult:
+    """Make a saved deck match its Archidekt deck (the raw API response `data`).
+
+    Cards that stay keep their line, so a printing you chose for them and cards
+    you took out of the deck are not lost. Basic lands, tokens, bracket and name
+    are taken over from Archidekt.
+    """
+    result = SyncResult(deck)
+    name, cards = parse_archidekt_deck(data)
+    # A deck that tracks its basic lands as cards keeps doing so.
+    tracked, left_out = select_tracked(cards, include_basics=tracked_basic_lands(session, deck) > 0)
+    wanted = _one_line_per_card(tracked)
+    if not wanted:
+        raise DeckError("The Archidekt deck has no cards")
+
+    entries = session.exec(select(DeckEntry).where(DeckEntry.deck_id == deck.id).order_by(DeckEntry.id)).all()
+    kept: set[int] = set()
+    for card in wanted.values():
+        entry = next((e for e in entries if e.id not in kept and _names(e.name) & _names(card.name)), None)
+        if entry is None:
+            session.add(
+                DeckEntry(
+                    deck_id=deck.id, name=card.name, quantity=card.quantity, set_code=card.set_code,
+                    collector_number=card.collector_number, scryfall_id=card.scryfall_id, foil=card.foil,
+                )
+            )
+            result.added.append(card.name)
+            continue
+        kept.add(entry.id)
+        before = (entry.quantity, entry.set_code, entry.collector_number, entry.scryfall_id, entry.foil)
+        after = (card.quantity, card.set_code, card.collector_number, card.scryfall_id, card.foil)
+        if before != after:
+            entry.quantity, entry.set_code, entry.collector_number, entry.scryfall_id, entry.foil = after
+            session.add(entry)
+            result.changed.append(card.name)
+    for entry in entries:
+        if entry.id in kept:
+            continue
+        for pick in session.exec(select(DeckPick).where(DeckPick.deck_entry_id == entry.id)).all():
+            session.delete(pick)
+        session.delete(entry)
+        result.removed.append(entry.name)
+    session.flush()
+
+    current = deck_left_out(session, deck)
+    if current.basics != left_out.basics:
+        set_basic_lands(session, deck, left_out.basics)
+        result.other.append(f"basic lands now {left_out.basic_total}")
+    if current.tokens != left_out.tokens:
+        _set_tokens(session, deck, left_out.tokens)
+        result.other.append(f"tokens now {left_out.tokens}")
+    bracket = archidekt_bracket(data)
+    if bracket and bracket != deck.bracket:
+        deck.bracket = bracket
+        result.other.append(f"bracket now {bracket}")
+    if data.get("name") and name != deck.name:
+        result.other.append(f"renamed from {deck.name}")
+        deck.name = name
+    deck.synced_at = utcnow()
+    session.add(deck)
+    session.flush()
+    return result
+
+
+async def sync_deck(session: Session, deck: Deck) -> SyncResult:
+    """Bring a deck up to date with the Archidekt deck it follows."""
+    if not deck.archidekt_id:
+        raise DeckError("This deck has no Archidekt link")
+    return apply_archidekt(session, deck, await fetch_archidekt_json(deck.archidekt_id))
+
+
+async def sync_all_decks(session: Session, pause: float = 1.0) -> list[SyncResult]:
+    """Sync every deck that follows an Archidekt link; one failing deck does not stop the rest."""
+    results = []
+    linked = session.exec(select(Deck).where(Deck.archidekt_id != None).order_by(Deck.id)).all()  # noqa: E711
+    for index, deck in enumerate(linked):
+        if index and pause:
+            await asyncio.sleep(pause)  # be polite to Archidekt
+        try:
+            results.append(await sync_deck(session, deck))
+        except DeckError as exc:
+            logger.warning("Could not sync deck %s with Archidekt: %s", deck.name, exc)
+            results.append(SyncResult(deck, error=str(exc)))
+    return results
+
+
+def set_archidekt_link(session: Session, deck: Deck, url: str | None) -> bool:
+    """Set or clear the Archidekt deck a saved deck follows; returns True when the link changed."""
+    archidekt_id = None
+    if url and url.strip():
+        archidekt_id = archidekt_deck_id(url)
+        if archidekt_id is None:
+            raise DeckError("That does not look like an Archidekt deck URL")
+    if archidekt_id == deck.archidekt_id:
+        return False
+    deck.archidekt_id = archidekt_id
+    if archidekt_id is None:
+        deck.synced_at = None
+    session.add(deck)
+    session.flush()
+    return True
 
 
 def delete_deck(session: Session, deck: Deck) -> None:
@@ -534,6 +810,9 @@ async def add_card(
     if entry is None:
         entry = DeckEntry(deck_id=deck.id, name=data.name, quantity=0)
     entry.quantity += quantity
+    if set_code:  # the user named a printing: that is what this deck asks for from now on
+        entry.set_code, entry.collector_number = data.set_code, data.collector_number
+        entry.scryfall_id, entry.foil = data.scryfall_id, None
     session.add(entry)
     session.flush()
 
@@ -691,18 +970,21 @@ def deck_summaries(session: Session) -> list[DeckSummary]:
 
 
 async def add_missing_to_wishlist(
-    session: Session, scryfall: ScryfallClient, names: list[str], target_pct: float = 90.0
+    session: Session, scryfall: ScryfallClient, cards: list[str | CardRef], target_pct: float = 90.0
 ) -> tuple[int, list[str]]:
     """Put cards on the wishlist with a target of `target_pct`% of today's price.
 
-    Returns (number added, names Scryfall could not find).
+    A card can be a name, or a CardRef naming the printing the deck asks for; then
+    that printing is the one that is watched. Returns (number added, names
+    Scryfall could not find).
     """
     added, not_found = 0, []
-    resolved = await scryfall.resolve([CardRef(name=name) for name in names])
+    refs = [card if isinstance(card, CardRef) else CardRef(name=card) for card in cards]
+    resolved = await scryfall.resolve(refs)
     await scryfall.fill_missing_prices([data for data in resolved if data is not None])
-    for name, data in zip(names, resolved):
+    for ref, data in zip(refs, resolved):
         if data is None:
-            not_found.append(name)
+            not_found.append(ref.name)
             continue
         card = store_scryfall_card(session, data)
         target = round((data.price_eur or 0.0) * target_pct / 100, 2)

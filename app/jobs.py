@@ -140,10 +140,28 @@ async def run_wishlist_check() -> None:
         logger.exception("Wishlist check failed")
 
 
+async def run_deck_sync() -> None:
+    """Take over changes made on Archidekt in the decks that follow a link."""
+    from app.services.decks import sync_all_decks
+
+    try:
+        with Session(engine) as session:
+            results = await sync_all_decks(session)
+            session.commit()
+        changed = [result.summary() for result in results if result.anything]
+        logger.info("Deck sync done: %s decks checked, %s updated", len(results), len(changed))
+        for line in changed:
+            logger.info(line)
+    except Exception:
+        logger.exception("Deck sync failed")
+
+
 def start_scheduler() -> AsyncIOScheduler:
     settings = get_settings()
     scheduler = AsyncIOScheduler()
     scheduler.add_job(run_collection_update, "cron", hour=settings.daily_update_hour, id="collection-prices")
     scheduler.add_job(run_wishlist_check, "interval", hours=settings.wishlist_check_hours, id="wishlist-check")
+    if settings.deck_sync_hours > 0:
+        scheduler.add_job(run_deck_sync, "interval", hours=settings.deck_sync_hours, id="deck-sync")
     scheduler.start()
     return scheduler

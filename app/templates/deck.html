@@ -15,7 +15,7 @@
   {% if deck and row.entry_id and row.printings | length > 1 and not row.unassigned %}
   <div>
     <select name="pick:{{ row.entry_id }}" form="deck-form" title="Choose which printing this deck uses">
-      <option value="">Choose for me (cheapest free copy)</option>
+      <option value="">{% if row.wanted_printing %}Follow the deck list ({{ row.wanted_printing }}){% else %}Choose for me (cheapest free copy){% endif %}</option>
       {% for p in row.printings %}
       {% set free = row.free.get(p.entry.id, 0) %}
       <option value="{{ p.entry.id }}" {{ 'selected' if row.pinned_id == p.entry.id }} {{ 'disabled' if not free and row.pinned_id != p.entry.id }}>
@@ -26,6 +26,16 @@
   </div>
   {% endif %}
   {% if row.used_by %}<div class="printing muted">{{ row.reserved }} in use by {{ row.used_by | join(', ') }}</div>{% endif %}
+{% endmacro %}
+
+{# The printing the deck list asks for, when it names one (an Archidekt deck does). #}
+{% macro wanted(row) %}
+  {% if row.wanted_printing %}
+  <div class="printing muted wanted" title="The printing this card has in the deck list">
+    deck list: {{ row.wanted_printing }}
+    {% if row.picks %}{% if row.uses_wanted_printing %}<span class="up">✓</span>{% elif row.pinned_id %}· you chose another printing{% else %}· you use another printing{% endif %}{% endif %}
+  </div>
+  {% endif %}
 {% endmacro %}
 
 {% macro thumb(row) %}
@@ -91,7 +101,7 @@
     <tr data-bracket="{{ s.deck.bracket if s.deck.bracket else 'none' }}" data-complete="{{ 1 if s.complete else 0 }}"
         data-order="{{ loop.index }}" data-name="{{ s.deck.name }}" data-bracket-number="{{ s.deck.bracket or '' }}"
         data-cards="{{ s.total_cards }}" data-percent="{{ s.percent }}" data-value="{{ s.value }}" data-missing="{{ s.needed - s.usable }}">
-      <td><a href="/decks/{{ s.deck.id }}">{{ s.deck.name }}</a></td>
+      <td><a href="/decks/{{ s.deck.id }}">{{ s.deck.name }}</a>{% if s.deck.archidekt_id %} <span class="badge linked" title="Follows its deck on Archidekt">↻ Archidekt</span>{% endif %}</td>
       <td>{% if s.bracket_name %}<span class="badge bracket">{{ s.deck.bracket }} · {{ s.bracket_name }}</span>{% else %}<span class="muted">–</span>{% endif %}</td>
       <td class="num" title="Cards you have / cards in the deck, basic lands included">{{ s.total_owned }} / {{ s.total_cards }}</td>
       <td style="width: 35%"><div class="progress slim"><div style="width: {{ s.percent }}%"></div></div></td>
@@ -101,9 +111,16 @@
     {% endfor %}
     </tbody>
   </table>
-  <p class="muted">Every copy you own can only be in one deck. Printings you chose yourself go first, then older decks get first pick.
+  <p class="muted">Every copy you own can only be in one deck. Printings you chose yourself go first, then the printing a deck list names goes to that deck, then older decks get first pick.
     Click a column to sort, for example on "Missing" to see which deck is closest to done.
     <button type="button" class="link" id="deck-sort-reset" hidden>Back to the order the decks were added in</button></p>
+  {% set linked = summaries | selectattr('deck.archidekt_id') | list | length %}
+  <form class="row" method="post" action="/deck/sync"
+        onsubmit="const b = this.querySelector('button'); b.disabled = true; b.textContent = 'Checking Archidekt…';">
+    <button class="secondary" {{ 'disabled' if not linked }}>Sync all with Archidekt</button>
+    <span class="muted">{{ linked }} of {{ summaries | length }} decks follow an Archidekt link. They are also checked automatically.
+      Add a link on the page of a deck.</span>
+  </form>
 </div>
 
 <div class="panel randomizer">
@@ -185,6 +202,7 @@
     <input type="hidden" name="decklist" value="{{ decklist }}">
     {% for land, count in (left_out.basics if left_out else {}).items() %}<input type="hidden" name="basic:{{ land }}" value="{{ count }}">{% endfor %}
     <input type="hidden" name="bracket" value="{{ bracket or '' }}">
+    <input type="hidden" name="archidekt_id" value="{{ archidekt_id or '' }}">
     <input type="hidden" name="skipped_token" value="{{ tokens }}">
     <label>Deck name<input name="name" required size="30" value="{{ deck_name or '' }}" placeholder="My Commander deck"></label>
     <button>Save deck &amp; set these cards aside</button>
@@ -194,6 +212,27 @@
 </div>
 
 {% if deck %}
+<div class="panel">
+  <h2>Archidekt link</h2>
+  <div class="row">
+    <label>Deck on Archidekt<input name="archidekt_url" form="deck-form" type="url" size="46" value="{{ deck_link or '' }}"
+           placeholder="https://archidekt.com/decks/123456/my-deck"></label>
+    <button form="deck-form" class="secondary" title="Save the link with the other changes">Save link</button>
+    {% if deck_link %}
+    <form class="inline" method="post" action="/decks/{{ deck.id }}/sync" data-keep-scroll><button>Sync now</button></form>
+    <a href="{{ deck_link }}" target="_blank" rel="noopener">Open on Archidekt ↗</a>
+    {% endif %}
+  </div>
+  <p class="muted">
+    {% if deck_link %}
+    This deck follows its Archidekt deck: cards you add, remove or change there are taken over here automatically.
+    {% if deck.synced_at %}Last checked {{ deck.synced_at.strftime('%Y-%m-%d %H:%M') }} UTC.{% endif %}
+    {% else %}
+    Paste the link of this deck on Archidekt and changes you make there are taken over here automatically.
+    {% endif %}
+  </p>
+</div>
+
 <div class="panel">
   <h2>Add a card to this deck</h2>
   <form class="row" method="post" action="/decks/{{ deck.id }}/cards" data-keep-scroll>
@@ -250,7 +289,7 @@
     {% for row in have %}
     <tr data-deck-row="{{ row.name }} {% for p, n in row.picks %}{{ p.card.set_name }} {{ p.card.set_code }} {% endfor %}">
       <td>{{ thumb(row) }}</td>
-      <td>{{ row.name }}</td>
+      <td>{{ row.name }}{{ wanted(row) }}</td>
       <td class="num">{{ row.needed }}</td>
       <td class="num">{{ row.owned }}</td>
       <td class="num">{{ row.available }}</td>
@@ -267,7 +306,7 @@
     </tr>
     {% endfor %}
   </table>
-  {% if deck %}<p class="muted">Own a card in several printings? Pick the one that is in this deck; otherwise the cheapest free copy is used. Changes take effect when you save.
+  {% if deck %}<p class="muted">Own a card in several printings? Pick the one that is in this deck; otherwise the printing from the deck list is used if you own it, and else the cheapest free copy. Changes take effect when you save.
     "Remove" takes your copies of a card out of this deck: it moves to Still missing and the copies are free for other decks.</p>{% endif %}
   {% else %}
   <p class="muted">None of these cards are available in your collection yet.</p>
@@ -279,7 +318,7 @@
     <h2>Still missing ({{ need | length }})</h2>
     {% if addable %}
     <form class="row" method="post" action="/deck/wishlist">
-      {% for row in addable %}<input type="hidden" name="names" value="{{ row.name }}">{% endfor %}
+      {% for row in addable %}<input type="hidden" name="cards" value="{{ row.name }}|{{ row.set_code or '' }}|{{ row.collector_number or '' }}|{{ row.scryfall_id or '' }}">{% endfor %}
       <label>Target (% of current price)<input name="target_pct" type="number" min="1" max="100" value="90"></label>
       <button>Add {{ addable | length }} missing to wishlist</button>
     </form>
@@ -291,7 +330,7 @@
     {% for row in need %}
     <tr data-deck-row="{{ row.name }} {% for p, n in row.picks %}{{ p.card.set_name }} {{ p.card.set_code }} {% endfor %}">
       <td>{{ thumb(row) }}</td>
-      <td>{{ row.name }}{{ using(row) }}</td>
+      <td>{{ row.name }}{{ wanted(row) }}{{ using(row) }}</td>
       <td class="num">{{ row.needed }}</td>
       <td class="num">{{ row.owned }}</td>
       <td class="num">{{ row.available }}</td>

@@ -20,12 +20,14 @@ from app.schemas import (
     DeckCardOut,
     DeckCheckIn,
     DeckDetailOut,
+    DeckLinkIn,
     DeckAssignedIn,
     DeckBracketIn,
     DeckCardAdd,
     DeckOut,
     DeckPrintingIn,
     DeckSaveIn,
+    DeckSyncOut,
     DeckUseOut,
     ImportOut,
     PrintingOut,
@@ -304,6 +306,7 @@ def _deck_out(summary: decks.DeckSummary) -> DeckOut:
         cards_usable=summary.usable, complete=summary.complete, value=summary.value,
         bracket=summary.deck.bracket, bracket_name=summary.bracket_name, basic_land_count=summary.basic_lands,
         deck_size=summary.total_cards, deck_owned=summary.total_owned,
+        archidekt_url=decks.deck_url(summary.deck), synced_at=summary.deck.synced_at,
     )
 
 
@@ -336,7 +339,9 @@ async def save_deck(payload: DeckSaveIn, session: Session = Depends(get_session)
         )
     except decks.DeckError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    deck = decks.save_deck(session, payload.name, loaded.cards, loaded.left_out, payload.bracket or loaded.bracket)
+    deck = decks.save_deck(
+        session, payload.name, loaded.cards, loaded.left_out, payload.bracket or loaded.bracket, loaded.archidekt_id
+    )
     session.commit()
     return _deck_detail(session, deck)
 
@@ -437,6 +442,48 @@ def move_basic_lands(deck_id: int, session: Session = Depends(get_session)):
     return _deck_detail(session, deck)
 
 
+def _sync_out(result: decks.SyncResult) -> DeckSyncOut:
+    return DeckSyncOut(
+        deck_id=result.deck.id, name=result.deck.name, added=result.added, removed=result.removed,
+        changed=result.changed, other=result.other, error=result.error, summary=result.summary(),
+    )
+
+
+@router.post("/decks/sync", response_model=list[DeckSyncOut])
+async def sync_all_decks(session: Session = Depends(get_session)):
+    """Bring every deck that follows an Archidekt link up to date."""
+    results = await decks.sync_all_decks(session)
+    session.commit()
+    return [_sync_out(result) for result in results]
+
+
+@router.post("/decks/{deck_id}/sync", response_model=DeckSyncOut)
+async def sync_deck(deck_id: int, session: Session = Depends(get_session)):
+    """Bring one deck up to date with the Archidekt deck it follows."""
+    deck = _saved_deck(session, deck_id)
+    try:
+        result = await decks.sync_deck(session, deck)
+    except decks.DeckError as exc:
+        session.rollback()
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    session.commit()
+    return _sync_out(result)
+
+
+@router.put("/decks/{deck_id}/archidekt", response_model=DeckDetailOut)
+async def set_archidekt_link(deck_id: int, payload: DeckLinkIn, session: Session = Depends(get_session)):
+    """Let a deck follow an Archidekt deck (it is brought up to date right away), or stop following with null."""
+    deck = _saved_deck(session, deck_id)
+    try:
+        if decks.set_archidekt_link(session, deck, payload.archidekt_url) and deck.archidekt_id:
+            await decks.sync_deck(session, deck)
+    except decks.DeckError as exc:
+        session.rollback()
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    session.commit()
+    return _deck_detail(session, deck)
+
+
 @router.put("/decks/{deck_id}/bracket", response_model=DeckDetailOut)
 def set_bracket(deck_id: int, payload: DeckBracketIn, session: Session = Depends(get_session)):
     """Set the Commander bracket (1-5) of a deck, or null to clear it."""
@@ -468,6 +515,7 @@ class LoadedDeck:
     cards: list[decks.DeckCard]  # the cards to track against the collection
     left_out: decks.LeftOut  # basic lands and tokens
     bracket: int | None = None
+    archidekt_id: int | None = None  # set when the deck came from an Archidekt link
 
 
 async def load_deck(
@@ -477,7 +525,7 @@ async def load_deck(
     include_basics: bool = False,
     include_tokens: bool = False,
 ) -> LoadedDeck:
-    name = bracket = None
+    name = bracket = deck_id = None
     if archidekt_url and archidekt_url.strip():
         deck_id = decks.archidekt_deck_id(archidekt_url)
         if deck_id is None:
@@ -494,7 +542,7 @@ async def load_deck(
     cards, left_out = decks.select_tracked(cards, include_basics, include_tokens)
     if not cards:
         raise decks.DeckError("That deck only has basic lands and tokens; tick the boxes to include them")
-    return LoadedDeck(name, cards, left_out, bracket)
+    return LoadedDeck(name, cards, left_out, bracket, deck_id)
 
 
 @router.post("/jobs/update-prices", status_code=202)

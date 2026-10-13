@@ -16,7 +16,7 @@ from app.database import get_session
 from app.deps import get_scryfall
 from app.models import Card, CollectionEntry, Deck, WishlistEntry
 from app.routers.api import load_deck
-from app.scryfall import ScryfallClient, ScryfallError
+from app.scryfall import CardRef, ScryfallClient, ScryfallError
 from app.services import collection, decks, stats, wishlist
 
 router = APIRouter(include_in_schema=False)
@@ -301,7 +301,24 @@ def wishlist_delete(entry_id: int, session: Session = Depends(get_session)):
 
 
 def _decklist_text(rows: list[decks.DeckRow]) -> str:
-    return "\n".join(f"{row.needed} {row.name}" for row in rows)
+    """The checked deck as text for the "save" form; keeps the printing a card asks for."""
+    lines = []
+    for row in rows:
+        line = f"{row.needed} {row.name}"
+        if row.set_code:
+            line += f" ({row.set_code})" + (f" {row.collector_number}" if row.collector_number else "")
+        lines.append(line + (" *F*" if row.foil else ""))
+    return "\n".join(lines)
+
+
+def _wishlist_refs(cards: list[str]) -> list[CardRef]:
+    """Hidden "name|set|number|scryfall id" fields of the deck page, as card references."""
+    refs = []
+    for value in cards:
+        name, set_code, number, scryfall_id = (value.split("|") + ["", "", ""])[:4]
+        if name.strip():
+            refs.append(CardRef(name.strip(), set_code or None, number or None, scryfall_id or None))
+    return refs
 
 
 @router.get("/deck")
@@ -353,13 +370,14 @@ async def deck_check(
         name = PurePath(file.filename).stem
     name = deck_name.strip() or name or ""
     if action == "save":
-        deck = decks.save_deck(session, name, cards, loaded.left_out, loaded.bracket)
+        deck = decks.save_deck(session, name, cards, loaded.left_out, loaded.bracket, loaded.archidekt_id)
         session.commit()
         return redirect(f"/decks/{deck.id}", f"Saved {deck.name}. The cards you own are now set aside for this deck.")
     rows = decks.check_deck(session, cards)
     return render(request, "deck.html", rows=rows, deck=None, summaries=summaries, deck_name=name,
                   decklist=_decklist_text(rows), archidekt_url=archidekt_url, left_out=loaded.left_out,
                   bracket=loaded.bracket, brackets=decks.BRACKETS, deck_data=_deck_data(summaries),
+                  archidekt_id=loaded.archidekt_id,
                   include_basics=include_basics, include_tokens=include_tokens)
 
 
@@ -370,6 +388,7 @@ async def deck_save(
     decklist: str = Form(...),
     skipped_token: int = Form(0),
     bracket: str = Form(""),
+    archidekt_id: str = Form(""),
     session: Session = Depends(get_session),
 ):
     """Save the deck that was just checked; its list was already filtered by the check."""
@@ -380,7 +399,10 @@ async def deck_save(
         left_out = decks.LeftOut(_basic_lands_from(await request.form()), max(0, skipped_token))
     except decks.DeckError as exc:
         return redirect("/deck", str(exc), error=True)
-    deck = decks.save_deck(session, name, cards, left_out, int(bracket) if bracket.isdigit() else None)
+    deck = decks.save_deck(
+        session, name, cards, left_out, int(bracket) if bracket.isdigit() else None,
+        int(archidekt_id) if archidekt_id.isdigit() else None,
+    )
     session.commit()
     return redirect(f"/decks/{deck.id}", f"Saved {deck.name}. The cards you own are now set aside for this deck.")
 
@@ -393,7 +415,7 @@ def saved_deck_page(deck_id: int, request: Request, session: Session = Depends(g
     return render(request, "deck.html", rows=decks.saved_deck_rows(session, deck), deck=deck,
                   summaries=decks.deck_summaries(session), left_out=decks.deck_left_out(session, deck),
                   bracket=deck.bracket, brackets=decks.BRACKETS, basic_names=decks.BASIC_LAND_NAMES,
-                  tracked_basics=decks.tracked_basic_lands(session, deck))
+                  tracked_basics=decks.tracked_basic_lands(session, deck), deck_link=decks.deck_url(deck))
 
 
 def _basic_lands_from(form) -> dict[str, int]:
@@ -452,6 +474,13 @@ async def saved_deck_save(deck_id: int, request: Request, session: Session = Dep
         )
         # The "Remove" / "Put back" buttons submit the same form, so pending edits are saved along.
         message = "Changes saved"
+        # A new Archidekt link: follow it from now on and take over that deck right away.
+        if "archidekt_url" in form and decks.set_archidekt_link(session, deck, str(form["archidekt_url"])):
+            message = (
+                (await decks.sync_deck(session, deck)).summary()
+                if deck.archidekt_id
+                else "Changes saved. This deck no longer follows an Archidekt deck."
+            )
         for field, assigned in (("unassign", False), ("assign", True)):
             if str(form.get(field, "")).strip():
                 entry = decks.set_assigned(session, deck, int(form[field]), assigned)
@@ -464,6 +493,38 @@ async def saved_deck_save(deck_id: int, request: Request, session: Session = Dep
         return redirect(f"/decks/{deck_id}", f"Nothing was saved: {message}", error=True)
     session.commit()
     return redirect(f"/decks/{deck_id}", message)
+
+
+@router.post("/decks/{deck_id}/sync")
+async def saved_deck_sync(deck_id: int, session: Session = Depends(get_session)):
+    """The "Sync now" button on a deck that follows an Archidekt link."""
+    deck = session.get(Deck, deck_id)
+    if deck is None:
+        return redirect("/deck", "Deck not found", error=True)
+    try:
+        result = await decks.sync_deck(session, deck)
+    except decks.DeckError as exc:
+        session.rollback()
+        return redirect(f"/decks/{deck_id}", f"Could not sync: {exc}", error=True)
+    session.commit()
+    return redirect(f"/decks/{deck_id}", result.summary())
+
+
+@router.post("/deck/sync")
+async def decks_sync_all(session: Session = Depends(get_session)):
+    """The "Sync all with Archidekt" button on the decks page."""
+    results = await decks.sync_all_decks(session)
+    session.commit()
+    if not results:
+        return redirect("/deck", "None of your decks follows an Archidekt link yet")
+    updated = [result for result in results if result.anything]
+    failed = [result for result in results if result.error]
+    message = f"Checked {len(results)} deck{'s' if len(results) != 1 else ''} on Archidekt: {len(updated)} updated"
+    if updated:
+        message += " (" + ", ".join(result.deck.name for result in updated[:5]) + ("…" if len(updated) > 5 else "") + ")"
+    if failed:
+        message += f", {len(failed)} could not be reached (" + ", ".join(result.deck.name for result in failed[:5]) + ")"
+    return redirect("/deck", message, error=bool(failed))
 
 
 @router.post("/decks/{deck_id}/basics")
@@ -532,12 +593,15 @@ def saved_deck_delete(deck_id: int, session: Session = Depends(get_session)):
 @router.post("/deck/wishlist")
 async def deck_to_wishlist(
     names: list[str] = Form(default=[]),
+    cards: list[str] = Form(default=[]),
     target_pct: float = Form(90.0),
     session: Session = Depends(get_session),
     scryfall: ScryfallClient = Depends(get_scryfall),
 ):
     try:
-        added, not_found = await decks.add_missing_to_wishlist(session, scryfall, names, target_pct)
+        added, not_found = await decks.add_missing_to_wishlist(
+            session, scryfall, [*_wishlist_refs(cards), *names], target_pct
+        )
     except ScryfallError as exc:
         return redirect("/wishlist", str(exc), error=True)
     stats.record_daily_total(session)

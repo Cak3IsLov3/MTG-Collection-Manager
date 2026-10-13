@@ -192,3 +192,6 @@ details.in-decks summary::after { content: " ▾"; }
 details.in-decks[open] summary::after { content: " ▴"; }
 details.in-decks ul { margin: 4px 0 2px; padding: 6px 10px; list-style: none; background: var(--bg); border: 1px solid var(--border);
   border-radius: 6px; font-size: 12px; line-height: 1.6; }
+
+/* Decks that follow an Archidekt link */
+.badge.linked { border-color: var(--up); color: var(--up); }
