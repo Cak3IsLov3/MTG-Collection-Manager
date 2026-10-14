@@ -489,3 +489,22 @@ def test_search_decks_on_name_or_card(client):
     page = client.get("/deck", params={"q": "sol"}).text
     assert 'id="deck-list-search"' in page and 'value="sol"' in page
     assert 'data-card-names="Lim-Dûl&#39;s Vault|Sol Ring|Plains"' in page
+
+
+def test_filter_wishlist_on_colour(client):
+    for name in ("Sol Ring", "Lim-Dûl's Vault", "Fire // Ice"):
+        client.post("/api/wishlist", json={"name": name, "target_price": 1})
+
+    def names(**params):
+        return [i["card"]["name"] for i in client.get("/api/wishlist", params=params).json()["items"]]
+
+    assert len(names()) == 3
+    assert sorted(names(colors="U")) == ["Fire // Ice", "Lim-Dûl's Vault"]
+    assert names(colors="UR", color_match="exact") == ["Fire // Ice"]
+    assert names(colors="C") == ["Sol Ring"]
+
+    page = client.get("/wishlist").text
+    assert 'id="wishlist-colors"' in page and 'data-colors="UB"' in page and 'class="pips"' in page
+    # The shared filter is on the other pages too.
+    client.post("/api/collection", json={"name": "Sol Ring"})
+    assert 'id="collection-colors"' in client.get("/collection").text

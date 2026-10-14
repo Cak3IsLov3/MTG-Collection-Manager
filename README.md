@@ -21,6 +21,8 @@ price.
 
 ![Wishlist targets set to 85% of the current price: the changed prices are highlighted until you save them all](docs/wishlist-targets.jpg)
 
+![The wishlist filtered on colour: the red and green cards, each with its colours](docs/wishlist-colors.jpg)
+
 ![Choosing the set of a wishlist card: every printing of Force of Will with its price](docs/wishlist-set.jpg)
 
 ![Remove all asks for a second click before it empties the wishlist](docs/wishlist-remove-all.jpg)
@@ -89,6 +91,7 @@ price.
 - Choose the set you want a card from: "Change set" lists every printing with its price; the target price is kept
 - Sort the wishlist by card name, current price, target price or difference, in either direction
 - "Remove all" empties the wishlist in one go, after a second click to confirm
+- Filter the wishlist on colour, like the collection; the 80–95% buttons then only change the cards you see
 - Edit target prices freely and store them with one "Save all prices" button; set every target to 80, 85, 90 or 95% of the current price in one click
 - Alert history
 
@@ -178,7 +181,7 @@ product page. Two things to know:
 | `GET` / `POST` | `/api/collection` | List the collection (`?q=` searches name and set, `?in_deck=false` keeps the cards that are in no deck yet, `?colors=WU&color_match=any|within|exact` filters on colour) / add a card and fetch its price |
 | `POST` | `/api/collection/import` | Upload an Archidekt or Moxfield CSV (`?replace=true` replaces the earlier imported cards, hand-added cards stay) |
 | `PATCH` / `DELETE` | `/api/collection/{id}` | Change the quantity or the foil finish of an entry / remove it |
-| `GET` / `POST` | `/api/wishlist` | List the wishlist / watch a card with a max price |
+| `GET` / `POST` | `/api/wishlist` | List the wishlist (`?colors=WU&color_match=any\|within\|exact`) / watch a card with a max price |
 | `POST` | `/api/wishlist/{id}/purchase` | Move a card from WANT to HAVE |
 | `PUT` | `/api/wishlist/targets` | Set several target prices at once |
 | `PUT` | `/api/wishlist/{id}/printing` | Watch another printing (set) of the same card |

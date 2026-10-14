@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_colour_filter.html" import colour_filter, pips %}
 {% block title %}{{ deck.name if deck else 'Decks' }} · MTG Collection Manager{% endblock %}
 
 {% macro printing_name(p) %}{{ p.card.set_name }} ({{ p.card.set_code | upper }}{% if p.card.collector_number %} #{{ p.card.collector_number }}{% endif %}){% endmacro %}
@@ -87,18 +88,7 @@
     <span id="deck-filter-count" class="muted"></span>
   </div>
   <div class="toolbar search-bar color-bar">
-    <span class="muted">Colour</span>
-    <span id="deck-colors" class="color-filter" role="group" aria-label="Filter decks on colour">
-      {% for letter, label in [("W", "White"), ("U", "Blue"), ("B", "Black"), ("R", "Red"), ("G", "Green"), ("C", "Colourless")] %}
-      <button type="button" class="pip pip-{{ letter }}" data-color="{{ letter }}" aria-pressed="false" title="{{ label }}">{{ letter }}</button>
-      {% endfor %}
-    </span>
-    <select id="deck-color-mode" aria-label="How the chosen colours must match">
-      <option value="exact">Decks with exactly these colours</option>
-      <option value="any">Decks with any of these colours</option>
-      <option value="within">Decks within these colours</option>
-    </select>
-    <button type="button" class="link" id="deck-colors-reset" hidden>Clear colours</button>
+    {{ colour_filter("deck", "Decks", ("exact", "any", "within")) }}
   </div>
   <p id="deck-filter-empty" class="muted" hidden>No decks match that filter.</p>
   <table id="deck-list">
@@ -120,7 +110,7 @@
         data-colors="{{ '?' if s.deck.colors is none else s.deck.colors }}"
         data-card-names="{{ (card_names | default({})).get(s.deck.id, []) | join('|') }}">
       <td><a href="/decks/{{ s.deck.id }}">{{ s.deck.name }}</a>
-        {% if s.deck.colors is not none %}<span class="pips" title="Colour identity">{% for letter in s.deck.colors or "C" %}<span class="pip pip-{{ letter }}">{{ letter }}</span>{% endfor %}</span>{% endif %}
+        {{ pips(s.deck.colors) }}
         <div class="muted small deck-hit" hidden></div>{% if s.deck.archidekt_id %} <span class="badge linked" title="Follows its deck on Archidekt">↻ Archidekt</span>{% endif %}</td>
       <td>{% if s.bracket_name %}<span class="badge bracket">{{ s.deck.bracket }} · {{ s.bracket_name }}</span>{% else %}<span class="muted">–</span>{% endif %}</td>
       <td class="num" title="Cards you have / cards in the deck, basic lands included">{{ s.total_owned }} / {{ s.total_cards }}</td>
@@ -428,26 +418,7 @@
   const completeFilter = document.getElementById("deck-complete-filter");
   const deckListRows = [...document.querySelectorAll("#deck-list tr[data-bracket]")];
 
-  // Colour filter: the pressed buttons, and how a deck's colours must match them.
-  const deckColorButtons = [...document.querySelectorAll("#deck-colors button")];
-  const deckColorMode = document.getElementById("deck-color-mode");
-  const deckColorReset = document.getElementById("deck-colors-reset");
-  const chosenDeckColors = () => deckColorButtons.filter((b) => b.getAttribute("aria-pressed") === "true").map((b) => b.dataset.color);
-  function deckColorMatch(text, chosen) {
-    if (chosen.length === 0) return true;
-    if (text === "?") return false;  // colours not worked out yet
-    const colors = new Set(text);
-    const want = chosen.filter((c) => c !== "C");
-    if (deckColorMode.value === "within") return [...colors].every((c) => want.includes(c));
-    if (deckColorMode.value === "exact") return colors.size === want.length && want.every((c) => colors.has(c));
-    return want.some((c) => colors.has(c)) || (colors.size === 0 && chosen.includes("C"));
-  }
-  try {
-    const saved = JSON.parse(localStorage.getItem("deck-colors") || "{}");
-    for (const button of deckColorButtons) button.setAttribute("aria-pressed", String((saved.colors || []).includes(button.dataset.color)));
-    if (saved.mode) deckColorMode.value = saved.mode;
-    if (!deckColorMode.value) deckColorMode.value = "exact";
-  } catch (error) {}
+  const deckColours = colourFilter("deck", "deck-colors", "exact", () => filterDecks());
 
   // Search on the deck name or a card in the deck; a deck found through its cards says which ones.
   const deckSearch = document.getElementById("deck-list-search");
@@ -466,8 +437,6 @@
   }
 
   function filterDecks() {
-    const chosen = chosenDeckColors();
-    deckColorReset.hidden = chosen.length === 0;
     const words = foldText(deckSearch.value).split(/\s+/).filter(Boolean);
     let shown = 0;
     for (const row of deckListRows) {
@@ -476,7 +445,7 @@
         hit.match &&
         (!bracketFilter.value || row.dataset.bracket === bracketFilter.value) &&
         (!completeFilter.checked || row.dataset.complete === "1") &&
-        deckColorMatch(row.dataset.colors, chosen);
+        deckColours.matches(row.dataset.colors);
       row.hidden = !match;
       if (match) shown += 1;
       const note = row.querySelector(".deck-hit");
@@ -489,8 +458,7 @@
     if (deckSearch.value.trim()) url.searchParams.set("q", deckSearch.value.trim());
     else url.searchParams.delete("q");
     history.replaceState(null, "", url);
-    try { localStorage.setItem("deck-colors", JSON.stringify({ colors: chosen, mode: deckColorMode.value })); } catch (error) {}
-    const filtered = bracketFilter.value || completeFilter.checked || chosen.length > 0 || words.length > 0;
+    const filtered = bracketFilter.value || completeFilter.checked || deckColours.active() || words.length > 0;
     document.getElementById("deck-filter-count").textContent = filtered ? `${shown} of ${deckListRows.length} decks` : "";
     document.getElementById("deck-filter-empty").hidden = shown > 0;
     document.getElementById("deck-list").hidden = shown === 0;
@@ -504,17 +472,6 @@
   bracketFilter.addEventListener("change", filterDecks);
   completeFilter.addEventListener("change", filterDecks);
   deckSearch.addEventListener("input", filterDecks);
-  for (const button of deckColorButtons) {
-    button.addEventListener("click", () => {
-      button.setAttribute("aria-pressed", String(button.getAttribute("aria-pressed") !== "true"));
-      filterDecks();
-    });
-  }
-  deckColorMode.addEventListener("change", filterDecks);
-  deckColorReset.addEventListener("click", () => {
-    for (const button of deckColorButtons) button.setAttribute("aria-pressed", "false");
-    filterDecks();
-  });
   filterDecks();
 </script>
 <script>

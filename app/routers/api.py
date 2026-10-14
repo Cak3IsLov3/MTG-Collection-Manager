@@ -174,8 +174,16 @@ def remove_from_collection(entry_id: int, session: Session = Depends(get_session
 
 
 @router.get("/wishlist", response_model=WishlistOut)
-def list_wishlist(session: Session = Depends(get_session)):
+def list_wishlist(
+    colors: str | None = None,
+    color_match: Literal["any", "within", "exact"] = "any",
+    session: Session = Depends(get_session),
+):
+    """The wishlist; `colors` (letters from WUBRG, C for colourless) keeps the cards with any of
+    them, the cards that fit `within` them, or the cards with `exact`ly them."""
     rows = wishlist.wishlist_rows(session)
+    if colors:
+        rows = [row for row in rows if collection.color_match(row.card.colors, colors, color_match)]
     return WishlistOut(
         total_cost=wishlist.wishlist_cost(rows),
         items=[WishlistItemOut.from_row(row) for row in rows],

@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_colour_filter.html" import colour_filter, pips %}
 {% block title %}Wishlist · MTG Collection Manager{% endblock %}
 
 {% block content %}
@@ -33,12 +34,20 @@
 
 <div class="panel table-wrap">
   {% if rows %}
+  <div class="toolbar search-bar color-bar wishlist-colors">
+    {{ colour_filter("wishlist", "Cards") }}
+    <span id="wishlist-count" class="muted"></span>
+    {% if rows | selectattr("card.colors", "none") | list %}
+    <span class="muted">The colours of some cards are still being fetched; reload in a minute.</span>
+    {% endif %}
+  </div>
+  <p id="wishlist-empty" class="muted" hidden>No cards on your wishlist match these colours.</p>
   <div class="toolbar search-bar bulk-targets">
     <span class="muted">Set every target to</span>
     {% for pct in (80, 85, 90, 95) %}
-    <button type="button" class="secondary small" data-target-pct="{{ pct }}" title="Fill in {{ pct }}% of each card's current price as its target">{{ pct }}%</button>
+    <button type="button" class="secondary small" data-target-pct="{{ pct }}" title="Fill in {{ pct }}% of the current price of each card you see as its target">{{ pct }}%</button>
     {% endfor %}
-    <span class="muted">of the current price, then press "Save all prices".</span>
+    <span class="muted">of the current price, then press "Save all prices". With a colour filter on, only the cards you see change.</span>
   </div>
   <table id="wishlist-table">
     <thead>
@@ -54,10 +63,11 @@
     <tbody>
     {% for row in rows %}
     <tr data-name="{{ row.card.name }}" data-current="{{ row.current_price if row.current_price is not none else '' }}"
-        data-target="{{ row.entry.target_price }}" data-difference="{{ row.difference if row.difference is not none else '' }}">
+        data-target="{{ row.entry.target_price }}" data-difference="{{ row.difference if row.difference is not none else '' }}"
+        data-colors="{{ '?' if row.card.colors is none else row.card.colors }}">
       <td>{% if row.card.image_url %}<img class="thumb" src="{{ row.card.image_url }}" alt="" loading="lazy">{% endif %}</td>
       <td>
-        <a href="/cards/{{ row.card.id }}">{{ row.card.name }}</a>
+        <a href="/cards/{{ row.card.id }}">{{ row.card.name }}</a> {{ pips(row.card.colors) }}
         <div class="muted">{{ row.card.set_name }} ({{ row.card.set_code | upper }}{% if row.card.collector_number %} #{{ row.card.collector_number }}{% endif %})</div>
         <form class="printing-form" method="post" action="/wishlist/{{ row.entry.id }}/printing" data-keep-scroll
               data-name="{{ row.card.name }}" data-current="{{ row.card.scryfall_id }}">
@@ -157,6 +167,7 @@
     button.addEventListener("click", () => {
       const share = Number(button.dataset.targetPct) / 100;
       for (const field of targetFields) {
+        if (field.closest("tr").hidden) continue;  // filtered out by colour: leave it alone
         const current = field.closest("tr").dataset.current;
         if (current === "") continue;  // no price known: leave the target as it is
         field.value = (Math.round(Number(current) * share * 100) / 100).toFixed(2);
@@ -199,6 +210,25 @@
       opener.textContent = "Could not load the sets, try again";
     }
   });
+</script>
+<script>
+  // Filter the wishlist on colour; the choice is remembered in this browser.
+  const wishlistRows = [...document.querySelectorAll("#wishlist-table tbody tr[data-colors]")];
+  if (wishlistRows.length) {
+    const colours = colourFilter("wishlist", "wishlist-colors", "any", filterWishlist);
+    function filterWishlist() {
+      let shown = 0;
+      for (const row of wishlistRows) {
+        row.hidden = !colours.matches(row.dataset.colors);
+        if (!row.hidden) shown += 1;
+      }
+      document.getElementById("wishlist-count").textContent =
+        colours.active() ? `${shown} of ${wishlistRows.length} cards` : `${wishlistRows.length} cards`;
+      document.getElementById("wishlist-empty").hidden = shown > 0;
+      document.getElementById("wishlist-table").hidden = shown === 0;
+    }
+    filterWishlist();
+  }
 </script>
 <script>
   // Click a column header to sort; click again to reverse. The choice is remembered in this browser.

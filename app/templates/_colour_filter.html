@@ -1,0 +1,22 @@
+{# Colour filter buttons (W U B R G and colourless) with a choice of how the colours must match.
+   The page script reads the pressed buttons and calls colourMatch() from base.html. #}
+{% macro colour_filter(prefix, noun, modes=("any", "within", "exact")) %}
+{% set labels = {
+  "any": noun ~ " with any of these colours",
+  "within": noun ~ " that fit a deck of these colours" if noun == "Cards" else noun ~ " within these colours",
+  "exact": noun ~ " with exactly these colours",
+} %}
+<span class="muted">Colour</span>
+<span id="{{ prefix }}-colors" class="color-filter" role="group" aria-label="Filter on colour">
+  {% for letter, label in [("W", "White"), ("U", "Blue"), ("B", "Black"), ("R", "Red"), ("G", "Green"), ("C", "Colourless")] %}
+  <button type="button" class="pip pip-{{ letter }}" data-color="{{ letter }}" aria-pressed="false" title="{{ label }}">{{ letter }}</button>
+  {% endfor %}
+</span>
+<select id="{{ prefix }}-color-mode" aria-label="How the chosen colours must match">
+  {% for mode in modes %}<option value="{{ mode }}">{{ labels[mode] }}</option>{% endfor %}
+</select>
+<button type="button" class="link" id="{{ prefix }}-colors-reset" hidden>Clear colours</button>
+{% endmacro %}
+
+{# The colour identity of a card or deck as small pips; nothing when it is not known yet. #}
+{% macro pips(colors) %}{% if colors is not none %}<span class="pips" title="Colour identity">{% for letter in colors or "C" %}<span class="pip pip-{{ letter }}">{{ letter }}</span>{% endfor %}</span>{% endif %}{% endmacro %}

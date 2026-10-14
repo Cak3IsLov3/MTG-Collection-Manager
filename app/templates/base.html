@@ -56,6 +56,54 @@
       }, 4000);
     });
   </script>
+  <script>
+    // The colour filter of _colour_filter.html: pressed buttons and a match mode, remembered under
+    // `storageKey`. matches(text) takes colour letters in WUBRG order ("" colourless, "?" unknown).
+    function colourFilter(prefix, storageKey, defaultMode, onChange) {
+      const buttons = [...document.querySelectorAll(`#${prefix}-colors button`)];
+      const mode = document.getElementById(`${prefix}-color-mode`);
+      const reset = document.getElementById(`${prefix}-colors-reset`);
+      const chosen = () => buttons.filter((b) => b.getAttribute("aria-pressed") === "true").map((b) => b.dataset.color);
+      try {
+        const saved = JSON.parse(localStorage.getItem(storageKey) || "{}");
+        for (const button of buttons) button.setAttribute("aria-pressed", String((saved.colors || []).includes(button.dataset.color)));
+        if (saved.mode) mode.value = saved.mode;
+      } catch (error) {}
+      if (!mode.value) mode.value = defaultMode;
+
+      function changed() {
+        reset.hidden = chosen().length === 0;
+        try { localStorage.setItem(storageKey, JSON.stringify({ colors: chosen(), mode: mode.value })); } catch (error) {}
+        onChange();
+      }
+      for (const button of buttons) {
+        button.addEventListener("click", () => {
+          button.setAttribute("aria-pressed", String(button.getAttribute("aria-pressed") !== "true"));
+          changed();
+        });
+      }
+      mode.addEventListener("change", changed);
+      reset.addEventListener("click", () => {
+        for (const button of buttons) button.setAttribute("aria-pressed", "false");
+        changed();
+      });
+      reset.hidden = chosen().length === 0;
+
+      return {
+        active: () => chosen().length > 0,
+        matches(text) {
+          const picked = chosen();
+          if (picked.length === 0) return true;
+          if (text === "?") return false;  // colours not fetched yet
+          const colors = new Set(text);
+          const want = picked.filter((c) => c !== "C");
+          if (mode.value === "within") return [...colors].every((c) => want.includes(c));
+          if (mode.value === "exact") return colors.size === want.length && want.every((c) => colors.has(c));
+          return want.some((c) => colors.has(c)) || (colors.size === 0 && picked.includes("C"));
+        },
+      };
+    }
+  </script>
   {% block scripts %}{% endblock %}
 </body>
 </html>
