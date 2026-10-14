@@ -550,6 +550,23 @@ def deck_usage(session: Session) -> dict[int, list[tuple[Deck, int]]]:
     return usage
 
 
+def deck_wanted(session: Session) -> dict[int, list[tuple[Deck, int]]]:
+    """Free copies a saved deck could still use: {collection entry id: [(deck, copies the deck misses)]}.
+
+    A deck misses a card you own a free copy of when you took the card out of that deck."""
+    pool = _CardPool(session)
+    wanted: dict[int, list[tuple[Deck, int]]] = {}
+    for deck in pool.decks:
+        for key, need in pool.needs[deck.id].items():
+            missing = need.quantity - sum(pool.claims[deck.id].get(key, {}).values())
+            if missing <= 0:
+                continue
+            for row in pool.printings.get(key, []):
+                if pool.remaining[row.entry.id] > 0:
+                    wanted.setdefault(row.entry.id, []).append((deck, missing))
+    return wanted
+
+
 def check_deck(session: Session, cards: list[DeckCard], deck_id: int | None = None) -> list[DeckRow]:
     """Compare a deck with the collection by card name (any printing counts).
 

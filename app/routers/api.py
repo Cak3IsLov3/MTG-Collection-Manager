@@ -58,18 +58,28 @@ def summary(session: Session = Depends(get_session)):
 
 
 @router.get("/collection", response_model=CollectionOut)
-def list_collection(q: str | None = None, session: Session = Depends(get_session)):
-    """The collection; `q` filters on card name, set name or set code (every word must match)."""
+def list_collection(q: str | None = None, in_deck: bool | None = None, session: Session = Depends(get_session)):
+    """The collection; `q` filters on card name, set name or set code (every word must match).
+    `in_deck=false` keeps the entries with a copy that is in no saved deck, `in_deck=true` the
+    entries a saved deck uses."""
     rows = collection.search_rows(collection.collection_rows(session), q)
     usage = decks.deck_usage(session)
+    wanted = decks.deck_wanted(session)
     items = []
+    kept = []
     for row in rows:
         item = CollectionItemOut.from_row(row)
         item.in_decks = [
             DeckUseOut(id=deck.id, name=deck.name, quantity=copies) for deck, copies in usage.get(row.entry.id, [])
         ]
-        items.append(item)
-    return CollectionOut(total_value=collection.collection_value(rows), items=items)
+        item.free = row.entry.quantity - sum(use.quantity for use in item.in_decks)
+        item.wanted_by = [
+            DeckUseOut(id=deck.id, name=deck.name, quantity=copies) for deck, copies in wanted.get(row.entry.id, [])
+        ]
+        if in_deck is None or (bool(item.in_decks) if in_deck else item.free > 0):
+            items.append(item)
+            kept.append(row)
+    return CollectionOut(total_value=collection.collection_value(kept), items=items)
 
 
 @router.post("/collection", response_model=CollectionItemOut, status_code=201)

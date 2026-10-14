@@ -187,6 +187,7 @@ button.link:disabled { color: var(--muted); cursor: default; text-decoration: no
 details.in-decks { display: inline-block; vertical-align: top; margin-left: 6px; font-size: 11px; }
 details.in-decks summary { display: inline-block; padding: 0 7px; border: 1px solid var(--have); border-radius: 10px; color: var(--have);
   cursor: pointer; list-style: none; white-space: nowrap; }
+details.in-decks.wanted-by summary { border-color: var(--accent); color: var(--accent); }
 details.in-decks summary::-webkit-details-marker { display: none; }
 details.in-decks summary::after { content: " ▾"; }
 details.in-decks[open] summary::after { content: " ▴"; }

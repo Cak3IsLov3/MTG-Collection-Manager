@@ -29,6 +29,8 @@ price.
 
 ![Which decks a card is in: the label opened for two Sol Ring printings](docs/collection-decks.jpg)
 
+![Free copies a deck still needs: cards you own that are missing from a deck, with the decks that need them](docs/collection-needed.jpg)
+
 ![Printings without a price of their own borrow one from another printing, marked ≈ SET (Dragon Egg and Fellwar Stone)](docs/collection-borrowed.jpg)
 
 ![The saved decks filtered on bracket 3: two of the five decks are left](docs/decks-filter.jpg)
@@ -65,6 +67,7 @@ price.
 - Change the quantity of a card in place, without removing and re-adding it
 - Tick or untick "foil" on a card you already have; price and totals follow, and it merges with the same card in the other finish
 - See which decks a card is in: cards that are set aside for a deck carry an "in N decks" label that opens the list of decks, and how many copies are still free
+- Show only the free copies, only the copies a deck uses, or only the free copies a deck still needs: cards you own that are missing from a deck carry a "needed by N decks" label with the decks
 - Instant search in the collection on card name, set or deck (accents and word order do not matter), with a foil-only filter
 - A printing without a price borrows the price of the cheapest printing with the same name, marked "≈ SET"
 - Daily price snapshots, total value over time, top 10 most valuable cards, weekly risers and fallers
@@ -161,7 +164,7 @@ product page. Two things to know:
 
 | Method | Path | |
 | --- | --- | --- |
-| `GET` / `POST` | `/api/collection` | List the collection (`?q=` searches name and set) / add a card and fetch its price |
+| `GET` / `POST` | `/api/collection` | List the collection (`?q=` searches name and set, `?in_deck=false` keeps the cards that are in no deck yet) / add a card and fetch its price |
 | `POST` | `/api/collection/import` | Upload an Archidekt or Moxfield CSV |
 | `PATCH` / `DELETE` | `/api/collection/{id}` | Change the quantity or the foil finish of an entry / remove it |
 | `GET` / `POST` | `/api/wishlist` | List the wishlist / watch a card with a max price |

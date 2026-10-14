@@ -38,6 +38,13 @@
   <div class="toolbar search-bar">
     <input id="collection-search" type="search" size="40" autocomplete="off" value="{{ request.query_params.get('q', '') }}"
            placeholder="Search by card name, set or deck…" aria-label="Search your collection">
+    <label class="muted" for="collection-show">Show</label>
+    <select id="collection-show" aria-label="Show all cards, only the free ones or only the ones in a deck">
+      <option value="all">All cards</option>
+      <option value="free">Free copies (not in a deck yet)</option>
+      <option value="wanted">Free copies a deck still needs</option>
+      <option value="used">In a deck</option>
+    </select>
     <label class="check muted"><input id="collection-foil" type="checkbox">&nbsp;Foil only</label>
     <span id="collection-count" class="muted"></span>
   </div>
@@ -49,7 +56,9 @@
     </tr>
     {% for row in rows %}
     {% set used = usage.get(row.entry.id, []) %}
-    <tr data-search="{{ row.card.name }} {{ row.card.set_name }} {{ row.card.set_code }} #{{ row.card.collector_number or '' }}{% for deck, count in used %} {{ deck.name }}{% endfor %}" data-foil="{{ 1 if row.entry.is_foil else 0 }}" data-qty="{{ row.entry.quantity }}">
+    {% set in_decks = used | sum(attribute=1) %}
+    {% set needs = wanted.get(row.entry.id, []) %}
+    <tr data-search="{{ row.card.name }} {{ row.card.set_name }} {{ row.card.set_code }} #{{ row.card.collector_number or '' }}{% for deck, count in used %} {{ deck.name }}{% endfor %}{% for deck, count in needs %} {{ deck.name }}{% endfor %}" data-foil="{{ 1 if row.entry.is_foil else 0 }}" data-qty="{{ row.entry.quantity }}" data-used="{{ in_decks }}" data-wanted="{{ needs | length }}">
       <td>{% if row.card.image_url %}<img class="thumb" src="{{ row.card.image_url }}" alt="" loading="lazy">{% endif %}</td>
       <td>
         <a href="/cards/{{ row.card.id }}">{{ row.card.name }}</a>
@@ -60,12 +69,23 @@
         {% if used %}
         {% set copies = used | sum(attribute=1) %}
         <details class="in-decks">
-          <summary title="Click to see which decks use this card">in {{ used | length }} deck{{ 's' if used | length != 1 }}</summary>
+          <summary title="Click to see which decks use this card">in {{ used | length }} deck{{ 's' if used | length != 1 }}{% if row.entry.quantity > copies %} · {{ row.entry.quantity - copies }} free{% endif %}</summary>
           <ul>
             {% for deck, count in used %}
             <li>{{ count }}× <a href="/decks/{{ deck.id }}">{{ deck.name }}</a></li>
             {% endfor %}
             <li class="muted">{{ row.entry.quantity - copies }} of {{ row.entry.quantity }} cop{{ 'y' if row.entry.quantity == 1 else 'ies' }} free</li>
+          </ul>
+        </details>
+        {% endif %}
+        {% if needs %}
+        <details class="in-decks wanted-by">
+          <summary title="You have a free copy and these decks still miss this card">needed by {{ needs | length }} deck{{ 's' if needs | length != 1 }}</summary>
+          <ul>
+            {% for deck, count in needs %}
+            <li>{{ count }}× <a href="/decks/{{ deck.id }}">{{ deck.name }}</a></li>
+            {% endfor %}
+            <li class="muted">Open the deck and click "Put back" under Still missing.</li>
           </ul>
         </details>
         {% endif %}
@@ -111,22 +131,35 @@
       text: fold(row.dataset.search),
       foil: row.dataset.foil === "1",
       quantity: Number(row.dataset.qty),
+      used: Number(row.dataset.used),  // copies that are set aside for a saved deck
+      wanted: Number(row.dataset.wanted),  // decks that miss this card while a copy is free
     }));
+    const show = document.getElementById("collection-show");
+    try { show.value = localStorage.getItem("collection-show") || "all"; } catch (error) {}
+    if (!show.value) show.value = "all";
 
     function filter() {
       const words = fold(search.value).split(/\s+/).filter(Boolean);
       let shown = 0;
       let cards = 0;
       for (const item of rows) {
-        const match = (!foilOnly.checked || item.foil) && words.every((word) => item.text.includes(word));
+        // "Free copies" counts the copies no deck uses, "In a deck" the copies a deck uses, and
+        // "a deck still needs" the free copies of cards a deck misses.
+        const free = Math.max(0, item.quantity - item.used);
+        const copies = show.value === "free" ? free
+          : show.value === "used" ? Math.min(item.used, item.quantity)
+          : show.value === "wanted" ? (item.wanted > 0 ? free : 0)
+          : item.quantity;
+        const match = copies > 0 && (!foilOnly.checked || item.foil) && words.every((word) => item.text.includes(word));
         item.row.hidden = !match;
         if (match) {
           shown += 1;
-          cards += item.quantity;
+          cards += copies;
         }
       }
-      const filtered = words.length > 0 || foilOnly.checked;
-      count.textContent = filtered ? `${shown} of ${rows.length} entries · ${cards} cards` : `${rows.length} entries`;
+      const filtered = words.length > 0 || foilOnly.checked || show.value !== "all";
+      const what = { free: "free cards", used: "cards in decks", wanted: "free cards a deck needs" }[show.value] || "cards";
+      count.textContent = filtered ? `${shown} of ${rows.length} entries · ${cards} ${what}` : `${rows.length} entries`;
       empty.hidden = shown > 0;
       table.hidden = shown === 0;
       const url = new URL(location.href);
@@ -137,6 +170,10 @@
 
     search.addEventListener("input", filter);
     foilOnly.addEventListener("change", filter);
+    show.addEventListener("change", () => {
+      try { localStorage.setItem("collection-show", show.value); } catch (error) {}
+      filter();
+    });
     filter();
 
     // Change a quantity in place: saved through the API, without reloading the page.

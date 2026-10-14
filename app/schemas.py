@@ -51,6 +51,10 @@ class CollectionItemOut(BaseModel):
     price_from_set: str | None = None
     # Saved decks these copies are set aside for (filled in by the collection list).
     in_decks: list[DeckUseOut] = []
+    # Copies that are in no saved deck (filled in by the collection list).
+    free: int | None = None
+    # Saved decks that still miss this card while a copy of it is free (quantity: copies the deck misses).
+    wanted_by: list[DeckUseOut] = []
 
     @classmethod
     def from_row(cls, row: CollectionRow) -> "CollectionItemOut":
