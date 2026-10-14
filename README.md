@@ -35,7 +35,9 @@ price.
 
 ![Printings without a price of their own borrow one from another printing, marked ≈ SET (Dragon Egg and Fellwar Stone)](docs/collection-borrowed.jpg)
 
-![The saved decks filtered on bracket 3: two of the five decks are left](docs/decks-filter.jpg)
+![The saved decks filtered on bracket 3: two of the six decks are left](docs/decks-filter.jpg)
+
+![The saved decks filtered on colour: the decks with green in them, each with its colours](docs/decks-colors.jpg)
 
 ![The saved decks sorted on missing cards: the decks closest to done first](docs/decks-sorted.jpg)
 
@@ -101,6 +103,7 @@ price.
 - One "Save changes" button per deck: bracket, basic lands and chosen printings are edited freely and stored together, with a reminder while there are unsaved changes
 - Commander bracket per deck: taken from Archidekt when the deck has one, and changeable at any time
 - Filter the list of saved decks by bracket, or show only the decks that are complete
+- Filter the saved decks on colour: every deck shows the colour identity of its cards, and you pick decks with exactly, any of, or within the chosen colours
 - Sort the saved decks by how many cards they still miss, or by name, bracket, size, progress or value
 - Follow an Archidekt deck: a deck saved from an Archidekt link (or given one later) is brought up to date when the deck changes there, automatically every few hours or with "Sync now"; printings you chose and cards you took out are kept
 - The printing from the deck list comes along: an Archidekt deck (or a text list with sets) knows the set and card number of every card. If you own that printing it goes to that deck, also when another deck had taken it only because any copy would do, and missing cards go on the wishlist in that printing
@@ -181,7 +184,7 @@ product page. Two things to know:
 | `GET` | `/api/cards/{id}/prices` | Price history of one card |
 | `GET` | `/api/summary` | Collection value vs. wishlist cost |
 | `POST` | `/api/decks/check` | Have/missing overview for a decklist or Archidekt URL |
-| `GET` / `POST` | `/api/decks` | List saved decks / save a deck and set its cards aside |
+| `GET` / `POST` | `/api/decks` | List saved decks (`?bracket=`, `?colors=WG&color_match=exact\|any\|within`) / save a deck and set its cards aside |
 | `GET` | `/api/decks/random` | Pick random decks (`count`, `bracket`, `complete_only`) |
 | `GET` / `DELETE` | `/api/decks/{id}` | A saved deck with its cards / delete it and free its cards |
 | `PUT` | `/api/decks/{id}/cards/{entry_id}/printing` | Choose which printing a deck uses for a card |

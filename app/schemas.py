@@ -253,6 +253,8 @@ class DeckOut(BaseModel):
     # The Archidekt deck this deck follows, and when it was last brought up to date.
     archidekt_url: str | None = None
     synced_at: dt.datetime | None = None
+    # Colour identity of the deck's cards, letters in WUBRG order; null until it is worked out.
+    colors: str | None = None
 
 
 class DeckLinkIn(BaseModel):

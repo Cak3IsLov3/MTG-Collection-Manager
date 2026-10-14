@@ -727,6 +727,8 @@ def apply_archidekt(session: Session, deck: Deck, data: dict) -> SyncResult:
         result.other.append(f"renamed from {deck.name}")
         deck.name = name
     deck.synced_at = utcnow()
+    if result.added or result.removed:
+        deck.colors = None  # worked out again by fill_deck_colors
     session.add(deck)
     session.flush()
     return result
@@ -752,6 +754,40 @@ async def sync_all_decks(session: Session, pause: float = 1.0) -> list[SyncResul
             logger.warning("Could not sync deck %s with Archidekt: %s", deck.name, exc)
             results.append(SyncResult(deck, error=str(exc)))
     return results
+
+
+async def fill_deck_colors(session: Session, scryfall: ScryfallClient) -> int:
+    """Work out the colour identity of decks that have none yet: the colours of all their cards.
+
+    Colours of cards in the collection are known already; the rest are looked up on Scryfall.
+    Returns the number of decks that got their colours."""
+    pending = session.exec(select(Deck).where(Deck.colors == None)).all()  # noqa: E711
+    if not pending:
+        return 0
+    entries = session.exec(select(DeckEntry).where(DeckEntry.deck_id.in_([deck.id for deck in pending]))).all()
+    known: dict[str, str] = {}
+    for card in session.exec(select(Card).where(Card.colors != None)).all():  # noqa: E711
+        for key in _names(card.name):
+            known.setdefault(key, card.colors)
+    lookups: dict[str, dict] = {}
+    for entry in entries:
+        if not _names(entry.name) & known.keys():
+            lookups.setdefault(name_key(entry.name), {"id": entry.scryfall_id} if entry.scryfall_id else {"name": entry.name})
+    if lookups:
+        found, _ = await scryfall.get_collection(list(lookups.values()))
+        for data in found:
+            if data.colors is not None:
+                for key in _names(data.name):
+                    known.setdefault(key, data.colors)
+    for deck in pending:
+        colors = set()
+        for entry in entries:
+            if entry.deck_id == deck.id:
+                colors.update(next((known[key] for key in _names(entry.name) if key in known), ""))
+        deck.colors = "".join(c for c in "WUBRG" if c in colors)
+        session.add(deck)
+    session.commit()
+    return len(pending)
 
 
 def set_archidekt_link(session: Session, deck: Deck, url: str | None) -> bool:
@@ -826,6 +862,8 @@ async def add_card(
     entry = next((e for e in entries if _names(e.name) & _names(data.name)), None)
     if entry is None:
         entry = DeckEntry(deck_id=deck.id, name=data.name, quantity=0)
+        deck.colors = None  # worked out again by fill_deck_colors
+        session.add(deck)
     entry.quantity += quantity
     if set_code:  # the user named a printing: that is what this deck asks for from now on
         entry.set_code, entry.collector_number = data.set_code, data.collector_number

@@ -446,3 +446,27 @@ async def test_colours_are_filled_in_for_cards_stored_earlier(session, scryfall,
     assert await fill_missing_colors(session, scryfall) == 1
     assert session.exec(select(Card).where(Card.scryfall_id == "id-fire")).one().colors == "UR"
     assert await fill_missing_colors(session, scryfall) == 0
+
+
+def test_filter_decks_on_colour(client):
+    client.post("/api/collection", json={"name": "Lim-Dûl's Vault"})  # colours known from the collection
+    grixis = client.post("/api/decks", json={"name": "Grixis", "decklist": "1 Lim-Dûl's Vault\n1 Fire // Ice\n1 Sol Ring"}).json()
+    client.post("/api/decks", json={"name": "Artifacts", "decklist": "1 Sol Ring\n1 Black Lotus"})
+
+    def names(**params):
+        return {d["name"]: d["colors"] for d in client.get("/api/decks", params=params).json()}
+
+    assert names() == {"Grixis": "UBR", "Artifacts": ""}  # Fire // Ice was looked up on Scryfall
+    assert names(colors="UBR", color_match="exact") == {"Grixis": "UBR"}
+    assert names(colors="R") == {"Grixis": "UBR"}
+    assert names(colors="C") == {"Artifacts": ""}
+    assert names(colors="UB", color_match="within") == {"Artifacts": ""}
+
+    page = client.get("/deck").text
+    assert 'data-colors="UBR"' in page and 'id="deck-colors"' in page
+
+    # A card added to a deck changes its colours.
+    artifacts = next(d for d in client.get("/api/decks").json() if d["name"] == "Artifacts")
+    client.post(f"/api/decks/{artifacts['id']}/cards", json={"name": "Fire // Ice"})
+    assert names()["Artifacts"] == "UR"
+    assert grixis["colors"] is None  # worked out when the decks are listed

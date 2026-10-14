@@ -84,6 +84,20 @@
     <label class="check muted"><input id="deck-complete-filter" type="checkbox">&nbsp;Only complete decks</label>
     <span id="deck-filter-count" class="muted"></span>
   </div>
+  <div class="toolbar search-bar color-bar">
+    <span class="muted">Colour</span>
+    <span id="deck-colors" class="color-filter" role="group" aria-label="Filter decks on colour">
+      {% for letter, label in [("W", "White"), ("U", "Blue"), ("B", "Black"), ("R", "Red"), ("G", "Green"), ("C", "Colourless")] %}
+      <button type="button" class="pip pip-{{ letter }}" data-color="{{ letter }}" aria-pressed="false" title="{{ label }}">{{ letter }}</button>
+      {% endfor %}
+    </span>
+    <select id="deck-color-mode" aria-label="How the chosen colours must match">
+      <option value="exact">Decks with exactly these colours</option>
+      <option value="any">Decks with any of these colours</option>
+      <option value="within">Decks within these colours</option>
+    </select>
+    <button type="button" class="link" id="deck-colors-reset" hidden>Clear colours</button>
+  </div>
   <p id="deck-filter-empty" class="muted" hidden>No decks match that filter.</p>
   <table id="deck-list">
     <thead>
@@ -100,8 +114,10 @@
     {% for s in summaries %}
     <tr data-bracket="{{ s.deck.bracket if s.deck.bracket else 'none' }}" data-complete="{{ 1 if s.complete else 0 }}"
         data-order="{{ loop.index }}" data-name="{{ s.deck.name }}" data-bracket-number="{{ s.deck.bracket or '' }}"
-        data-cards="{{ s.total_cards }}" data-percent="{{ s.percent }}" data-value="{{ s.value }}" data-missing="{{ s.needed - s.usable }}">
-      <td><a href="/decks/{{ s.deck.id }}">{{ s.deck.name }}</a>{% if s.deck.archidekt_id %} <span class="badge linked" title="Follows its deck on Archidekt">↻ Archidekt</span>{% endif %}</td>
+        data-cards="{{ s.total_cards }}" data-percent="{{ s.percent }}" data-value="{{ s.value }}" data-missing="{{ s.needed - s.usable }}"
+        data-colors="{{ '?' if s.deck.colors is none else s.deck.colors }}">
+      <td><a href="/decks/{{ s.deck.id }}">{{ s.deck.name }}</a>
+        {% if s.deck.colors is not none %}<span class="pips" title="Colour identity">{% for letter in s.deck.colors or "C" %}<span class="pip pip-{{ letter }}">{{ letter }}</span>{% endfor %}</span>{% endif %}{% if s.deck.archidekt_id %} <span class="badge linked" title="Follows its deck on Archidekt">↻ Archidekt</span>{% endif %}</td>
       <td>{% if s.bracket_name %}<span class="badge bracket">{{ s.deck.bracket }} · {{ s.bracket_name }}</span>{% else %}<span class="muted">–</span>{% endif %}</td>
       <td class="num" title="Cards you have / cards in the deck, basic lands included">{{ s.total_owned }} / {{ s.total_cards }}</td>
       <td style="width: 35%"><div class="progress slim"><div style="width: {{ s.percent }}%"></div></div></td>
@@ -408,16 +424,41 @@
   const completeFilter = document.getElementById("deck-complete-filter");
   const deckListRows = [...document.querySelectorAll("#deck-list tr[data-bracket]")];
 
+  // Colour filter: the pressed buttons, and how a deck's colours must match them.
+  const deckColorButtons = [...document.querySelectorAll("#deck-colors button")];
+  const deckColorMode = document.getElementById("deck-color-mode");
+  const deckColorReset = document.getElementById("deck-colors-reset");
+  const chosenDeckColors = () => deckColorButtons.filter((b) => b.getAttribute("aria-pressed") === "true").map((b) => b.dataset.color);
+  function deckColorMatch(text, chosen) {
+    if (chosen.length === 0) return true;
+    if (text === "?") return false;  // colours not worked out yet
+    const colors = new Set(text);
+    const want = chosen.filter((c) => c !== "C");
+    if (deckColorMode.value === "within") return [...colors].every((c) => want.includes(c));
+    if (deckColorMode.value === "exact") return colors.size === want.length && want.every((c) => colors.has(c));
+    return want.some((c) => colors.has(c)) || (colors.size === 0 && chosen.includes("C"));
+  }
+  try {
+    const saved = JSON.parse(localStorage.getItem("deck-colors") || "{}");
+    for (const button of deckColorButtons) button.setAttribute("aria-pressed", String((saved.colors || []).includes(button.dataset.color)));
+    if (saved.mode) deckColorMode.value = saved.mode;
+    if (!deckColorMode.value) deckColorMode.value = "exact";
+  } catch (error) {}
+
   function filterDecks() {
+    const chosen = chosenDeckColors();
+    deckColorReset.hidden = chosen.length === 0;
     let shown = 0;
     for (const row of deckListRows) {
       const match =
         (!bracketFilter.value || row.dataset.bracket === bracketFilter.value) &&
-        (!completeFilter.checked || row.dataset.complete === "1");
+        (!completeFilter.checked || row.dataset.complete === "1") &&
+        deckColorMatch(row.dataset.colors, chosen);
       row.hidden = !match;
       if (match) shown += 1;
     }
-    const filtered = bracketFilter.value || completeFilter.checked;
+    try { localStorage.setItem("deck-colors", JSON.stringify({ colors: chosen, mode: deckColorMode.value })); } catch (error) {}
+    const filtered = bracketFilter.value || completeFilter.checked || chosen.length > 0;
     document.getElementById("deck-filter-count").textContent = filtered ? `${shown} of ${deckListRows.length} decks` : "";
     document.getElementById("deck-filter-empty").hidden = shown > 0;
     document.getElementById("deck-list").hidden = shown === 0;
@@ -430,6 +471,17 @@
   } catch (error) {}
   bracketFilter.addEventListener("change", filterDecks);
   completeFilter.addEventListener("change", filterDecks);
+  for (const button of deckColorButtons) {
+    button.addEventListener("click", () => {
+      button.setAttribute("aria-pressed", String(button.getAttribute("aria-pressed") !== "true"));
+      filterDecks();
+    });
+  }
+  deckColorMode.addEventListener("change", filterDecks);
+  deckColorReset.addEventListener("click", () => {
+    for (const button of deckColorButtons) button.setAttribute("aria-pressed", "false");
+    filterDecks();
+  });
   filterDecks();
 </script>
 <script>

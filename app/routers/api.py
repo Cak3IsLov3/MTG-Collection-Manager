@@ -325,7 +325,7 @@ def _deck_out(summary: decks.DeckSummary) -> DeckOut:
         cards_usable=summary.usable, complete=summary.complete, value=summary.value,
         bracket=summary.deck.bracket, bracket_name=summary.bracket_name, basic_land_count=summary.basic_lands,
         deck_size=summary.total_cards, deck_owned=summary.total_owned,
-        archidekt_url=decks.deck_url(summary.deck), synced_at=summary.deck.synced_at,
+        archidekt_url=decks.deck_url(summary.deck), synced_at=summary.deck.synced_at, colors=summary.deck.colors,
     )
 
 
@@ -340,12 +340,24 @@ def _deck_detail(session: Session, deck: Deck) -> DeckDetailOut:
 
 
 @router.get("/decks", response_model=list[DeckOut])
-def list_decks(bracket: int | None = None, session: Session = Depends(get_session)):
-    """The saved decks; `bracket` (1-5) keeps only the decks in that Commander bracket."""
+async def list_decks(
+    bracket: int | None = None,
+    colors: str | None = None,
+    color_match: Literal["any", "within", "exact"] = "any",
+    session: Session = Depends(get_session),
+    scryfall: ScryfallClient = Depends(get_scryfall),
+):
+    """The saved decks; `bracket` (1-5) keeps only the decks in that Commander bracket, `colors`
+    (letters from WUBRG, C for colourless) the decks with any, `within` or `exact`ly those colours."""
+    try:
+        await decks.fill_deck_colors(session, scryfall)
+    except ScryfallError:
+        session.rollback()  # the list still works, new decks just have no colours yet
     return [
         _deck_out(summary)
         for summary in decks.deck_summaries(session)
-        if bracket is None or summary.deck.bracket == bracket
+        if (bracket is None or summary.deck.bracket == bracket)
+        and (not colors or collection.color_match(summary.deck.colors, colors, color_match))
     ]
 
 

@@ -27,7 +27,7 @@ def add_missing_columns(target=None) -> None:
         return
     added = {
         "card": {"colors": "VARCHAR"},
-        "deck": {"bracket": "INTEGER", "archidekt_id": "INTEGER", "synced_at": "DATETIME"},
+        "deck": {"bracket": "INTEGER", "archidekt_id": "INTEGER", "synced_at": "DATETIME", "colors": "VARCHAR"},
         "deckentry": {
             "unassigned": "BOOLEAN NOT NULL DEFAULT 0",
             "set_code": "VARCHAR",

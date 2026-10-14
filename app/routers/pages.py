@@ -1,5 +1,6 @@
 """Server-rendered pages (Jinja2) and the HTML forms behind them."""
 
+import logging
 from pathlib import PurePath
 from urllib.parse import quote
 
@@ -19,6 +20,7 @@ from app.routers.api import load_deck
 from app.scryfall import CardRef, ScryfallClient, ScryfallError
 from app.services import collection, decks, stats, wishlist
 
+logger = logging.getLogger(__name__)
 router = APIRouter(include_in_schema=False)
 templates = Jinja2Templates(directory=BASE_DIR / "templates")
 
@@ -322,10 +324,22 @@ def _wishlist_refs(cards: list[str]) -> list[CardRef]:
 
 
 @router.get("/deck")
-def deck_page(request: Request, session: Session = Depends(get_session)):
+async def deck_page(
+    request: Request, session: Session = Depends(get_session), scryfall: ScryfallClient = Depends(get_scryfall)
+):
+    await _fill_deck_colors(session, scryfall)
     summaries = decks.deck_summaries(session)
     return render(request, "deck.html", rows=None, deck=None, summaries=summaries, brackets=decks.BRACKETS,
                   deck_data=_deck_data(summaries))
+
+
+async def _fill_deck_colors(session: Session, scryfall: ScryfallClient) -> None:
+    """New or changed decks get their colours; without Scryfall the list still shows, just without them."""
+    try:
+        await decks.fill_deck_colors(session, scryfall)
+    except ScryfallError as exc:
+        logger.warning("Could not work out deck colours: %s", exc)
+        session.rollback()
 
 
 def _deck_data(summaries: list[decks.DeckSummary]) -> list[dict]:

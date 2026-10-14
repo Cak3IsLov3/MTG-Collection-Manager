@@ -150,11 +150,14 @@ async def run_collection_update() -> None:
 
 
 async def run_fill_colors() -> None:
+    from app.services.decks import fill_deck_colors
+
     try:
         with Session(engine) as session:
             filled = await fill_missing_colors(session, deps.get_scryfall())
-        if filled:
-            logger.info("Colours filled in for %s cards", filled)
+            decks = await fill_deck_colors(session, deps.get_scryfall())
+        if filled or decks:
+            logger.info("Colours filled in for %s cards and %s decks", filled, decks)
     except Exception:
         logger.exception("Filling in colours failed")
 

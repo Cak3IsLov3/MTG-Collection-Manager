@@ -78,6 +78,8 @@ class Deck(SQLModel, table=True):
     # The Archidekt deck this one follows: changes made there are taken over here.
     archidekt_id: int | None = None
     synced_at: dt.datetime | None = None
+    # Colour identity of its cards, letters in WUBRG order; None: to be worked out (again).
+    colors: str | None = None
 
 
 class DeckEntry(SQLModel, table=True):

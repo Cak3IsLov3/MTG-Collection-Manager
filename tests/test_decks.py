@@ -742,6 +742,6 @@ def test_decks_can_be_sorted_on_missing_cards(client):
     for key in ("name", "bracketNumber", "cards", "percent", "value", "missing"):
         assert f'data-sort="{key}"' in page
     assert 'data-order="1" data-name="Burn" data-bracket-number="4"' in page
-    assert 'data-cards="5" data-percent="0" data-value="0' in page and 'data-missing="5">' in page
+    assert 'data-cards="5" data-percent="0" data-value="0' in page and 'data-missing="5"' in page
     assert 'data-order="2" data-name="Ramp"' in page and 'data-cards="11" data-percent="100" data-value="1.5" data-missing="0"' in page
     assert page.count('id="deck-list"') == 1 and "<tbody>" in page
