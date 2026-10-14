@@ -25,6 +25,8 @@ price.
 
 ![Remove all asks for a second click before it empties the wishlist](docs/wishlist-remove-all.jpg)
 
+![Importing a CSV with "Replace my imported cards": the cards added by hand are kept](docs/collection-import.jpg)
+
 ![Searching the collection: five versions of Sol Ring, told apart by set and card number](docs/collection-search.jpg)
 
 ![Which decks a card is in: the label opened for two Sol Ring printings](docs/collection-decks.jpg)
