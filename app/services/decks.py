@@ -318,7 +318,7 @@ def parse_archidekt_deck(data: dict) -> tuple[str, list[DeckCard]]:
             continue
         if primary in TOKEN_CATEGORIES or oracle.get("layout") in TOKEN_LAYOUTS or "Token" in (oracle.get("types") or []):
             kind = TOKEN
-        elif primary in outside_deck or set(categories) & SKIPPED_CATEGORIES:
+        elif primary in outside_deck or primary in SKIPPED_CATEGORIES:  # a second category "Maybeboard" is only a label
             continue
         elif "Basic" in (oracle.get("superTypes") or []) and "Land" in (oracle.get("types") or []):
             kind = BASIC

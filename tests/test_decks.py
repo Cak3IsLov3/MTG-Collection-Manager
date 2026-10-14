@@ -287,6 +287,21 @@ def test_basic_lands_and_tokens_are_left_out_by_default():
     assert archidekt_bracket(archidekt) == 3 and archidekt_bracket({"edhBracket": None}) is None
 
 
+def test_archidekt_card_belongs_to_its_first_category():
+    # Archidekt counts a card by its first category: "Maybeboard" as a second one is only a label.
+    from app.services.decks import parse_archidekt_deck
+
+    archidekt = {
+        "categories": [{"name": "Creature", "includedInDeck": True}, {"name": "Maybeboard", "includedInDeck": False}],
+        "cards": [
+            {"quantity": 1, "categories": ["Creature", "Maybeboard"], "card": {"oracleCard": {"name": "Brash Taunter", "types": ["Creature"]}}},
+            {"quantity": 1, "categories": ["Maybeboard", "Creature"], "card": {"oracleCard": {"name": "Sun Titan", "types": ["Creature"]}}},
+        ],
+    }
+    _, cards = parse_archidekt_deck(archidekt)
+    assert [c.name for c in cards] == ["Brash Taunter"]
+
+
 def test_saved_deck_keeps_its_basic_lands_per_land(client):
     client.post("/api/collection", json={"name": "Sol Ring"})
     decklist = "1 Sol Ring\n20 Forest\n10 Plains\n2 Treasure Token"
