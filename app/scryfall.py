@@ -79,6 +79,8 @@ class ScryfallCard:
     # Filled in when this printing has no price and the price of another printing is used instead.
     eur_from_set: str | None = None
     eur_foil_from_set: str | None = None
+    # Colour identity as letters in WUBRG order; "" is colourless.
+    colors: str | None = None
 
     @classmethod
     def from_json(cls, data: dict) -> "ScryfallCard":
@@ -87,6 +89,7 @@ class ScryfallCard:
             (f["image_uris"] for f in data.get("card_faces") or [] if f.get("image_uris")), {}
         )
         prices = data.get("prices") or {}
+        identity = data.get("color_identity")
         return cls(
             scryfall_id=data["id"],
             name=data["name"],
@@ -97,6 +100,7 @@ class ScryfallCard:
             price_eur=_to_float(prices.get("eur")),
             price_eur_foil=_to_float(prices.get("eur_foil")),
             cardmarket_url=(data.get("purchase_uris") or {}).get("cardmarket"),
+            colors=None if identity is None else "".join(c for c in "WUBRG" if c in identity),
         )
 
 

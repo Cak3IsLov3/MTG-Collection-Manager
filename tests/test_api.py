@@ -412,3 +412,37 @@ def test_collection_shows_which_decks_use_a_card(client):
     assert "needed by 1 deck</summary>" in page and 'data-wanted="1"' in page and page.count("wanted-by") == 1
     client.put(f"/api/decks/{second['id']}/cards/{entry_id}/assigned", json={"assigned": True})
     assert client.get("/api/collection").json()["items"][1]["wanted_by"] == []
+
+
+def test_filter_collection_on_colour(client):
+    for name in ("Sol Ring", "Lim-Dûl's Vault", "Fire // Ice", "Black Lotus"):
+        client.post("/api/collection", json={"name": name})
+
+    def names(**params):
+        return [i["card"]["name"] for i in client.get("/api/collection", params=params).json()["items"]]
+
+    items = {i["card"]["name"]: i["card"]["colors"] for i in client.get("/api/collection").json()["items"]}
+    assert items == {"Black Lotus": None, "Fire // Ice": "UR", "Lim-Dûl's Vault": "UB", "Sol Ring": ""}  # WUBRG order
+    assert names(colors="U") == ["Fire // Ice", "Lim-Dûl's Vault"]
+    assert names(colors="r") == ["Fire // Ice"]
+    assert names(colors="C") == ["Sol Ring"]
+    assert names(colors="UB", color_match="within") == ["Lim-Dûl's Vault", "Sol Ring"]  # colourless fits any deck
+    assert names(colors="UR", color_match="exact") == ["Fire // Ice"]
+    assert names(colors="C", color_match="exact") == ["Sol Ring"]
+    assert client.get("/api/collection", params={"colors": "U", "color_match": "nope"}).status_code == 422
+
+    page = client.get("/collection").text
+    assert 'data-colors="UB"' in page and 'data-colors=""' in page and 'data-colors="?"' in page
+    assert 'id="collection-colors"' in page and "still being fetched" in page
+
+
+async def test_colours_are_filled_in_for_cards_stored_earlier(session, scryfall, fake_scryfall):
+    from app.jobs import fill_missing_colors
+    from app.models import Card
+
+    session.add(Card(name="Fire // Ice", set_code="mh2", set_name="Set MH2", scryfall_id="id-fire"))
+    session.add(Card(name="Sol Ring", set_code="cmm", set_name="Set CMM", scryfall_id="id-sol", colors=""))
+    session.commit()
+    assert await fill_missing_colors(session, scryfall) == 1
+    assert session.exec(select(Card).where(Card.scryfall_id == "id-fire")).one().colors == "UR"
+    assert await fill_missing_colors(session, scryfall) == 0

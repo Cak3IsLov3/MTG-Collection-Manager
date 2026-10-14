@@ -16,6 +16,8 @@ class CardOut(BaseModel):
     scryfall_id: str
     collector_number: str | None
     image_url: str | None
+    # Colour identity as letters in WUBRG order; "" is colourless, null not fetched yet.
+    colors: str | None = None
 
 
 class CollectionAdd(BaseModel):

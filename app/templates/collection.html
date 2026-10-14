@@ -48,6 +48,23 @@
     <label class="check muted"><input id="collection-foil" type="checkbox">&nbsp;Foil only</label>
     <span id="collection-count" class="muted"></span>
   </div>
+  <div class="toolbar search-bar color-bar">
+    <span class="muted">Colour</span>
+    <span id="collection-colors" class="color-filter" role="group" aria-label="Filter on colour">
+      {% for letter, label in [("W", "White"), ("U", "Blue"), ("B", "Black"), ("R", "Red"), ("G", "Green"), ("C", "Colourless")] %}
+      <button type="button" class="pip pip-{{ letter }}" data-color="{{ letter }}" aria-pressed="false" title="{{ label }}">{{ letter }}</button>
+      {% endfor %}
+    </span>
+    <select id="collection-color-mode" aria-label="How the chosen colours must match">
+      <option value="any">Cards with any of these colours</option>
+      <option value="within">Cards that fit a deck of these colours</option>
+      <option value="exact">Cards with exactly these colours</option>
+    </select>
+    <button type="button" class="link" id="collection-colors-reset" hidden>Clear colours</button>
+    {% if rows | selectattr("card.colors", "none") | list %}
+    <span class="muted">The colours of some cards are still being fetched; reload in a minute.</span>
+    {% endif %}
+  </div>
   <p id="collection-empty" class="muted" hidden>No cards match your search.</p>
   <table id="collection-table">
     <tr>
@@ -58,10 +75,13 @@
     {% set used = usage.get(row.entry.id, []) %}
     {% set in_decks = used | sum(attribute=1) %}
     {% set needs = wanted.get(row.entry.id, []) %}
-    <tr data-search="{{ row.card.name }} {{ row.card.set_name }} {{ row.card.set_code }} #{{ row.card.collector_number or '' }}{% for deck, count in used %} {{ deck.name }}{% endfor %}{% for deck, count in needs %} {{ deck.name }}{% endfor %}" data-foil="{{ 1 if row.entry.is_foil else 0 }}" data-qty="{{ row.entry.quantity }}" data-used="{{ in_decks }}" data-wanted="{{ needs | length }}">
+    <tr data-search="{{ row.card.name }} {{ row.card.set_name }} {{ row.card.set_code }} #{{ row.card.collector_number or '' }}{% for deck, count in used %} {{ deck.name }}{% endfor %}{% for deck, count in needs %} {{ deck.name }}{% endfor %}" data-foil="{{ 1 if row.entry.is_foil else 0 }}" data-qty="{{ row.entry.quantity }}" data-used="{{ in_decks }}" data-wanted="{{ needs | length }}" data-colors="{{ '?' if row.card.colors is none else row.card.colors }}">
       <td>{% if row.card.image_url %}<img class="thumb" src="{{ row.card.image_url }}" alt="" loading="lazy">{% endif %}</td>
       <td>
         <a href="/cards/{{ row.card.id }}">{{ row.card.name }}</a>
+        {% if row.card.colors is not none %}
+        <span class="pips" title="Colour identity">{% for letter in row.card.colors or "C" %}<span class="pip pip-{{ letter }}">{{ letter }}</span>{% endfor %}</span>
+        {% endif %}
         <label class="foil-toggle {{ 'on' if row.entry.is_foil }}" title="Tick if your copies of this card are foil">
           <input type="checkbox" class="foil" data-entry="{{ row.entry.id }}" {{ 'checked' if row.entry.is_foil }}
                  aria-label="{{ row.card.name }} is foil">foil
@@ -133,13 +153,36 @@
       quantity: Number(row.dataset.qty),
       used: Number(row.dataset.used),  // copies that are set aside for a saved deck
       wanted: Number(row.dataset.wanted),  // decks that miss this card while a copy is free
+      colors: row.dataset.colors === "?" ? null : new Set(row.dataset.colors),  // colour identity; null: not known yet
     }));
+
+    // Colour filter: the buttons that are pressed, and how they must match.
+    const colorButtons = [...document.querySelectorAll("#collection-colors button")];
+    const colorMode = document.getElementById("collection-color-mode");
+    const colorReset = document.getElementById("collection-colors-reset");
+    const chosenColors = () => colorButtons.filter((b) => b.getAttribute("aria-pressed") === "true").map((b) => b.dataset.color);
+    function colorMatch(colors, chosen) {
+      if (chosen.length === 0) return true;
+      if (colors === null) return false;
+      const want = chosen.filter((c) => c !== "C");
+      if (colorMode.value === "within") return [...colors].every((c) => want.includes(c));
+      if (colorMode.value === "exact") return colors.size === want.length && want.every((c) => colors.has(c));
+      return want.some((c) => colors.has(c)) || (colors.size === 0 && chosen.includes("C"));
+    }
+    try {
+      const saved = JSON.parse(localStorage.getItem("collection-colors") || "{}");
+      for (const button of colorButtons) button.setAttribute("aria-pressed", String((saved.colors || []).includes(button.dataset.color)));
+      if (saved.mode) colorMode.value = saved.mode;
+      if (!colorMode.value) colorMode.value = "any";
+    } catch (error) {}
     const show = document.getElementById("collection-show");
     try { show.value = localStorage.getItem("collection-show") || "all"; } catch (error) {}
     if (!show.value) show.value = "all";
 
     function filter() {
       const words = fold(search.value).split(/\s+/).filter(Boolean);
+      const chosen = chosenColors();
+      colorReset.hidden = chosen.length === 0;
       let shown = 0;
       let cards = 0;
       for (const item of rows) {
@@ -150,14 +193,15 @@
           : show.value === "used" ? Math.min(item.used, item.quantity)
           : show.value === "wanted" ? (item.wanted > 0 ? free : 0)
           : item.quantity;
-        const match = copies > 0 && (!foilOnly.checked || item.foil) && words.every((word) => item.text.includes(word));
+        const match = copies > 0 && (!foilOnly.checked || item.foil) && colorMatch(item.colors, chosen)
+          && words.every((word) => item.text.includes(word));
         item.row.hidden = !match;
         if (match) {
           shown += 1;
           cards += copies;
         }
       }
-      const filtered = words.length > 0 || foilOnly.checked || show.value !== "all";
+      const filtered = words.length > 0 || foilOnly.checked || show.value !== "all" || chosen.length > 0;
       const what = { free: "free cards", used: "cards in decks", wanted: "free cards a deck needs" }[show.value] || "cards";
       count.textContent = filtered ? `${shown} of ${rows.length} entries · ${cards} ${what}` : `${rows.length} entries`;
       empty.hidden = shown > 0;
@@ -170,6 +214,23 @@
 
     search.addEventListener("input", filter);
     foilOnly.addEventListener("change", filter);
+    function colorsChanged() {
+      try {
+        localStorage.setItem("collection-colors", JSON.stringify({ colors: chosenColors(), mode: colorMode.value }));
+      } catch (error) {}
+      filter();
+    }
+    for (const button of colorButtons) {
+      button.addEventListener("click", () => {
+        button.setAttribute("aria-pressed", String(button.getAttribute("aria-pressed") !== "true"));
+        colorsChanged();
+      });
+    }
+    colorMode.addEventListener("change", colorsChanged);
+    colorReset.addEventListener("click", () => {
+      for (const button of colorButtons) button.setAttribute("aria-pressed", "false");
+      colorsChanged();
+    });
     show.addEventListener("change", () => {
       try { localStorage.setItem("collection-show", show.value); } catch (error) {}
       filter();

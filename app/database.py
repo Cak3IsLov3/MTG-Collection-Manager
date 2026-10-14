@@ -26,6 +26,7 @@ def add_missing_columns(target=None) -> None:
     if target.dialect.name != "sqlite":
         return
     added = {
+        "card": {"colors": "VARCHAR"},
         "deck": {"bracket": "INTEGER", "archidekt_id": "INTEGER", "synced_at": "DATETIME"},
         "deckentry": {
             "unassigned": "BOOLEAN NOT NULL DEFAULT 0",

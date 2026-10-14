@@ -31,11 +31,11 @@ def scryfall_json(name, scryfall_id, set_code="tst", eur="1.00", eur_foil=None, 
 
 
 CARDS = [
-    scryfall_json("Sol Ring", "id-sol", "cmm", eur="1.50", eur_foil="4.00"),
+    scryfall_json("Sol Ring", "id-sol", "cmm", eur="1.50", eur_foil="4.00", color_identity=[]),
     scryfall_json("Sol Ring", "id-sol-lea", "lea", eur="900.00"),
     scryfall_json("Sol Ring", "id-sol-cmm-art", "cmm", eur="6.00", collector_number="410"),
-    scryfall_json("Lim-Dûl's Vault", "id-vault", "all", eur="12.34"),
-    scryfall_json("Fire // Ice", "id-fire", "mh2", eur="0.25", eur_foil="0.80"),
+    scryfall_json("Lim-Dûl's Vault", "id-vault", "all", eur="12.34", color_identity=["B", "U"]),
+    scryfall_json("Fire // Ice", "id-fire", "mh2", eur="0.25", eur_foil="0.80", color_identity=["R", "U"]),
     scryfall_json("Black Lotus", "id-lotus", "lea", eur=None),
 ]
 

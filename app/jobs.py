@@ -45,10 +45,30 @@ async def update_collection_prices(session: Session, scryfall: ScryfallClient) -
             logger.warning("Scryfall no longer knows %s (%s)", card.name, card.scryfall_id)
             continue
         record_scryfall_price(session, card.id, data)
+        if data.colors is not None:
+            card.colors = data.colors
         updated += 1
     record_daily_total(session)
     session.commit()
     return updated
+
+
+async def fill_missing_colors(session: Session, scryfall: ScryfallClient) -> int:
+    """Fetch the colours of cards that were stored before colours were kept. Returns how many were filled in."""
+    cards = list(session.exec(select(Card).where(Card.colors == None)))  # noqa: E711
+    if not cards:
+        return 0
+    found, _ = await scryfall.get_collection([{"id": card.scryfall_id} for card in cards])
+    by_id = {data.scryfall_id: data for data in found}
+    filled = 0
+    for card in cards:
+        data = by_id.get(card.scryfall_id)
+        if data is not None and data.colors is not None:
+            card.colors = data.colors
+            session.add(card)
+            filled += 1
+    session.commit()
+    return filled
 
 
 async def check_wishlist(
@@ -129,6 +149,16 @@ async def run_collection_update() -> None:
         logger.exception("Price update failed")
 
 
+async def run_fill_colors() -> None:
+    try:
+        with Session(engine) as session:
+            filled = await fill_missing_colors(session, deps.get_scryfall())
+        if filled:
+            logger.info("Colours filled in for %s cards", filled)
+    except Exception:
+        logger.exception("Filling in colours failed")
+
+
 async def run_wishlist_check() -> None:
     try:
         with Session(engine) as session:
@@ -163,5 +193,6 @@ def start_scheduler() -> AsyncIOScheduler:
     scheduler.add_job(run_wishlist_check, "interval", hours=settings.wishlist_check_hours, id="wishlist-check")
     if settings.deck_sync_hours > 0:
         scheduler.add_job(run_deck_sync, "interval", hours=settings.deck_sync_hours, id="deck-sync")
+    scheduler.add_job(run_fill_colors, "date", id="card-colors")  # once, right after starting
     scheduler.start()
     return scheduler

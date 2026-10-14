@@ -17,6 +17,8 @@ class Card(SQLModel, table=True):
     scryfall_id: str = Field(unique=True, index=True)
     collector_number: str | None = None
     image_url: str | None = None
+    # Colour identity as letters in WUBRG order; "" is colourless, None not fetched yet.
+    colors: str | None = None
 
 
 class CollectionEntry(SQLModel, table=True):

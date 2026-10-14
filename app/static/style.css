@@ -121,6 +121,21 @@ select { font: inherit; font-size: 12px; color: var(--text); background: var(--b
 
 .search-bar { justify-content: flex-start; }
 .search-bar input[type="search"] { flex: 1 1 260px; max-width: 420px; }
+.color-bar { margin-top: -4px; }
+.color-filter { display: inline-flex; gap: 6px; }
+/* Mana colours: a round pip per colour, on a card row and as a filter button. */
+.pip { display: inline-flex; align-items: center; justify-content: center; width: 15px; height: 15px; padding: 0;
+  border: 1px solid rgba(0, 0, 0, .45); border-radius: 50%; font-size: 9px; font-weight: 700; line-height: 1; color: #1a1a1a; }
+.pip-W { background: #f3edd3; }
+.pip-U { background: #6fb1e6; }
+.pip-B { background: #7d7387; color: #fff; }
+.pip-R { background: #e8755d; }
+.pip-G { background: #6fbf85; }
+.pip-C { background: #b9bec8; }
+.pips { display: inline-flex; gap: 2px; margin-left: 6px; vertical-align: middle; }
+button.pip { width: 26px; height: 26px; font-size: 12px; cursor: pointer; opacity: .4; }
+button.pip:hover, button.pip:focus-visible { opacity: .75; }
+button.pip[aria-pressed="true"] { opacity: 1; box-shadow: 0 0 0 2px var(--accent); }
 tr[hidden] { display: none; }
 
 input.qty { width: 64px; padding: 4px 6px; text-align: right; }

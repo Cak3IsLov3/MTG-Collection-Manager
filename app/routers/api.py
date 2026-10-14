@@ -1,6 +1,7 @@
 """JSON API."""
 
 from dataclasses import dataclass
+from typing import Literal
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile
 from sqlmodel import Session
@@ -58,11 +59,19 @@ def summary(session: Session = Depends(get_session)):
 
 
 @router.get("/collection", response_model=CollectionOut)
-def list_collection(q: str | None = None, in_deck: bool | None = None, session: Session = Depends(get_session)):
+def list_collection(
+    q: str | None = None,
+    in_deck: bool | None = None,
+    colors: str | None = None,
+    color_match: Literal["any", "within", "exact"] = "any",
+    session: Session = Depends(get_session),
+):
     """The collection; `q` filters on card name, set name or set code (every word must match).
     `in_deck=false` keeps the entries with a copy that is in no saved deck, `in_deck=true` the
-    entries a saved deck uses."""
+    entries a saved deck uses. `colors` filters on colour identity (letters from WUBRG, C for
+    colourless): cards with any of them, cards that fit `within` them, or cards with `exact`ly them."""
     rows = collection.search_rows(collection.collection_rows(session), q)
+    rows = collection.filter_colors(rows, colors, color_match)
     usage = decks.deck_usage(session)
     wanted = decks.deck_wanted(session)
     items = []
