@@ -46,7 +46,7 @@ def test_csv_import_endpoint(client):
     response = client.post("/api/collection/import", files={"file": ("cards.csv", MOXFIELD.encode(), "text/csv")})
     assert response.status_code == 200
     assert response.json() == {
-        "format": "moxfield", "imported_rows": 2, "imported_cards": 4, "not_found": [], "errors": [], "kept_manual": 0,
+        "format": "moxfield", "imported_rows": 2, "imported_cards": 4, "not_found": [], "errors": [], "kept_manual": 0, "new_copies": 4,
     }
     assert client.get("/api/collection").json()["total_value"] == 5.3  # 3 x 1.50 + foil 0.80
 
@@ -406,10 +406,10 @@ def test_collection_shows_which_decks_use_a_card(client):
 
     # The card was taken out of the second deck while you own free copies: that deck still needs it.
     items = {i["card"]["name"]: i for i in client.get("/api/collection").json()["items"]}
-    assert items["Sol Ring"]["wanted_by"] == [{"id": second["id"], "name": "Artifacts", "quantity": 1}]
+    assert items["Sol Ring"]["wanted_by"] == [{"id": second["id"], "name": "Artifacts", "quantity": 1, "entry_id": entry_id}]
     assert items["Fire // Ice"]["wanted_by"] == []
     page = client.get("/collection").text
-    assert "needed by 1 deck</summary>" in page and 'data-wanted="1"' in page and page.count("wanted-by") == 1
+    assert "needed by 1 deck</summary>" in page and 'data-wanted="1"' in page and page.count('class="in-decks wanted-by"') == 1
     client.put(f"/api/decks/{second['id']}/cards/{entry_id}/assigned", json={"assigned": True})
     assert client.get("/api/collection").json()["items"][1]["wanted_by"] == []
 

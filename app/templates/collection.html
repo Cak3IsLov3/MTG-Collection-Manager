@@ -34,6 +34,20 @@
   </div>
 </div>
 
+{% set to_sort = rows | selectattr("entry.id", "in", waiting) | selectattr("entry.id", "in", wanted) | list %}
+{% if waiting %}
+<div class="panel sort-notice">
+  <p><strong>{{ waiting.values() | sum }} new cop{{ 'y' if waiting.values() | sum == 1 else 'ies' }} from your import wait for you.</strong>
+    No deck gets them until you put them in one{% if to_sort %}: {{ to_sort | length }} card{{ 's' if to_sort | length != 1 }} {{ 'is' if to_sort | length == 1 else 'are' }} needed by a deck{% endif %}.</p>
+  <div class="row">
+    {% if to_sort %}<button type="button" class="small" id="show-to-sort">Show the cards to sort</button>{% endif %}
+    <form class="inline" method="post" action="/collection/let-app-sort" data-confirm="Click again: the app puts them in decks">
+      <button class="secondary small">Let the app decide for all</button>
+    </form>
+  </div>
+</div>
+{% endif %}
+
 <div class="panel table-wrap">
   {% if rows %}
   <div class="toolbar search-bar">
@@ -44,6 +58,7 @@
       <option value="all">All cards</option>
       <option value="free">Free copies (not in a deck yet)</option>
       <option value="wanted">Free copies a deck still needs</option>
+      <option value="sort">New cards to sort into decks</option>
       <option value="used">In a deck</option>
     </select>
     <label class="check muted"><input id="collection-foil" type="checkbox">&nbsp;Foil only</label>
@@ -65,11 +80,13 @@
     {% set used = usage.get(row.entry.id, []) %}
     {% set in_decks = used | sum(attribute=1) %}
     {% set needs = wanted.get(row.entry.id, []) %}
-    <tr data-search="{{ row.card.name }} {{ row.card.set_name }} {{ row.card.set_code }} #{{ row.card.collector_number or '' }}{% for deck, count in used %} {{ deck.name }}{% endfor %}{% for deck, count in needs %} {{ deck.name }}{% endfor %}" data-foil="{{ 1 if row.entry.is_foil else 0 }}" data-qty="{{ row.entry.quantity }}" data-used="{{ in_decks }}" data-wanted="{{ needs | length }}" data-colors="{{ '?' if row.card.colors is none else row.card.colors }}">
+    {% set new = waiting.get(row.entry.id, 0) %}
+    <tr data-search="{{ row.card.name }} {{ row.card.set_name }} {{ row.card.set_code }} #{{ row.card.collector_number or '' }}{% for deck, count in used %} {{ deck.name }}{% endfor %}{% for deck, count, _ in needs %} {{ deck.name }}{% endfor %}" data-foil="{{ 1 if row.entry.is_foil else 0 }}" data-qty="{{ row.entry.quantity }}" data-used="{{ in_decks }}" data-wanted="{{ needs | length }}" data-waiting="{{ new }}" data-colors="{{ '?' if row.card.colors is none else row.card.colors }}">
       <td>{% if row.card.image_url %}<img class="thumb" src="{{ row.card.image_url }}" alt="" loading="lazy">{% endif %}</td>
       <td>
         <a href="/cards/{{ row.card.id }}">{{ row.card.name }}</a>
         {{ pips(row.card.colors) }}
+        {% if new %}<span class="badge new" title="New from your import: no deck gets these copies until you put them in one">{{ new }} new</span>{% endif %}
         <label class="foil-toggle {{ 'on' if row.entry.is_foil }}" title="Tick if your copies of this card are foil">
           <input type="checkbox" class="foil" data-entry="{{ row.entry.id }}" {{ 'checked' if row.entry.is_foil }}
                  aria-label="{{ row.card.name }} is foil">foil
@@ -90,10 +107,26 @@
         <details class="in-decks wanted-by">
           <summary title="You have a free copy and these decks still miss this card">needed by {{ needs | length }} deck{{ 's' if needs | length != 1 }}</summary>
           <ul>
-            {% for deck, count in needs %}
-            <li>{{ count }}× <a href="/decks/{{ deck.id }}">{{ deck.name }}</a></li>
+            {% for deck, count, deck_entry_id in needs %}
+            <li>{{ count }}× <a href="/decks/{{ deck.id }}">{{ deck.name }}</a>
+              {% if new %}
+              <form class="inline" method="post" action="/collection/{{ row.entry.id }}/sort" data-keep-scroll>
+                <input type="hidden" name="deck_id" value="{{ deck.id }}">
+                <input type="hidden" name="deck_entry_id" value="{{ deck_entry_id }}">
+                <button class="small" title="Put a new copy in {{ deck.name }}">Put in this deck</button>
+              </form>
+              {% endif %}
+            </li>
             {% endfor %}
+            {% if new %}
+            <li>
+              <form class="inline" method="post" action="/collection/{{ row.entry.id }}/let-app-sort" data-keep-scroll>
+                <button class="link" title="Let the app put these copies in the decks that need them">Let the app decide</button>
+              </form>
+            </li>
+            {% else %}
             <li class="muted">Open the deck and click "Put back" under Still missing.</li>
+            {% endif %}
           </ul>
         </details>
         {% endif %}
@@ -141,6 +174,7 @@
       quantity: Number(row.dataset.qty),
       used: Number(row.dataset.used),  // copies that are set aside for a saved deck
       wanted: Number(row.dataset.wanted),  // decks that miss this card while a copy is free
+      waiting: Number(row.dataset.waiting),  // new copies from an import, not in a deck until you choose
       colors: row.dataset.colors,  // colour identity in WUBRG order; "?" not known yet
     }));
 
@@ -160,17 +194,21 @@
         const copies = show.value === "free" ? free
           : show.value === "used" ? Math.min(item.used, item.quantity)
           : show.value === "wanted" ? (item.wanted > 0 ? free : 0)
+          : show.value === "sort" ? (item.wanted > 0 ? item.waiting : 0)
           : item.quantity;
         const match = copies > 0 && (!foilOnly.checked || item.foil) && colours.matches(item.colors)
           && words.every((word) => item.text.includes(word));
         item.row.hidden = !match;
+        // Sorting: open the list of decks that need the card, with its "Put in this deck" buttons.
+        const needed = item.row.querySelector("details.wanted-by");
+        if (needed && show.value === "sort" && match) needed.open = true;
         if (match) {
           shown += 1;
           cards += copies;
         }
       }
       const filtered = words.length > 0 || foilOnly.checked || show.value !== "all" || colours.active();
-      const what = { free: "free cards", used: "cards in decks", wanted: "free cards a deck needs" }[show.value] || "cards";
+      const what = { free: "free cards", used: "cards in decks", wanted: "free cards a deck needs", sort: "new cards to sort" }[show.value] || "cards";
       count.textContent = filtered ? `${shown} of ${rows.length} entries · ${cards} ${what}` : `${rows.length} entries`;
       empty.hidden = shown > 0;
       table.hidden = shown === 0;
@@ -182,6 +220,14 @@
 
     search.addEventListener("input", filter);
     foilOnly.addEventListener("change", filter);
+    const showToSort = document.getElementById("show-to-sort");
+    if (showToSort) {
+      showToSort.addEventListener("click", () => {
+        show.value = "sort";
+        show.dispatchEvent(new Event("change"));
+        show.scrollIntoView({ block: "start" });
+      });
+    }
     show.addEventListener("change", () => {
       try { localStorage.setItem("collection-show", show.value); } catch (error) {}
       filter();

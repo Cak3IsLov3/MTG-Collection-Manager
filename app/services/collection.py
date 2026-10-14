@@ -31,6 +31,8 @@ class ImportResult:
     not_found: list[str] = field(default_factory=list)
     # With replace: cards you added by hand that the file does not have, and so were kept.
     kept_manual: int = 0
+    # Copies that are new in the collection; they wait for you to sort them into decks.
+    new_copies: int = 0
 
 
 def add_to_collection(session: Session, card: Card, quantity: int = 1, is_foil: bool = False) -> CollectionEntry:
@@ -51,6 +53,7 @@ def set_quantity(session: Session, entry: CollectionEntry, quantity: int) -> Col
     if quantity < 1:
         raise ValueError("Quantity must be at least 1")
     entry.quantity = quantity
+    entry.unsorted = min(entry.unsorted, quantity)
     session.add(entry)
     session.flush()
     return entry
@@ -75,6 +78,7 @@ def set_foil(session: Session, entry: CollectionEntry, is_foil: bool) -> Collect
         session.flush()
         return entry
     other.quantity += entry.quantity
+    other.unsorted += entry.unsorted
     session.add(other)
     for pick in session.exec(select(DeckPick).where(DeckPick.collection_entry_id == entry.id)).all():
         pick.collection_entry_id = other.id
@@ -222,6 +226,7 @@ async def import_rows(
     )
     # Only now, after Scryfall answered, is anything changed: a failed lookup never empties the collection.
     seen: set[int] = set()  # entries this import has set already
+    before: dict[int, int] = {}  # copies an entry had before this import
     for row, data in zip(rows, resolved):
         if data is None:
             result.not_found.append(row.name)
@@ -232,15 +237,25 @@ async def import_rows(
         ).first()
         if entry is None:
             entry = CollectionEntry(card_id=card.id, quantity=0, is_foil=row.is_foil, imported=True)
-        elif replace and entry.id not in seen:
+        elif entry.id not in seen:
+            before[entry.id] = entry.quantity
+        if replace and entry.id is not None and entry.id not in seen:
             entry.quantity = 0  # the file says how many there are
             entry.imported = True
         entry.quantity += row.quantity
         session.add(entry)
         session.flush()
+        before.setdefault(entry.id, 0)
         seen.add(entry.id)
         result.imported_rows += 1
         result.imported_cards += row.quantity
+    # Copies the import brought in wait for you to sort them into decks.
+    for entry_id in seen:
+        entry = session.get(CollectionEntry, entry_id)
+        added = entry.quantity - before[entry_id]
+        entry.unsorted = min(entry.quantity, max(0, entry.unsorted + max(0, added)))
+        result.new_copies += max(0, added)
+        session.add(entry)
     if replace:
         for entry in session.exec(select(CollectionEntry)).all():
             if entry.id in seen:

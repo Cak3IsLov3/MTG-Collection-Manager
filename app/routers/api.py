@@ -29,6 +29,7 @@ from app.schemas import (
     DeckPrintingIn,
     DeckSaveIn,
     DeckSyncOut,
+    DeckNeedOut,
     DeckUseOut,
     ImportOut,
     PrintingOut,
@@ -72,8 +73,8 @@ def list_collection(
     colourless): cards with any of them, cards that fit `within` them, or cards with `exact`ly them."""
     rows = collection.search_rows(collection.collection_rows(session), q)
     rows = collection.filter_colors(rows, colors, color_match)
-    usage = decks.deck_usage(session)
-    wanted = decks.deck_wanted(session)
+    shared = decks.collection_decks(session)
+    usage, wanted = shared.usage, shared.wanted
     items = []
     kept = []
     for row in rows:
@@ -83,8 +84,10 @@ def list_collection(
         ]
         item.free = row.entry.quantity - sum(use.quantity for use in item.in_decks)
         item.wanted_by = [
-            DeckUseOut(id=deck.id, name=deck.name, quantity=copies) for deck, copies in wanted.get(row.entry.id, [])
+            DeckNeedOut(id=deck.id, name=deck.name, quantity=copies, entry_id=deck_entry_id)
+            for deck, copies, deck_entry_id in wanted.get(row.entry.id, [])
         ]
+        item.waiting = shared.waiting.get(row.entry.id, 0)
         if in_deck is None or (bool(item.in_decks) if in_deck else item.free > 0):
             items.append(item)
             kept.append(row)
@@ -134,6 +137,7 @@ async def import_collection(
         not_found=result.not_found,
         errors=parsed.errors,
         kept_manual=result.kept_manual,
+        new_copies=result.new_copies,
     )
 
 
@@ -465,6 +469,30 @@ def set_assigned(deck_id: int, entry_id: int, payload: DeckAssignedIn, session: 
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     session.commit()
     return _deck_detail(session, deck)
+
+
+@router.post("/decks/{deck_id}/cards/{entry_id}/new-copy", response_model=DeckDetailOut)
+def put_new_copy_in_deck(
+    deck_id: int, entry_id: int, payload: DeckPrintingIn | None = None, session: Session = Depends(get_session)
+):
+    """Put a new copy from an import, that waits to be sorted, in this deck. `collection_entry_id`
+    picks the printing; without it the printing the deck list names goes first, then the cheapest."""
+    deck = _saved_deck(session, deck_id)
+    try:
+        decks.put_new_copy_in_deck(session, deck, entry_id, payload.collection_entry_id if payload else None)
+    except decks.DeckError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    session.commit()
+    return _deck_detail(session, deck)
+
+
+@router.post("/collection/let-app-sort")
+def let_app_sort(entry_id: int | None = None, session: Session = Depends(get_session)):
+    """Stop holding new copies from imports back (all, or of one collection entry): the app
+    shares them out over the decks again."""
+    released = decks.let_app_sort(session, entry_id)
+    session.commit()
+    return {"released": released}
 
 
 @router.put("/decks/{deck_id}/basic-lands", response_model=DeckDetailOut)

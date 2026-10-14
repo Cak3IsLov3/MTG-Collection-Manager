@@ -346,7 +346,12 @@
       <td class="num">{{ row.available }}</td>
       <td class="num down">{{ row.missing }}</td>
       <td>
-        {% if row.unassigned %}<span class="badge">taken out of this deck</span>
+        {% if row.waiting and deck and row.entry_id %}
+        <span class="badge new" title="New from your import: no deck gets it until you choose">{{ row.waiting }} new cop{{ 'y' if row.waiting == 1 else 'ies' }} waiting</span>
+        <form class="inline" method="post" action="/decks/{{ deck.id }}/cards/{{ row.entry_id }}/new-copy" data-keep-scroll>
+          <button class="small" title="Put a new copy from your import in this deck">Put in this deck</button>
+        </form>
+        {% elif row.unassigned %}<span class="badge">taken out of this deck</span>
         {% if row.entry_id %}
         <button form="deck-form" name="assign" value="{{ row.entry_id }}" class="secondary small"
                 title="Use your copies for this deck again">Put back</button>

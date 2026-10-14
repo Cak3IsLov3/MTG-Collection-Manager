@@ -41,6 +41,13 @@ class DeckUseOut(BaseModel):
     quantity: int  # copies of this collection entry the deck uses
 
 
+class DeckNeedOut(BaseModel):
+    id: int
+    name: str
+    quantity: int  # copies the deck misses
+    entry_id: int  # the card in that deck, e.g. for /api/decks/{id}/cards/{entry_id}/new-copy
+
+
 class CollectionItemOut(BaseModel):
     id: int
     card: CardOut
@@ -55,8 +62,11 @@ class CollectionItemOut(BaseModel):
     in_decks: list[DeckUseOut] = []
     # Copies that are in no saved deck (filled in by the collection list).
     free: int | None = None
-    # Saved decks that still miss this card while a copy of it is free (quantity: copies the deck misses).
-    wanted_by: list[DeckUseOut] = []
+    # Saved decks that still miss this card while a copy of it is free (quantity: copies the deck misses,
+    # entry_id: the card in that deck).
+    wanted_by: list[DeckNeedOut] = []
+    # New copies from an import: no deck gets them until you put them in one (or let the app decide).
+    waiting: int = 0
 
     @classmethod
     def from_row(cls, row: CollectionRow) -> "CollectionItemOut":
@@ -85,6 +95,8 @@ class ImportOut(BaseModel):
     errors: list[str]
     # With replace=true: copies you added by hand that the file does not have; they were kept.
     kept_manual: int = 0
+    # Copies that are new in the collection; they wait for you to put them in decks.
+    new_copies: int = 0
 
 
 class WishlistAdd(BaseModel):
@@ -206,6 +218,8 @@ class DeckCardOut(BaseModel):
     used_by: list[str] = []
     value: float = 0.0
     unassigned: bool = False
+    # New copies from an import that wait for you; POST .../cards/{entry_id}/new-copy puts them in this deck.
+    waiting: int = 0
     # The printing the deck list asks for (e.g. from Archidekt), if it names one.
     wanted_set_code: str | None = None
     wanted_collector_number: str | None = None
@@ -223,6 +237,7 @@ class DeckCardOut(BaseModel):
             used_by=row.used_by, printings=[CollectionItemOut.from_row(p) for p in row.printings],
             entry_id=row.entry_id, value=row.value, chosen_collection_entry_id=row.pinned_id,
             unassigned=row.unassigned,
+            waiting=row.waiting,
             wanted_set_code=row.set_code, wanted_collector_number=row.collector_number, wanted_foil=row.foil,
             uses_wanted_printing=row.uses_wanted_printing,
             using=[DeckPickOut(quantity=n, printing=CollectionItemOut.from_row(p)) for p, n in row.picks],

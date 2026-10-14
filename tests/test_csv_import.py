@@ -107,3 +107,46 @@ async def test_replace_keeps_the_cards_you_added_yourself(client):
     assert collection() == {("Lim-Dûl's Vault", False): 1, ("Sol Ring", False): 3}
     card = client.get(f"/api/decks/{deck['id']}").json()["cards"][0]
     assert card["chosen_collection_entry_id"] == sol["id"]
+
+
+async def test_imported_cards_wait_until_you_put_them_in_a_deck(client):
+    first = client.post("/api/decks", json={"name": "First", "decklist": "1 Sol Ring"}).json()
+    second = client.post("/api/decks", json={"name": "Second", "decklist": "1 Sol Ring\n1 Fire // Ice"}).json()
+    client.post("/api/collection", json={"name": "Lim-Dûl's Vault"})  # added by hand: not held back
+
+    files = {"file": ("moxfield.csv", MOXFIELD, "text/csv")}  # 3 Sol Ring, 1 foil Fire // Ice
+    result = client.post("/api/collection/import", files=files).json()
+    assert result["new_copies"] == 4
+
+    def deck(d):
+        return {c["name"]: c for c in client.get(f"/api/decks/{d['id']}").json()["cards"]}
+
+    # No deck got the new copies on its own.
+    assert deck(first)["Sol Ring"]["missing"] == 1 and deck(second)["Sol Ring"]["missing"] == 1
+    items = {i["card"]["name"]: i for i in client.get("/api/collection").json()["items"]}
+    assert items["Sol Ring"]["waiting"] == 3 and items["Fire // Ice"]["waiting"] == 1
+    assert items["Lim-Dûl's Vault"]["waiting"] == 0
+    assert [d["name"] for d in items["Sol Ring"]["wanted_by"]] == ["First", "Second"]
+    assert 'Show the cards to sort' in client.get("/collection").text
+
+    # You put one in the second deck yourself; the first deck still waits.
+    second_sol = deck(second)["Sol Ring"]["entry_id"]
+    response = client.post(f"/api/decks/{second['id']}/cards/{second_sol}/new-copy")
+    assert response.status_code == 200
+    assert deck(second)["Sol Ring"]["missing"] == 0 and deck(first)["Sol Ring"]["missing"] == 1
+    assert client.post(f"/api/decks/{second['id']}/cards/{second_sol}/new-copy").status_code == 400  # not missing it
+    items = {i["card"]["name"]: i for i in client.get("/api/collection").json()["items"]}
+    assert items["Sol Ring"]["waiting"] == 2
+
+    # The page buttons do the same.
+    page = client.post(
+        f"/collection/{items['Fire // Ice']['id']}/sort",
+        data={"deck_id": second["id"], "deck_entry_id": deck(second)["Fire // Ice"]["entry_id"]},
+    )
+    assert "Put 1× Fire // Ice in Second" in page.text
+    assert deck(second)["Fire // Ice"]["missing"] == 0
+
+    # "Let the app decide": the rest goes to the decks automatically again.
+    assert client.post("/api/collection/let-app-sort").json() == {"released": 2}
+    assert deck(first)["Sol Ring"]["missing"] == 0
+    assert 'Show the cards to sort' not in client.get("/collection").text

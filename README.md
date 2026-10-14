@@ -29,6 +29,12 @@ price.
 
 ![Importing a CSV with "Replace my imported cards": the cards added by hand are kept](docs/collection-import.jpg)
 
+![After an import the new cards wait for you: no deck gets them until you put them in one](docs/collection-new-cards.jpg)
+
+![Sorting the new cards: every deck that needs a card, with a "Put in this deck" button, or let the app decide](docs/collection-sort.jpg)
+
+![On the deck page a missing card with a new copy waiting can be put in the deck directly](docs/deck-new-copy.jpg)
+
 ![Searching the collection: five versions of Sol Ring, told apart by set and card number](docs/collection-search.jpg)
 
 ![Which decks a card is in: the label opened for two Sol Ring printings](docs/collection-decks.jpg)
@@ -74,6 +80,7 @@ price.
 **Collection (HAVE)**
 - Add cards by name (optionally a specific set, foil or non-foil), or by set + collector number to get one exact version when a set has several
 - CSV import with automatic format detection (Archidekt, Moxfield, or any CSV with a quantity and name column); adds to your collection or replaces what earlier imports brought in. Cards you added by hand are kept; a card that is in the file too gets the file's quantity, and decks keep the printings you chose
+- You decide which deck gets new cards: copies that come in through an import are not handed out to decks automatically. "Show the cards to sort" lists the new cards that a deck needs, with a "Put in this deck" button per deck (also under Still missing on the deck page), or let the app decide per card or for all of them
 - Change the quantity of a card in place, without removing and re-adding it
 - Tick or untick "foil" on a card you already have; price and totals follow, and it merges with the same card in the other finish
 - See which decks a card is in: cards that are set aside for a deck carry an "in N decks" label that opens the list of decks, and how many copies are still free
@@ -198,6 +205,8 @@ product page. Two things to know:
 | `PUT` | `/api/decks/{id}/cards/{entry_id}/printing` | Choose which printing a deck uses for a card |
 | `POST` | `/api/decks/{id}/cards` | Add a card to a saved deck |
 | `PUT` | `/api/decks/{id}/cards/{entry_id}/assigned` | Take your copies of a card out of a deck, or put them back |
+| `POST` | `/api/decks/{id}/cards/{entry_id}/new-copy` | Put a new copy from an import, that waits to be sorted, in this deck |
+| `POST` | `/api/collection/let-app-sort` | Let the app share out the new copies from imports over the decks (`?entry_id=` for one card) |
 | `PUT` | `/api/decks/{id}/basic-lands` | Set how many of each basic land a deck runs |
 | `PUT` | `/api/decks/{id}/bracket` | Set or clear the Commander bracket of a deck |
 | `PUT` | `/api/decks/{id}/archidekt` | Let a deck follow an Archidekt deck, or stop following |

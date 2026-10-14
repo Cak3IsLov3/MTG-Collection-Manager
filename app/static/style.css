@@ -92,6 +92,10 @@ button { cursor: pointer; background: var(--accent); border-color: var(--accent)
 button.secondary { background: transparent; color: var(--text); border-color: var(--border); font-weight: 400; }
 button.small { padding: 3px 8px; font-size: 12px; }
 .deck-hit { margin-top: 2px; font-size: 11px; }
+.badge.new { border-color: var(--want); color: var(--want); margin-left: 6px; }
+.sort-notice { border-color: var(--want); }
+.sort-notice p { margin: 0 0 8px; }
+details.in-decks li form.inline { margin-left: 6px; }
 button:hover { filter: brightness(1.1); }
 
 .top-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 12px; }

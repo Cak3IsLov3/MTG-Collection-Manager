@@ -105,6 +105,8 @@ class DeckRow:
     pinned_id: int | None = None  # collection entry id the user chose, if any
     # The user took their copies out of this deck: it uses none, so the card counts as missing.
     unassigned: bool = False
+    # New copies from an import that wait for you to put them in a deck.
+    waiting: int = 0
     # The printing the deck list asks for, when it names one.
     set_code: str | None = None
     collector_number: str | None = None
@@ -393,6 +395,10 @@ class _CardPool:
     deck could have used it too. After that saved decks claim what they still
     need in the order they were created, cheapest printing first. Whatever is
     left is available to a deck you are only checking.
+
+    New copies from an import are held back from the automatic steps: they wait
+    until you put them in a deck yourself (which makes them a chosen printing)
+    or let the app decide.
     """
 
     def __init__(self, session: Session) -> None:
@@ -431,6 +437,14 @@ class _CardPool:
             for key, need in self.needs[deck.id].items():
                 if need.pin is not None and not need.unassigned:
                     self._take([need.pin], need.quantity, self.remaining, self.claims[deck.id].setdefault(key, {}))
+        # New copies from an import wait for you: the automatic steps below do not get them.
+        self.waiting: dict[int, int] = {}
+        for rows in self.printings.values():
+            for row in rows:
+                held = min(row.entry.unsorted or 0, self.remaining[row.entry.id])
+                if held > 0:
+                    self.waiting[row.entry.id] = held
+                    self.remaining[row.entry.id] -= held
         for deck in self.decks:  # then the printing a deck list names
             for key, need in self.needs[deck.id].items():
                 if need.unassigned or not need.set_code:
@@ -443,6 +457,8 @@ class _CardPool:
                 if need.unassigned:
                     continue
                 self._take(self._order(key, need), need.quantity - sum(claimed.values()), self.remaining, claimed)
+        for entry_id, held in self.waiting.items():  # free, but still waiting to be sorted
+            self.remaining[entry_id] += held
 
     @staticmethod
     def _rank(need: _Need, row: CollectionRow) -> int:
@@ -527,6 +543,7 @@ class _CardPool:
                     entry_id=need.entry_id,
                     pinned_id=need.pin,
                     unassigned=need.unassigned,
+                    waiting=sum(self.waiting.get(row.entry.id, 0) for row in printings),
                     set_code=need.set_code,
                     collector_number=need.collector_number,
                     scryfall_id=need.scryfall_id,
@@ -535,9 +552,26 @@ class _CardPool:
             )
         return sorted(rows, key=lambda row: name_key(row.name))
 
+@dataclass
+class CollectionDecks:
+    """How the collection is shared out over the decks, per collection entry id."""
+
+    usage: dict[int, list[tuple[Deck, int]]]  # decks that use its copies: [(deck, copies)]
+    wanted: dict[int, list[tuple[Deck, int, int]]]  # decks that miss the card: [(deck, copies missing, deck entry id)]
+    waiting: dict[int, int]  # new copies that wait for you to sort them into a deck
+
+
+def collection_decks(session: Session) -> CollectionDecks:
+    pool = _CardPool(session)
+    return CollectionDecks(_usage(pool), _wanted(pool), dict(pool.waiting))
+
+
 def deck_usage(session: Session) -> dict[int, list[tuple[Deck, int]]]:
     """Which saved decks use the copies of each collection entry: {collection entry id: [(deck, copies)]}."""
-    pool = _CardPool(session)
+    return _usage(_CardPool(session))
+
+
+def _usage(pool: "_CardPool") -> dict[int, list[tuple[Deck, int]]]:
     usage: dict[int, list[tuple[Deck, int]]] = {}
     for deck in pool.decks:
         per_entry: dict[int, int] = {}
@@ -550,12 +584,16 @@ def deck_usage(session: Session) -> dict[int, list[tuple[Deck, int]]]:
     return usage
 
 
-def deck_wanted(session: Session) -> dict[int, list[tuple[Deck, int]]]:
-    """Free copies a saved deck could still use: {collection entry id: [(deck, copies the deck misses)]}.
+def deck_wanted(session: Session) -> dict[int, list[tuple[Deck, int, int]]]:
+    """Free copies a saved deck could still use: {collection entry id: [(deck, copies missing, deck entry id)]}.
 
-    A deck misses a card you own a free copy of when you took the card out of that deck."""
-    pool = _CardPool(session)
-    wanted: dict[int, list[tuple[Deck, int]]] = {}
+    A deck misses a card you own a free copy of when you took the card out of that deck,
+    or when the copy is new from an import and waits for you to sort it."""
+    return _wanted(_CardPool(session))
+
+
+def _wanted(pool: "_CardPool") -> dict[int, list[tuple[Deck, int, int]]]:
+    wanted: dict[int, list[tuple[Deck, int, int]]] = {}
     for deck in pool.decks:
         for key, need in pool.needs[deck.id].items():
             missing = need.quantity - sum(pool.claims[deck.id].get(key, {}).values())
@@ -563,8 +601,59 @@ def deck_wanted(session: Session) -> dict[int, list[tuple[Deck, int]]]:
                 continue
             for row in pool.printings.get(key, []):
                 if pool.remaining[row.entry.id] > 0:
-                    wanted.setdefault(row.entry.id, []).append((deck, missing))
+                    wanted.setdefault(row.entry.id, []).append((deck, missing, need.entry_id))
     return wanted
+
+
+def put_new_copy_in_deck(
+    session: Session, deck: Deck, entry_id: int, collection_entry_id: int | None = None
+) -> str:
+    """Put new copies from an import in a deck that misses the card; returns a message for the user.
+
+    Without `collection_entry_id` the printing the deck list names goes first, then the
+    cheapest. The copies become the deck's chosen printing, so no other deck takes them.
+    """
+    entry = session.get(DeckEntry, entry_id)
+    if entry is None or entry.deck_id != deck.id:
+        raise DeckError("That card is not in this deck")
+    pool = _CardPool(session)
+    key = pool._key(entry.name)
+    need = pool.needs[deck.id][key]
+    claimed = sum(pool.claims[deck.id].get(key, {}).values())
+    missing = need.quantity if need.unassigned else need.quantity - claimed
+    if missing <= 0:
+        raise DeckError(f"{deck.name} is not missing {entry.name}")
+    candidates = [owned_id for owned_id in pool._order(key, need) if pool.waiting.get(owned_id)]
+    if collection_entry_id is not None:
+        candidates = [owned_id for owned_id in candidates if owned_id == collection_entry_id]
+    if not candidates:
+        raise DeckError(f"You have no new copy of {entry.name} waiting to be sorted")
+    chosen = candidates[0]
+    choose_printing(session, deck, entry.id, chosen)
+    if entry.unassigned:
+        entry.unassigned = False
+        session.add(entry)
+    owned = session.get(CollectionEntry, chosen)
+    copies = min(missing, pool.waiting[chosen])
+    owned.unsorted = max(0, owned.unsorted - copies)
+    session.add(owned)
+    session.flush()
+    return f"Put {copies}× {entry.name} in {deck.name}"
+
+
+def let_app_sort(session: Session, collection_entry_id: int | None = None) -> int:
+    """Stop holding new copies back (of one collection entry, or all): the app shares them out
+    over the decks again. Returns the number of copies that were waiting."""
+    statement = select(CollectionEntry).where(CollectionEntry.unsorted > 0)
+    if collection_entry_id is not None:
+        statement = statement.where(CollectionEntry.id == collection_entry_id)
+    released = 0
+    for owned in session.exec(statement).all():
+        released += owned.unsorted
+        owned.unsorted = 0
+        session.add(owned)
+    session.flush()
+    return released
 
 
 def check_deck(session: Session, cards: list[DeckCard], deck_id: int | None = None) -> list[DeckRow]:

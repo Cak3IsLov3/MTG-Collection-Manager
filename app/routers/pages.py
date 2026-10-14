@@ -92,8 +92,9 @@ def card_page(card_id: int, request: Request, session: Session = Depends(get_ses
 @router.get("/collection")
 def collection_page(request: Request, session: Session = Depends(get_session)):
     rows = collection.collection_rows(session)
+    shared = decks.collection_decks(session)
     return render(request, "collection.html", rows=rows, total=collection.collection_value(rows),
-                  usage=decks.deck_usage(session), wanted=decks.deck_wanted(session))
+                  usage=shared.usage, wanted=shared.wanted, waiting=shared.waiting)
 
 
 @router.post("/collection/add")
@@ -134,6 +135,8 @@ async def collection_import(
     stats.record_daily_total(session)
     session.commit()
     msg = f"Imported {result.imported_cards} cards ({result.imported_rows} rows, {parsed.format} format)."
+    if result.new_copies:
+        msg += f" {result.new_copies} new cop{'y' if result.new_copies == 1 else 'ies'} wait for you to put them in decks."
     if result.kept_manual:
         msg += f" Kept {result.kept_manual} cards you added yourself."
     problems = [f"not found: {name}" for name in result.not_found] + parsed.errors
@@ -141,6 +144,38 @@ async def collection_import(
         shown = "; ".join(problems[:10]) + ("; …" if len(problems) > 10 else "")
         msg += f" {len(problems)} skipped — {shown}"
     return redirect("/collection", msg, error=bool(problems))
+
+
+@router.post("/collection/{entry_id}/sort")
+def collection_sort(
+    entry_id: int, deck_id: int = Form(...), deck_entry_id: int = Form(...), session: Session = Depends(get_session)
+):
+    """Put a new copy from an import in a deck that misses it."""
+    deck = session.get(Deck, deck_id)
+    if deck is None:
+        return redirect("/collection", "That deck does not exist anymore", error=True)
+    try:
+        message = decks.put_new_copy_in_deck(session, deck, deck_entry_id, entry_id)
+    except decks.DeckError as exc:
+        return redirect("/collection", str(exc), error=True)
+    session.commit()
+    return redirect("/collection", message)
+
+
+@router.post("/collection/{entry_id}/let-app-sort")
+def collection_let_app_sort(entry_id: int, session: Session = Depends(get_session)):
+    """Stop holding the new copies of one card back: the app shares them out over the decks."""
+    released = decks.let_app_sort(session, entry_id)
+    session.commit()
+    return redirect("/collection", f"The app now shares out {released} new cop{'y' if released == 1 else 'ies'} over your decks")
+
+
+@router.post("/collection/let-app-sort")
+def collection_let_app_sort_all(session: Session = Depends(get_session)):
+    """Stop holding any new copies back."""
+    released = decks.let_app_sort(session)
+    session.commit()
+    return redirect("/collection", f"The app now shares out {released} new cop{'y' if released == 1 else 'ies'} over your decks")
 
 
 @router.post("/collection/{entry_id}/quantity")
@@ -526,6 +561,20 @@ async def saved_deck_sync(deck_id: int, session: Session = Depends(get_session))
         return redirect(f"/decks/{deck_id}", f"Could not sync: {exc}", error=True)
     session.commit()
     return redirect(f"/decks/{deck_id}", result.summary())
+
+
+@router.post("/decks/{deck_id}/cards/{entry_id}/new-copy")
+def saved_deck_new_copy(deck_id: int, entry_id: int, session: Session = Depends(get_session)):
+    """Put a new copy from an import, that waits to be sorted, in this deck."""
+    deck = session.get(Deck, deck_id)
+    if deck is None:
+        return redirect("/deck", "Deck not found", error=True)
+    try:
+        message = decks.put_new_copy_in_deck(session, deck, entry_id)
+    except decks.DeckError as exc:
+        return redirect(f"/decks/{deck_id}", str(exc), error=True)
+    session.commit()
+    return redirect(f"/decks/{deck_id}", message)
 
 
 @router.post("/deck/sync")

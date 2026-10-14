@@ -29,6 +29,9 @@ class CollectionEntry(SQLModel, table=True):
     added_at: dt.datetime = Field(default_factory=utcnow)
     # Came from a CSV import. Importing with "replace" only replaces these; cards added by hand stay.
     imported: bool = False
+    # Copies from an import that wait for you to sort them into decks: the app does not hand
+    # them out to decks on its own until you put them in a deck or let it decide.
+    unsorted: int = 0
 
 
 class WishlistEntry(SQLModel, table=True):
