@@ -78,3 +78,32 @@ async def test_import_twice_adds_up_unless_replace(session, scryfall):
 
     await import_rows(session, scryfall, rows, replace=True)
     assert sum(row.entry.quantity for row in collection_rows(session)) == 4
+
+
+async def test_replace_keeps_the_cards_you_added_yourself(client):
+    def collection():
+        return {
+            (i["card"]["name"], i["is_foil"]): i["quantity"] for i in client.get("/api/collection").json()["items"]
+        }
+
+    client.post("/api/collection", json={"name": "Lim-Dûl's Vault"})  # added by hand, not in the file
+    client.post("/api/collection", json={"name": "Sol Ring", "set_code": "cmm", "quantity": 1})  # also in the file
+    files = {"file": ("moxfield.csv", MOXFIELD, "text/csv")}
+    result = client.post("/api/collection/import", params={"replace": True}, files=files).json()
+    assert result["kept_manual"] == 1
+    # The file's quantity is taken over for Sol Ring, so it is not counted twice.
+    assert collection() == {("Lim-Dûl's Vault", False): 1, ("Sol Ring", False): 3, ("Fire // Ice", True): 1}
+
+    # Importing again with replace changes nothing, and still keeps the hand-added card.
+    client.post("/api/collection/import", params={"replace": True}, files=files)
+    assert collection() == {("Lim-Dûl's Vault", False): 1, ("Sol Ring", False): 3, ("Fire // Ice", True): 1}
+
+    # A card that is no longer in the file goes, a deck that used an imported card keeps its choice.
+    deck = client.post("/api/decks", json={"name": "D", "decklist": "1 Sol Ring"}).json()
+    sol = next(i for i in client.get("/api/collection").json()["items"] if i["card"]["name"] == "Sol Ring")
+    client.put(f"/api/decks/{deck['id']}/cards/{deck['cards'][0]['entry_id']}/printing", json={"collection_entry_id": sol["id"]})
+    only_sol = {"file": ("moxfield.csv", MOXFIELD.rsplit("\n", 2)[0] + "\n", "text/csv")}
+    client.post("/api/collection/import", params={"replace": True}, files=only_sol)
+    assert collection() == {("Lim-Dûl's Vault", False): 1, ("Sol Ring", False): 3}
+    card = client.get(f"/api/decks/{deck['id']}").json()["cards"][0]
+    assert card["chosen_collection_entry_id"] == sol["id"]

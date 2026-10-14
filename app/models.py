@@ -27,6 +27,8 @@ class CollectionEntry(SQLModel, table=True):
     quantity: int = 1
     is_foil: bool = False
     added_at: dt.datetime = Field(default_factory=utcnow)
+    # Came from a CSV import. Importing with "replace" only replaces these; cards added by hand stay.
+    imported: bool = False
 
 
 class WishlistEntry(SQLModel, table=True):

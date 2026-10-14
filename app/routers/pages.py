@@ -134,6 +134,8 @@ async def collection_import(
     stats.record_daily_total(session)
     session.commit()
     msg = f"Imported {result.imported_cards} cards ({result.imported_rows} rows, {parsed.format} format)."
+    if result.kept_manual:
+        msg += f" Kept {result.kept_manual} cards you added yourself."
     problems = [f"not found: {name}" for name in result.not_found] + parsed.errors
     if problems:
         shown = "; ".join(problems[:10]) + ("; …" if len(problems) > 10 else "")

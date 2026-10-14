@@ -83,6 +83,8 @@ class ImportOut(BaseModel):
     imported_cards: int
     not_found: list[str]
     errors: list[str]
+    # With replace=true: copies you added by hand that the file does not have; they were kept.
+    kept_manual: int = 0
 
 
 class WishlistAdd(BaseModel):

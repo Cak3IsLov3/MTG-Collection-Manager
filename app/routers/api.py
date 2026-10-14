@@ -116,7 +116,8 @@ async def import_collection(
     session: Session = Depends(get_session),
     scryfall: ScryfallClient = Depends(get_scryfall),
 ):
-    """Importing adds to the collection; `?replace=true` replaces it with the file's contents."""
+    """Importing adds to the collection; `?replace=true` replaces what earlier imports brought in
+    with the file's contents. Cards added by hand stay."""
     try:
         parsed = parse_collection_csv(await file.read())
         result = await collection.import_rows(session, scryfall, parsed.rows, replace)
@@ -132,6 +133,7 @@ async def import_collection(
         imported_cards=result.imported_cards,
         not_found=result.not_found,
         errors=parsed.errors,
+        kept_manual=result.kept_manual,
     )
 
 

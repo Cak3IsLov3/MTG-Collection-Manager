@@ -67,7 +67,7 @@ price.
 
 **Collection (HAVE)**
 - Add cards by name (optionally a specific set, foil or non-foil), or by set + collector number to get one exact version when a set has several
-- CSV import with automatic format detection (Archidekt, Moxfield, or any CSV with a quantity and name column); adds to your collection or replaces it
+- CSV import with automatic format detection (Archidekt, Moxfield, or any CSV with a quantity and name column); adds to your collection or replaces what earlier imports brought in. Cards you added by hand are kept; a card that is in the file too gets the file's quantity, and decks keep the printings you chose
 - Change the quantity of a card in place, without removing and re-adding it
 - Tick or untick "foil" on a card you already have; price and totals follow, and it merges with the same card in the other finish
 - See which decks a card is in: cards that are set aside for a deck carry an "in N decks" label that opens the list of decks, and how many copies are still free
@@ -171,7 +171,7 @@ product page. Two things to know:
 | Method | Path | |
 | --- | --- | --- |
 | `GET` / `POST` | `/api/collection` | List the collection (`?q=` searches name and set, `?in_deck=false` keeps the cards that are in no deck yet, `?colors=WU&color_match=any|within|exact` filters on colour) / add a card and fetch its price |
-| `POST` | `/api/collection/import` | Upload an Archidekt or Moxfield CSV |
+| `POST` | `/api/collection/import` | Upload an Archidekt or Moxfield CSV (`?replace=true` replaces the earlier imported cards, hand-added cards stay) |
 | `PATCH` / `DELETE` | `/api/collection/{id}` | Change the quantity or the foil finish of an entry / remove it |
 | `GET` / `POST` | `/api/wishlist` | List the wishlist / watch a card with a max price |
 | `POST` | `/api/wishlist/{id}/purchase` | Move a card from WANT to HAVE |

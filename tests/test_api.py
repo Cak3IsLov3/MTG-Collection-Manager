@@ -46,7 +46,7 @@ def test_csv_import_endpoint(client):
     response = client.post("/api/collection/import", files={"file": ("cards.csv", MOXFIELD.encode(), "text/csv")})
     assert response.status_code == 200
     assert response.json() == {
-        "format": "moxfield", "imported_rows": 2, "imported_cards": 4, "not_found": [], "errors": [],
+        "format": "moxfield", "imported_rows": 2, "imported_cards": 4, "not_found": [], "errors": [], "kept_manual": 0,
     }
     assert client.get("/api/collection").json()["total_value"] == 5.3  # 3 x 1.50 + foil 0.80
 

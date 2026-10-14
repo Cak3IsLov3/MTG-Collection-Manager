@@ -29,6 +29,8 @@ class ImportResult:
     imported_rows: int = 0
     imported_cards: int = 0
     not_found: list[str] = field(default_factory=list)
+    # With replace: cards you added by hand that the file does not have, and so were kept.
+    kept_manual: int = 0
 
 
 def add_to_collection(session: Session, card: Card, quantity: int = 1, is_foil: bool = False) -> CollectionEntry:
@@ -205,23 +207,49 @@ async def add_card_by_name(
 async def import_rows(
     session: Session, scryfall: ScryfallClient, rows: list[ImportRow], replace: bool = False
 ) -> ImportResult:
-    """Add rows to the collection; with `replace` the import becomes the whole collection."""
+    """Add rows to the collection.
+
+    With `replace` the file replaces what earlier imports brought in, while cards added by
+    hand stay. A card in the file that you also added by hand counts once: the file's
+    quantity is taken over. Entries are updated in place, so decks keep the printings you
+    chose for them.
+    """
     result = ImportResult()
     resolved = await scryfall.resolve(rows)
     await scryfall.fill_missing_prices(
         [data for data in resolved if data is not None],
         {data.scryfall_id for row, data in zip(rows, resolved) if data is not None and row.is_foil},
     )
-    if replace:
-        # Only after Scryfall answered, so a failed lookup never empties the collection.
-        for entry in session.exec(select(CollectionEntry)).all():
-            session.delete(entry)
-        session.flush()
+    # Only now, after Scryfall answered, is anything changed: a failed lookup never empties the collection.
+    seen: set[int] = set()  # entries this import has set already
     for row, data in zip(rows, resolved):
         if data is None:
             result.not_found.append(row.name)
             continue
-        add_to_collection(session, store_scryfall_card(session, data), row.quantity, row.is_foil)
+        card = store_scryfall_card(session, data)
+        entry = session.exec(
+            select(CollectionEntry).where(CollectionEntry.card_id == card.id, CollectionEntry.is_foil == row.is_foil)
+        ).first()
+        if entry is None:
+            entry = CollectionEntry(card_id=card.id, quantity=0, is_foil=row.is_foil, imported=True)
+        elif replace and entry.id not in seen:
+            entry.quantity = 0  # the file says how many there are
+            entry.imported = True
+        entry.quantity += row.quantity
+        session.add(entry)
+        session.flush()
+        seen.add(entry.id)
         result.imported_rows += 1
         result.imported_cards += row.quantity
+    if replace:
+        for entry in session.exec(select(CollectionEntry)).all():
+            if entry.id in seen:
+                continue
+            if entry.imported:  # brought in by an earlier import and no longer in the file
+                for pick in session.exec(select(DeckPick).where(DeckPick.collection_entry_id == entry.id)).all():
+                    session.delete(pick)
+                session.delete(entry)
+            else:
+                result.kept_manual += entry.quantity
+        session.flush()
     return result
