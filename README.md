@@ -37,6 +37,8 @@ price.
 
 ![Printings without a price of their own borrow one from another printing, marked ≈ SET (Dragon Egg and Fellwar Stone)](docs/collection-borrowed.jpg)
 
+![Searching the saved decks for a card: every deck that runs Sol Ring, with the matching card under its name](docs/decks-search.jpg)
+
 ![The saved decks filtered on bracket 3: two of the six decks are left](docs/decks-filter.jpg)
 
 ![The saved decks filtered on colour: the decks with green in them, each with its colours](docs/decks-colors.jpg)
@@ -105,6 +107,7 @@ price.
 - One "Save changes" button per deck: bracket, basic lands and chosen printings are edited freely and stored together, with a reminder while there are unsaved changes
 - Commander bracket per deck: taken from Archidekt when the deck has one, and changeable at any time
 - Filter the list of saved decks by bracket, or show only the decks that are complete
+- Search the saved decks on deck name or on a card: "arcane signet" lists every deck that runs it, with the matching cards under the deck name
 - Filter the saved decks on colour: every deck shows the colour identity of its cards, and you pick decks with exactly, any of, or within the chosen colours
 - Sort the saved decks by how many cards they still miss, or by name, bracket, size, progress or value
 - Follow an Archidekt deck: a deck saved from an Archidekt link (or given one later) is brought up to date when the deck changes there, automatically every few hours or with "Sync now"; printings you chose and cards you took out are kept
@@ -186,7 +189,7 @@ product page. Two things to know:
 | `GET` | `/api/cards/{id}/prices` | Price history of one card |
 | `GET` | `/api/summary` | Collection value vs. wishlist cost |
 | `POST` | `/api/decks/check` | Have/missing overview for a decklist or Archidekt URL |
-| `GET` / `POST` | `/api/decks` | List saved decks (`?bracket=`, `?colors=WG&color_match=exact\|any\|within`) / save a deck and set its cards aside |
+| `GET` / `POST` | `/api/decks` | List saved decks (`?q=` deck name or card, `?bracket=`, `?colors=WG&color_match=exact\|any\|within`) / save a deck and set its cards aside |
 | `GET` | `/api/decks/random` | Pick random decks (`count`, `bracket`, `complete_only`) |
 | `GET` / `DELETE` | `/api/decks/{id}` | A saved deck with its cards / delete it and free its cards |
 | `PUT` | `/api/decks/{id}/cards/{entry_id}/printing` | Choose which printing a deck uses for a card |

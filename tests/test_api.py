@@ -470,3 +470,22 @@ def test_filter_decks_on_colour(client):
     client.post(f"/api/decks/{artifacts['id']}/cards", json={"name": "Fire // Ice"})
     assert names()["Artifacts"] == "UR"
     assert grixis["colors"] is None  # worked out when the decks are listed
+
+
+def test_search_decks_on_name_or_card(client):
+    client.post("/api/decks", json={"name": "Rabbit Tribal", "decklist": "1 Sol Ring\n1 Lim-Dûl's Vault\n10 Plains"})
+    client.post("/api/decks", json={"name": "Fire Nation", "decklist": "1 Fire // Ice\n1 Sol Ring"})
+
+    def names(q):
+        return [d["name"] for d in client.get("/api/decks", params={"q": q}).json()]
+
+    assert names("rabbit") == ["Rabbit Tribal"]  # deck name
+    assert names("sol ring") == ["Rabbit Tribal", "Fire Nation"]  # a card in both decks
+    assert names("lim-dul") == ["Rabbit Tribal"]  # accents do not matter
+    assert names("ice") == ["Fire Nation"]
+    assert names("plains") == ["Rabbit Tribal"]  # basic lands count too
+    assert names("nothing like this") == []
+
+    page = client.get("/deck", params={"q": "sol"}).text
+    assert 'id="deck-list-search"' in page and 'value="sol"' in page
+    assert 'data-card-names="Lim-Dûl&#39;s Vault|Sol Ring|Plains"' in page

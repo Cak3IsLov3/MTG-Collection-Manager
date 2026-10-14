@@ -332,7 +332,7 @@ async def deck_page(
     await _fill_deck_colors(session, scryfall)
     summaries = decks.deck_summaries(session)
     return render(request, "deck.html", rows=None, deck=None, summaries=summaries, brackets=decks.BRACKETS,
-                  deck_data=_deck_data(summaries))
+                  deck_data=_deck_data(summaries), card_names=decks.deck_card_names(session))
 
 
 async def _fill_deck_colors(session: Session, scryfall: ScryfallClient) -> None:
@@ -380,6 +380,7 @@ async def deck_check(
     except decks.DeckError as exc:
         return render(request, "deck.html", rows=None, deck=None, summaries=summaries, decklist=decklist,
                       archidekt_url=archidekt_url, brackets=decks.BRACKETS, deck_data=_deck_data(summaries),
+                      card_names=decks.deck_card_names(session),
                       msg=str(exc), error=True)
     name, cards = loaded.name, loaded.cards
     if name is None and uploaded:
@@ -393,6 +394,7 @@ async def deck_check(
     return render(request, "deck.html", rows=rows, deck=None, summaries=summaries, deck_name=name,
                   decklist=_decklist_text(rows), archidekt_url=archidekt_url, left_out=loaded.left_out,
                   bracket=loaded.bracket, brackets=decks.BRACKETS, deck_data=_deck_data(summaries),
+                  card_names=decks.deck_card_names(session),
                   archidekt_id=loaded.archidekt_id,
                   include_basics=include_basics, include_tokens=include_tokens)
 

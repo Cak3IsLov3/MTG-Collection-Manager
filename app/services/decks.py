@@ -23,7 +23,7 @@ from app.models import (
     WishlistEntry,
 )
 from app.scryfall import CardRef, ScryfallClient, name_key
-from app.services.collection import CollectionRow, collection_rows, find_card
+from app.services.collection import CollectionRow, _fold, collection_rows, find_card
 from app.services.pricing import store_scryfall_card
 from app.services.wishlist import add_to_wishlist
 
@@ -754,6 +754,29 @@ async def sync_all_decks(session: Session, pause: float = 1.0) -> list[SyncResul
             logger.warning("Could not sync deck %s with Archidekt: %s", deck.name, exc)
             results.append(SyncResult(deck, error=str(exc)))
     return results
+
+
+def deck_card_names(session: Session) -> dict[int, list[str]]:
+    """The card names of every saved deck, basic lands included: {deck id: [names]}."""
+    names: dict[int, list[str]] = {}
+    for entry in session.exec(select(DeckEntry).order_by(DeckEntry.name)).all():
+        names.setdefault(entry.deck_id, []).append(entry.name)
+    for land in session.exec(select(DeckBasicLand).order_by(DeckBasicLand.name)).all():
+        names.setdefault(land.deck_id, []).append(land.name)
+    return names
+
+
+def search_decks(summaries: list[DeckSummary], card_names: dict[int, list[str]], query: str | None) -> list[DeckSummary]:
+    """Decks whose name, or one of whose cards, contains every word of `query` (accents do not matter)."""
+    words = _fold(query or "").split()
+    if not words:
+        return summaries
+    return [
+        summary
+        for summary in summaries
+        if all(word in _fold(summary.deck.name) for word in words)
+        or any(all(word in _fold(name) for word in words) for name in card_names.get(summary.deck.id, []))
+    ]
 
 
 async def fill_deck_colors(session: Session, scryfall: ScryfallClient) -> int:

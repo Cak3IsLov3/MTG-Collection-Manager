@@ -346,18 +346,23 @@ async def list_decks(
     bracket: int | None = None,
     colors: str | None = None,
     color_match: Literal["any", "within", "exact"] = "any",
+    q: str | None = None,
     session: Session = Depends(get_session),
     scryfall: ScryfallClient = Depends(get_scryfall),
 ):
     """The saved decks; `bracket` (1-5) keeps only the decks in that Commander bracket, `colors`
-    (letters from WUBRG, C for colourless) the decks with any, `within` or `exact`ly those colours."""
+    (letters from WUBRG, C for colourless) the decks with any, `within` or `exact`ly those colours,
+    and `q` the decks whose name or one of whose cards contains every word."""
     try:
         await decks.fill_deck_colors(session, scryfall)
     except ScryfallError:
         session.rollback()  # the list still works, new decks just have no colours yet
+    summaries = decks.deck_summaries(session)
+    if q:
+        summaries = decks.search_decks(summaries, decks.deck_card_names(session), q)
     return [
         _deck_out(summary)
-        for summary in decks.deck_summaries(session)
+        for summary in summaries
         if (bracket is None or summary.deck.bracket == bracket)
         and (not colors or collection.color_match(summary.deck.colors, colors, color_match))
     ]

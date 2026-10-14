@@ -91,6 +91,7 @@ textarea { width: 100%; min-height: 180px; font-family: ui-monospace, Consolas, 
 button { cursor: pointer; background: var(--accent); border-color: var(--accent); color: #1a1205; font-weight: 600; }
 button.secondary { background: transparent; color: var(--text); border-color: var(--border); font-weight: 400; }
 button.small { padding: 3px 8px; font-size: 12px; }
+.deck-hit { margin-top: 2px; font-size: 11px; }
 button:hover { filter: brightness(1.1); }
 
 .top-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 12px; }
