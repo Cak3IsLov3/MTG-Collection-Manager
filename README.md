@@ -138,9 +138,9 @@ price.
 - Saved decks: save a deck and the cards you own are set aside for it. Every copy can only be in one deck, so a second deck does not count the same Sol Ring again; it shows which deck is using it instead
 - Basic lands and tokens are left out of the tracked cards by default, so they do not show up as missing or end up on your wishlist; tick a box to include them
 - Deck size: basic lands count towards the cards of a deck, so you can see at a glance whether a Commander deck has exactly 100 cards, or how many it is short or over
-- Basic lands per deck: fill in how many of each basic land a deck runs, whatever the printing. Imported decks start with the numbers from the list, and older decks can move their lands over in one click
+- Basic lands per deck: fill in how many of each basic land a deck runs (shown as land cards), whatever the printing. Imported decks start with the numbers from the list, and older decks can move their lands over in one click
 - Deck randomizer: can't decide what to play? Pick a random deck, or a different one for every player at the table, optionally only from one bracket or only decks you can build right now, and with a bigger chance for the decks you have not played for a while
-- Tokens per deck: which tokens and emblems a deck makes and how many (from the deck list, or added by hand), in alphabetical order with their pictures and tick boxes for packing them for game night. There are often several tokens with one name (many Angels): "other version" shows them all to pick from
+- Tokens per deck: which tokens, emblems and helper cards (Morph, Manifest) a deck needs and how many (from the deck list, or added by hand), in alphabetical order with their pictures (click a number to change it) and tick boxes for packing them for game night. There are often several tokens with one name (many Angels): "other version" shows them all to pick from
 - Mana curve and card types per deck: cards per mana value, the average mana value, how many creatures, instants, lands and so on, and how many cards ramp, draw, remove or wipe the board (guessed from the rules text)
 - Proxies: a printable sheet of the cards a deck still misses (or the whole deck) at real card size, nine to an A4 page, for play-testing
 - Export a deck as a text list for Archidekt or Moxfield, with the commander first and its tokens at the end

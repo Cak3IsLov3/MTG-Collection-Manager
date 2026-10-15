@@ -763,6 +763,20 @@ def add_token(session: Session, deck: Deck, name: str, quantity: int = 1) -> Dec
     return token
 
 
+def set_token_quantity(session: Session, deck: Deck, token_id: int, quantity: int) -> DeckToken:
+    """Change how many of a token a deck needs (at least one; remove it to take it off the list)."""
+    token = session.get(DeckToken, token_id)
+    if token is None or token.deck_id != deck.id:
+        raise DeckError("That token is not in this deck")
+    if quantity < 1:
+        raise DeckError("A token needs a quantity of at least 1; use remove to take it off the list")
+    token.quantity = quantity
+    session.add(token)
+    session.flush()
+    _count_named_tokens(session, deck)
+    return token
+
+
 def remove_token(session: Session, deck: Deck, token_id: int) -> None:
     token = session.get(DeckToken, token_id)
     if token is None or token.deck_id != deck.id:

@@ -314,17 +314,18 @@
     The card is only added to this deck. If you own it, it is set aside for the deck; otherwise it shows up under Still missing.</p>
 </div>
 
+{% macro land_picture(land) %}{% if (land_images | default({})).get(land) %}<img src="{{ land_images[land] }}" alt="{{ land }}" title="{{ land }}" loading="lazy">{% else %}<span class="land-name">{{ land | replace('Snow-Covered ', 'Snow ') }}</span>{% endif %}{% endmacro %}
 <div class="panel">
   <h2>Basic lands <span class="muted">· {{ basics }} in this deck</span></h2>
   <div class="row">
     {% for land in basic_names[:6] %}
-    <label>{{ land }}<input class="qty" name="basic:{{ land }}" type="number" min="0" step="1" value="{{ left_out.basics.get(land, 0) }}" form="deck-form"></label>
+    <label class="land-pick">{{ land_picture(land) }}<input class="qty" name="basic:{{ land }}" type="number" min="0" step="1" value="{{ left_out.basics.get(land, 0) }}" form="deck-form" aria-label="{{ land }}"></label>
     {% endfor %}
     <details class="snow" {{ 'open' if left_out.basics.keys() | select('in', basic_names[6:]) | list }}>
       <summary class="muted">Snow-covered</summary>
       <div class="row">
         {% for land in basic_names[6:] %}
-        <label>{{ land | replace('Snow-Covered ', '') }}<input class="qty" name="basic:{{ land }}" type="number" min="0" step="1" value="{{ left_out.basics.get(land, 0) }}" form="deck-form"></label>
+        <label class="land-pick">{{ land_picture(land) }}<input class="qty" name="basic:{{ land }}" type="number" min="0" step="1" value="{{ left_out.basics.get(land, 0) }}" form="deck-form" aria-label="{{ land }}"></label>
         {% endfor %}
       </div>
     </details>
@@ -345,7 +346,12 @@
     {% for token in deck_token_list %}
     <div class="token-card">
       {% if token.image_url %}<img src="{{ token.image_url }}" alt="{{ token.name }}" loading="lazy">{% else %}<div class="token-blank">{{ token.name }}</div>{% endif %}
-      <label class="check"><input type="checkbox" class="token-packed" data-token="{{ token.id }}">&nbsp;{{ token.quantity }}× {{ token.name }}</label>
+      <label class="check"><input type="checkbox" class="token-packed" data-token="{{ token.id }}">&nbsp;{{ token.name }}</label>
+      <form class="inline token-qty" method="post" action="/decks/{{ deck.id }}/tokens/{{ token.id }}/quantity" data-keep-scroll>
+        <button type="button" class="qty-text" title="Click to change how many">{{ token.quantity }}×</button>
+        <input class="qty" name="quantity" type="number" min="1" step="1" value="{{ token.quantity }}" required hidden
+               aria-label="How many {{ token.name }} tokens">
+      </form>
       <form class="token-version" method="post" action="/decks/{{ deck.id }}/tokens/{{ token.id }}/version" data-keep-scroll
             data-name="{{ token.name }}" data-current="{{ token.scryfall_id or '' }}">
         <button type="button" class="link small choose-token" title="There can be several tokens with this name: pick the right one">other version</button>
@@ -551,6 +557,27 @@
       opener.textContent = "could not load the versions, try again";
     }
   });
+
+  // Token quantities read as text ("5×"); click one to change it. Enter or leaving the field saves,
+  // Escape keeps the old number.
+  for (const form of document.querySelectorAll(".token-qty")) {
+    const text = form.querySelector(".qty-text");
+    const field = form.querySelector("input");
+    const close = () => { field.value = field.defaultValue; field.hidden = true; text.hidden = false; };
+    text.addEventListener("click", () => {
+      text.hidden = true;
+      field.hidden = false;
+      field.focus();
+      field.select();
+    });
+    field.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") { event.preventDefault(); close(); text.focus(); }
+    });
+    field.addEventListener("blur", () => {
+      if (field.value && Number(field.value) >= 1 && field.value !== field.defaultValue) form.requestSubmit();
+      else close();
+    });
+  }
 
   const unpack = document.getElementById("tokens-unpack");
   if (unpack) {

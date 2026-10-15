@@ -601,6 +601,18 @@ async def set_commander(
     return _deck_detail(session, deck)
 
 
+@router.put("/decks/{deck_id}/tokens/{token_id}/quantity", response_model=DeckDetailOut)
+def set_token_quantity(deck_id: int, token_id: int, payload: dict[str, int], session: Session = Depends(get_session)):
+    """Change how many of a token a deck needs: {"quantity": 3}."""
+    deck = _saved_deck(session, deck_id)
+    try:
+        decks.set_token_quantity(session, deck, token_id, int(payload.get("quantity", 0)))
+    except decks.DeckError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    session.commit()
+    return _deck_detail(session, deck)
+
+
 @router.put("/decks/{deck_id}/tokens", response_model=DeckDetailOut)
 def set_uses_tokens(deck_id: int, payload: DeckTokensIn, session: Session = Depends(get_session)):
     """Mark a deck as one that uses tokens, or not; null goes back to what its deck list says."""

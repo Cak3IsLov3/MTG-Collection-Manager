@@ -12,8 +12,9 @@ from app.services.decks import DeckRow, _names, deck_tokens
 # A card counts as its first type in this list ("Artifact Creature" is a creature).
 TYPES = ["Creature", "Planeswalker", "Battle", "Instant", "Sorcery", "Artifact", "Enchantment", "Land"]
 ROLES = {"ramp": "Ramp", "draw": "Card draw", "removal": "Removal", "wipe": "Board wipe"}
-# Tokens and emblems ("Elspeth, Sun's Champion Emblem") are extras on Scryfall.
-TOKEN_QUERY = "(t:token or t:emblem)"
+# Tokens, emblems ("Elspeth, Sun's Champion Emblem") and helper cards such as Morph and Manifest
+# (a "Creature" in the shape of a token) are extras on Scryfall.
+TOKEN_QUERY = "(t:token or t:emblem or layout:token or layout:emblem or layout:double_faced_token)"
 
 _RAMP = re.compile(r"add \{|add (one|two|three) mana|search your library for (a|up to \w+) .*lands?\b.*onto the battlefield", re.I)
 _DRAW = re.compile(r"\bdraws? (a|two|three|four|x|that many) cards?\b|\bdraw cards\b", re.I)
@@ -101,6 +102,19 @@ async def fill_card_info(session: Session, scryfall: ScryfallClient, deck_id: in
         session.add(token)
     session.commit()
     return len(entries)
+
+
+_land_images: dict[str, str] = {}
+
+
+async def basic_land_images(scryfall: ScryfallClient) -> dict[str, str]:
+    """A picture of every basic land ("Plains" -> image url), looked up once and then kept."""
+    from app.services.decks import BASIC_LAND_NAMES
+
+    if not _land_images:
+        found, _ = await scryfall.get_collection([{"name": name} for name in BASIC_LAND_NAMES])
+        _land_images.update({data.name: data.image_url for data in found if data.image_url})
+    return _land_images
 
 
 @dataclass

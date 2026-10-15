@@ -87,6 +87,15 @@ h3.value-title { margin: 14px 0 6px; font-size: 15px; }
 table.compact td { padding: 4px 8px; }
 .roles .badge { margin: 2px 4px 2px 0; }
 .token-version { margin: 0; }
+label.land-pick { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+label.land-pick img { width: 92px; aspect-ratio: 5 / 7; border-radius: 5px; }
+label.land-pick input.qty { width: 64px; text-align: center; }
+.land-name { display: flex; align-items: center; justify-content: center; width: 92px; aspect-ratio: 5 / 7;
+  border: 1px dashed var(--border); border-radius: 5px; font-size: 12px; text-align: center; }
+.token-qty { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; color: var(--muted); }
+.token-qty input.qty { width: 56px; padding: 3px 6px; }
+.qty-text { all: unset; cursor: pointer; color: var(--text); font-size: 14px; font-weight: 600; border-bottom: 1px dashed var(--muted); }
+.qty-text:hover, .qty-text:focus-visible { color: var(--accent); border-bottom-color: var(--accent); }
 .token-choices { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; margin: 6px 0;
   width: min(640px, 80vw); position: relative; z-index: 2; padding: 8px; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; }
 .token-choice { all: unset; cursor: pointer; display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: var(--muted); }

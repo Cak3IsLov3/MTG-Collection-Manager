@@ -564,6 +564,7 @@ async def saved_deck_page(
     return render(request, "deck.html", rows=decks.saved_deck_rows(session, deck), deck=deck, uses_tokens=summary.uses_tokens,
                   value_history=decks.deck_value_history(session, deck),
                   deck_token_list=decks.deck_tokens(session, deck), deck_stats=deck_insights.deck_stats(session, deck),
+                  land_images=await _land_images(scryfall),
                   deck_plays=games.deck_plays(session).get(deck.id), deck_games=games.recent_games(session, 5, deck.id),
                   results=games.RESULTS, today=dt.date.today().isoformat(),
                   summaries=summaries, left_out=decks.deck_left_out(session, deck),
@@ -696,6 +697,21 @@ def saved_deck_add_token(
     return redirect(f"/decks/{deck_id}", f"Added {quantity}× {token.name} to the tokens of this deck")
 
 
+@router.post("/decks/{deck_id}/tokens/{token_id}/quantity")
+def saved_deck_token_quantity(
+    deck_id: int, token_id: int, quantity: int = Form(...), session: Session = Depends(get_session)
+):
+    deck = session.get(Deck, deck_id)
+    if deck is None:
+        return redirect("/deck", "Deck not found", error=True)
+    try:
+        token = decks.set_token_quantity(session, deck, token_id, quantity)
+    except decks.DeckError as exc:
+        return redirect(f"/decks/{deck_id}", str(exc), error=True)
+    session.commit()
+    return redirect(f"/decks/{deck_id}", f"{token.name}: {token.quantity} now")
+
+
 @router.post("/decks/{deck_id}/tokens/{token_id}/delete")
 def saved_deck_remove_token(deck_id: int, token_id: int, session: Session = Depends(get_session)):
     deck = session.get(Deck, deck_id)
@@ -724,6 +740,15 @@ async def saved_deck_token_version(
         return redirect(f"/decks/{deck_id}", f"Could not change the token: {exc}", error=True)
     session.commit()
     return redirect(f"/decks/{deck_id}", f"Changed the {token.name} token")
+
+
+async def _land_images(scryfall: ScryfallClient) -> dict[str, str]:
+    """Pictures of the basic lands; without Scryfall the lands are shown by name."""
+    try:
+        return await deck_insights.basic_land_images(scryfall)
+    except ScryfallError as exc:
+        logger.warning("Could not fetch the basic land pictures: %s", exc)
+        return {}
 
 
 def _download_name(name: str) -> str:

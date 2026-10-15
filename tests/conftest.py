@@ -48,6 +48,7 @@ CARDS = [
     scryfall_json("Elspeth, Sun's Champion Emblem", "id-elspeth-emblem", "tths", eur=None,
                   type_line="Emblem — Elspeth", layout="emblem"),
     scryfall_json("Cat Beast", "id-cat-beast", "tc13", eur=None, type_line="Token Creature — Cat Beast", layout="token"),
+    scryfall_json("Morph", "id-morph", "tktk", eur=None, type_line="Creature", layout="token", power="2", toughness="2"),
     scryfall_json("Angel", "id-angel-44", "tdmu", eur=None, type_line="Token Creature — Angel", layout="token",
                   power="4", toughness="4", colors=["W"], oracle_text="Flying"),
     scryfall_json("Angel", "id-angel-11", "tsnc", eur=None, type_line="Token Creature — Angel", layout="token",

@@ -59,12 +59,17 @@ def test_token_list(client, session):
     session.commit()
 
     page = client.get(f"/decks/{deck.id}").text  # looks up the token picture
-    assert "5× Treasure" in page and "https://img.example/id-treasure.jpg" in page and "5 to bring" in page
+    assert 'value="5" required' in page and 'aria-label="How many Treasure tokens"' in page and "https://img.example/id-treasure.jpg" in page and "5 to bring" in page
 
     client.post(f"/decks/{deck.id}/tokens", data={"name": "Saproling Token", "quantity": "2"})
     detail = client.get(f"/api/decks/{deck.id}").json()
     assert detail["token_count"] == 7 and detail["uses_tokens"]
     token_id = next(t.id for t in __import__("app.services.decks", fromlist=["deck_tokens"]).deck_tokens(session, deck) if t.name == "Saproling")
+    # A typo in the quantity is fixed in place.
+    response = client.post(f"/decks/{deck.id}/tokens/{token_id}/quantity", data={"quantity": "4"})
+    assert "Saproling: 4 now" in response.text
+    assert client.get(f"/api/decks/{deck.id}").json()["token_count"] == 9
+    assert "at least 1" in client.post(f"/decks/{deck.id}/tokens/{token_id}/quantity", data={"quantity": "0"}).text
     client.post(f"/decks/{deck.id}/tokens/{token_id}/delete")
     assert client.get(f"/api/decks/{deck.id}").json()["token_count"] == 5
 
@@ -147,9 +152,10 @@ def test_choose_which_token(client, session):
 
 def test_tokens_in_alphabetical_order_with_emblems(client):
     deck = client.post("/api/decks", json={"name": "Tokens", "decklist": "1 Sol Ring"}).json()
-    for name in ("Treasure", "cat beast", "Elspeth, Sun's Champion Emblem"):
+    for name in ("Treasure", "cat beast", "Elspeth, Sun's Champion Emblem", "Morph"):
         client.post(f"/decks/{deck['id']}/tokens", data={"name": name, "quantity": "1"})
     page = client.get(f"/decks/{deck['id']}").text
     # Scryfall's spelling is taken over, emblems are found too, and the list is in alphabetical order.
-    assert page.index("1× Cat Beast") < page.index("1× Elspeth, Sun&#39;s Champion Emblem") < page.index("1× Treasure")
+    assert page.index("How many Cat Beast tokens") < page.index("How many Elspeth, Sun&#39;s Champion Emblem tokens") < page.index("How many Treasure tokens")
     assert "https://img.example/id-elspeth-emblem.jpg" in page and "https://img.example/id-cat-beast.jpg" in page
+    assert "https://img.example/id-morph.jpg" in page  # a helper card, not a "Token" by type
