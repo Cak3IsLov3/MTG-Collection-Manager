@@ -730,7 +730,9 @@ def _set_tokens(session: Session, deck: Deck, tokens: int, token_cards: list[Dec
 
 
 def deck_tokens(session: Session, deck: Deck) -> list[DeckToken]:
-    return list(session.exec(select(DeckToken).where(DeckToken.deck_id == deck.id).order_by(DeckToken.name)))
+    """The tokens of a deck in alphabetical order, whatever the capitals ("beast" before "Food")."""
+    tokens = session.exec(select(DeckToken).where(DeckToken.deck_id == deck.id)).all()
+    return sorted(tokens, key=lambda token: (name_key(token.name), token.id))
 
 
 def _count_named_tokens(session: Session, deck: Deck) -> None:
@@ -739,7 +741,9 @@ def _count_named_tokens(session: Session, deck: Deck) -> None:
 
 
 def add_token(session: Session, deck: Deck, name: str, quantity: int = 1) -> DeckToken:
+    # "cat beast" -> "Cat beast" until Scryfall gives its exact name ("Cat Beast").
     name = token_name(name)
+    name = name[:1].upper() + name[1:]
     if not name:
         raise DeckError("Fill in the name of the token, e.g. Treasure")
     if quantity < 1:

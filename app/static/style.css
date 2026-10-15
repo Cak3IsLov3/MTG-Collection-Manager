@@ -48,6 +48,14 @@ h2 { margin: 0 0 12px; font-size: 16px; }
 .grid.two { grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); margin-bottom: 16px; }
 
 .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+/* Folding panels away: click the title. */
+h2.fold-title { cursor: pointer; user-select: none; }
+h2.fold-title::before { content: "▾"; display: inline-block; width: 1.1em; color: var(--muted); transition: transform .15s; }
+.panel.folded h2.fold-title::before { transform: rotate(-90deg); }
+h2.fold-title:hover::before, h2.fold-title:focus-visible::before { color: var(--accent); }
+.panel.folded > :not(.panel-head) { display: none !important; }
+.panel.folded > .panel-head, .panel.folded > .panel-head h2 { margin-bottom: 0; }
+.panel.folded { padding-top: 12px; padding-bottom: 12px; }
 .grid > .panel { margin-bottom: 0; }
 
 .stat .label { color: var(--muted); font-size: 13px; }

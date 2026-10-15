@@ -58,6 +58,45 @@
     });
   </script>
   <script>
+    // Every panel with a title can be folded away by clicking the title. What you fold is remembered
+    // per kind of page: fold "Basic lands" on one deck and it is folded on every deck.
+    (() => {
+      const page = location.pathname.replace(/\/\d+(?=\/|$)/g, "/*");
+      // "In this deck (8)" and "Tokens · 12 to bring" are the same panel whatever the numbers.
+      const titleOf = (heading) => heading.textContent.split(/[·(]/)[0].replace(/\d+/g, "").trim();
+      const folded = (() => { try { return new Set(JSON.parse(localStorage.getItem("folded-panels") || "[]")); } catch (error) { return new Set(); } })();
+      const save = () => { try { localStorage.setItem("folded-panels", JSON.stringify([...folded])); } catch (error) {} };
+
+      for (const panel of document.querySelectorAll("main .panel")) {
+        const heading = panel.querySelector(":scope > h2, :scope > .toolbar > h2");
+        if (!heading || !titleOf(heading)) continue;
+        const head = heading.parentElement === panel ? heading : heading.parentElement;
+        head.classList.add("panel-head");
+        heading.classList.add("fold-title");
+        heading.tabIndex = 0;
+        heading.setAttribute("role", "button");
+        const key = `${page}|${titleOf(heading)}`;
+        const apply = (fold) => {
+          panel.classList.toggle("folded", fold);
+          heading.setAttribute("aria-expanded", String(!fold));
+          heading.title = fold ? "Click to show this part again" : "Click to fold this part away";
+        };
+        apply(folded.has(key));
+        const toggle = (event) => {
+          if (event.target.closest("a, button:not(.fold-title), input, select, label")) return;
+          const fold = !panel.classList.contains("folded");
+          fold ? folded.add(key) : folded.delete(key);
+          save();
+          apply(fold);
+        };
+        heading.addEventListener("click", toggle);
+        heading.addEventListener("keydown", (event) => {
+          if (event.key === "Enter" || event.key === " ") { event.preventDefault(); toggle(event); }
+        });
+      }
+    })();
+  </script>
+  <script>
     // The colour filter of _colour_filter.html: pressed buttons and a match mode, remembered under
     // `storageKey`. matches(text) takes colour letters in WUBRG order ("" colourless, "?" unknown).
     function colourFilter(prefix, storageKey, defaultMode, onChange) {

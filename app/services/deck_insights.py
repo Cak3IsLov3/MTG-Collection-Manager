@@ -12,6 +12,8 @@ from app.services.decks import DeckRow, _names, deck_tokens
 # A card counts as its first type in this list ("Artifact Creature" is a creature).
 TYPES = ["Creature", "Planeswalker", "Battle", "Instant", "Sorcery", "Artifact", "Enchantment", "Land"]
 ROLES = {"ramp": "Ramp", "draw": "Card draw", "removal": "Removal", "wipe": "Board wipe"}
+# Tokens and emblems ("Elspeth, Sun's Champion Emblem") are extras on Scryfall.
+TOKEN_QUERY = "(t:token or t:emblem)"
 
 _RAMP = re.compile(r"add \{|add (one|two|three) mana|search your library for (a|up to \w+) .*lands?\b.*onto the battlefield", re.I)
 _DRAW = re.compile(r"\bdraws? (a|two|three|four|x|that many) cards?\b|\bdraw cards\b", re.I)
@@ -89,11 +91,13 @@ async def fill_card_info(session: Session, scryfall: ScryfallClient, deck_id: in
     for token in tokens:
         data = by_id.get(token.scryfall_id) if token.scryfall_id else None
         if data is None and '"' not in token.name:
-            results = await scryfall.search(f'!"{token.name}" t:token', unique="cards")
+            results = await scryfall.search(f'!"{token.name}" {TOKEN_QUERY}', unique="cards", include_extras="true")
             # A plain token of that name, not one face of a double-faced token.
             exact = [r for r in results if name_key(r.get("name", "")) == name_key(token.name)] or results
             data = ScryfallCard.from_json(exact[0]) if exact else None
         token.image_url = (data.image_url if data else None) or ""
+        if data is not None and name_key(data.name) == name_key(token.name):
+            token.name = data.name  # Scryfall's spelling: "cat beast" -> "Cat Beast"
         session.add(token)
     session.commit()
     return len(entries)
@@ -128,7 +132,9 @@ async def token_versions(scryfall: ScryfallClient, name: str) -> list[TokenVersi
     """The different tokens with this name (one print of each), to choose from."""
     if '"' in name or not name.strip():
         return []
-    results = await scryfall.search(f'!"{name.strip()}" t:token', unique="cards", order="released", dir="desc")
+    results = await scryfall.search(
+        f'!"{name.strip()}" {TOKEN_QUERY}', unique="cards", order="released", dir="desc", include_extras="true"
+    )
     exact = [r for r in results if name_key(r.get("name", "")) == name_key(name)] or results
     versions = []
     for data in exact:
@@ -144,6 +150,8 @@ async def choose_token_version(session: Session, scryfall: ScryfallClient, deck:
         raise ValueError("That token is not in this deck")
     card = await scryfall.get_by_id(scryfall_id)
     token.scryfall_id, token.image_url = card.scryfall_id, card.image_url or ""
+    if name_key(card.name) == name_key(token.name):
+        token.name = card.name
     session.add(token)
     session.flush()
     return token

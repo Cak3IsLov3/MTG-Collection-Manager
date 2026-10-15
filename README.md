@@ -129,6 +129,7 @@ price.
 - Alert history
 
 **Both**
+- Fold away what you do not need: click the title of a part (say "Basic lands" or "Add a card") to fold it, click again to open it. It is remembered, and on deck pages it counts for every deck
 - Collection value next to wishlist cost
 - "Bought it" moves a card from WANT to HAVE
 - Deck check: paste a decklist, upload a deck file or give an Archidekt URL. You see which cards you already own and in which printing (set, foil, quantity), so you can pull them from your collection, and you can add the missing cards to your wishlist in one click
@@ -137,7 +138,7 @@ price.
 - Deck size: basic lands count towards the cards of a deck, so you can see at a glance whether a Commander deck has exactly 100 cards, or how many it is short or over
 - Basic lands per deck: fill in how many of each basic land a deck runs, whatever the printing. Imported decks start with the numbers from the list, and older decks can move their lands over in one click
 - Deck randomizer: can't decide what to play? Pick a random deck, or a different one for every player at the table, optionally only from one bracket or only decks you can build right now, and with a bigger chance for the decks you have not played for a while
-- Tokens per deck: which tokens a deck makes and how many (from the deck list, or added by hand), with their pictures and tick boxes for packing them for game night. There are often several tokens with one name (many Angels): "other version" shows them all to pick from
+- Tokens per deck: which tokens and emblems a deck makes and how many (from the deck list, or added by hand), in alphabetical order with their pictures and tick boxes for packing them for game night. There are often several tokens with one name (many Angels): "other version" shows them all to pick from
 - Mana curve and card types per deck: cards per mana value, the average mana value, how many creatures, instants, lands and so on, and how many cards ramp, draw, remove or wipe the board (guessed from the rules text)
 - Proxies: a printable sheet of the cards a deck still misses (or the whole deck) at real card size, nine to an A4 page, for play-testing
 - Export a deck as a text list for Archidekt or Moxfield, with the commander first and its tokens at the end

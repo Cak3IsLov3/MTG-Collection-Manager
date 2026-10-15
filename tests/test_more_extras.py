@@ -143,3 +143,13 @@ def test_choose_which_token(client, session):
     session.expire_all()
     assert sorted((t.quantity, t.scryfall_id) for t in deck_tokens(session, saved)) == [(1, None), (2, "id-angel-11")]
     assert client.get(f"/api/decks/{deck['id']}").json()["token_count"] == 3
+
+
+def test_tokens_in_alphabetical_order_with_emblems(client):
+    deck = client.post("/api/decks", json={"name": "Tokens", "decklist": "1 Sol Ring"}).json()
+    for name in ("Treasure", "cat beast", "Elspeth, Sun's Champion Emblem"):
+        client.post(f"/decks/{deck['id']}/tokens", data={"name": name, "quantity": "1"})
+    page = client.get(f"/decks/{deck['id']}").text
+    # Scryfall's spelling is taken over, emblems are found too, and the list is in alphabetical order.
+    assert page.index("1× Cat Beast") < page.index("1× Elspeth, Sun&#39;s Champion Emblem") < page.index("1× Treasure")
+    assert "https://img.example/id-elspeth-emblem.jpg" in page and "https://img.example/id-cat-beast.jpg" in page
