@@ -65,6 +65,20 @@ tr:last-child td { border-bottom: 0; }
 
 /* Fixed shape, so rows keep their height while the images are still loading. */
 img.thumb { width: 36px; aspect-ratio: 5 / 7; background: var(--bg); border-radius: 3px; display: block; }
+.deck-title { display: flex; align-items: center; gap: 14px; }
+.chart-box.small { height: 200px; }
+h3.value-title { margin: 14px 0 6px; font-size: 15px; }
+.result-buttons { display: inline-flex; gap: 6px; align-self: flex-end; padding-bottom: 2px; }
+.badge.result-win { border-color: var(--up); color: var(--up); }
+.badge.result-loss { border-color: var(--down); color: var(--down); }
+.deck-games form.row { margin: 4px 0; }
+img.commander-art { width: 88px; aspect-ratio: 5 / 7; border-radius: 6px; box-shadow: 0 2px 10px rgba(0, 0, 0, .45); }
+.commander-pick { display: inline-flex; align-items: center; gap: 6px; margin-top: 6px; font-size: 12px; }
+.commander-pick select { max-width: 260px; }
+td.deck-name-cell { display: flex; align-items: center; gap: 10px; }
+.commander-thumb { flex: none; width: 30px; }
+.commander-thumb.empty { display: block; aspect-ratio: 5 / 7; border: 1px dashed var(--border); border-radius: 3px; }
+.random-card img.random-art { width: 100%; max-width: 160px; aspect-ratio: 5 / 7; border-radius: 6px; margin-bottom: 6px; }
 .muted { color: var(--muted); }
 .up { color: var(--up); }
 .down { color: var(--down); }

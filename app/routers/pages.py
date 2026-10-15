@@ -1,5 +1,6 @@
 """Server-rendered pages (Jinja2) and the HTML forms behind them."""
 
+import datetime as dt
 import logging
 from pathlib import PurePath
 from urllib.parse import quote
@@ -11,14 +12,14 @@ from sqlmodel import Session, select
 
 from app import jobs
 from app.cardmarket import is_cardmarket_url
-from app.config import BASE_DIR
+from app.config import BASE_DIR, get_settings
 from app.csv_import import CsvFormatError, parse_collection_csv
 from app.database import get_session
 from app.deps import get_scryfall
 from app.models import Card, CollectionEntry, Deck, WishlistEntry
 from app.routers.api import load_deck
 from app.scryfall import CardRef, ScryfallClient, ScryfallError
-from app.services import collection, decks, stats, wishlist
+from app.services import collection, decks, games, stats, wishlist
 
 logger = logging.getLogger(__name__)
 router = APIRouter(include_in_schema=False)
@@ -66,7 +67,7 @@ def parse_money(text: str) -> float | None:
 
 @router.get("/")
 def dashboard_page(request: Request, session: Session = Depends(get_session)):
-    return render(request, "dashboard.html", **stats.dashboard(session))
+    return render(request, "dashboard.html", settings=get_settings(), **stats.dashboard(session))
 
 
 @router.get("/cards/{card_id}")
@@ -202,6 +203,62 @@ def collection_delete(entry_id: int, session: Session = Depends(get_session)):
 
 
 # --- wishlist (WANT) ---------------------------------------------------------
+
+
+# --- game log ---------------------------------------------------------------
+
+
+@router.get("/games")
+def games_page(request: Request, deck: int | None = None, session: Session = Depends(get_session)):
+    saved = list(session.exec(select(Deck)))
+    plays = games.deck_plays(session)
+    by_id = {d.id: d for d in saved}
+    stats_rows = sorted(
+        ((by_id[deck_id], p) for deck_id, p in plays.items() if deck_id in by_id),
+        key=lambda item: (item[1].last_played, item[1].played),
+        reverse=True,
+    )
+    return render(
+        request, "games.html", decks=saved, games=games.recent_games(session), stats=stats_rows,
+        not_played=sorted((d for d in saved if d.id not in plays), key=lambda d: d.name),
+        deck_names={d.id: d.name for d in saved}, results=games.RESULTS,
+        today=dt.date.today().isoformat(), selected_deck=deck,
+    )
+
+
+@router.post("/games")
+def games_log(
+    deck_id: int = Form(...),
+    result: str = Form(...),
+    played_on: str = Form(""),
+    players: str = Form(""),
+    notes: str = Form(""),
+    back: str = Form(""),
+    session: Session = Depends(get_session),
+):
+    """Log a game; `back` sends you back to the deck page you logged it from."""
+    target = back if back.startswith("/decks/") else "/games"
+    deck = session.get(Deck, deck_id)
+    if deck is None:
+        return redirect(target, "That deck does not exist anymore", error=True)
+    try:
+        day = dt.date.fromisoformat(played_on) if played_on.strip() else None
+        game = games.log_game(session, deck, result, day, int(players) if players.strip() else None, notes)
+    except ValueError as exc:
+        message = str(exc) if isinstance(exc, games.GameError) else "That is not a valid date or number"
+        return redirect(target, message, error=True)
+    session.commit()
+    return redirect(target, f"Logged: {games.RESULTS[game.result].lower()} with {deck.name} on {game.played_on}")
+
+
+@router.post("/games/{game_id}/delete")
+def games_delete(game_id: int, session: Session = Depends(get_session)):
+    try:
+        games.delete_game(session, game_id)
+    except games.GameError as exc:
+        return redirect("/games", str(exc), error=True)
+    session.commit()
+    return redirect("/games", "Game removed from the log")
 
 
 @router.get("/wishlist")
@@ -367,21 +424,25 @@ async def deck_page(
 ):
     await _fill_deck_colors(session, scryfall)
     summaries = decks.deck_summaries(session)
+    plays = games.deck_plays(session)
     return render(request, "deck.html", rows=None, deck=None, summaries=summaries, brackets=decks.BRACKETS,
-                  deck_data=_deck_data(summaries), card_names=decks.deck_card_names(session))
+                  deck_data=_deck_data(summaries, plays), card_names=decks.deck_card_names(session), plays=plays)
 
 
 async def _fill_deck_colors(session: Session, scryfall: ScryfallClient) -> None:
-    """New or changed decks get their colours; without Scryfall the list still shows, just without them."""
+    """New or changed decks get their colours and commander picture; without Scryfall the list
+    still shows, just without them."""
     try:
         await decks.fill_deck_colors(session, scryfall)
+        await decks.fill_deck_commanders(session, scryfall)
     except ScryfallError as exc:
-        logger.warning("Could not work out deck colours: %s", exc)
+        logger.warning("Could not work out deck colours or commanders: %s", exc)
         session.rollback()
 
 
-def _deck_data(summaries: list[decks.DeckSummary]) -> list[dict]:
+def _deck_data(summaries: list[decks.DeckSummary], plays: dict | None = None) -> list[dict]:
     """What the deck randomizer on the page needs to know about every saved deck."""
+    plays = plays or {}
     return [
         {
             "id": s.deck.id,
@@ -391,6 +452,9 @@ def _deck_data(summaries: list[decks.DeckSummary]) -> list[dict]:
             "complete": s.complete,
             "usable": s.usable,
             "needed": s.needed,
+            "commander_image": s.deck.commander_image or None,
+            "played": plays[s.deck.id].played if s.deck.id in plays else 0,
+            "days_since_played": plays[s.deck.id].days_since() if s.deck.id in plays else None,
         }
         for s in summaries
     ]
@@ -462,13 +526,21 @@ async def deck_save(
 
 
 @router.get("/decks/{deck_id}")
-def saved_deck_page(deck_id: int, request: Request, session: Session = Depends(get_session)):
+async def saved_deck_page(
+    deck_id: int, request: Request, session: Session = Depends(get_session),
+    scryfall: ScryfallClient = Depends(get_scryfall),
+):
     deck = session.get(Deck, deck_id)
     if deck is None:
         raise HTTPException(status_code=404, detail="Deck not found")
-    summary = next(s for s in decks.deck_summaries(session) if s.deck.id == deck.id)
+    await _fill_deck_colors(session, scryfall)  # also the commander picture, e.g. after choosing one
+    summaries = decks.deck_summaries(session)
+    summary = next(s for s in summaries if s.deck.id == deck.id)
     return render(request, "deck.html", rows=decks.saved_deck_rows(session, deck), deck=deck, uses_tokens=summary.uses_tokens,
-                  summaries=decks.deck_summaries(session), left_out=decks.deck_left_out(session, deck),
+                  value_history=decks.deck_value_history(session, deck),
+                  deck_plays=games.deck_plays(session).get(deck.id), deck_games=games.recent_games(session, 5, deck.id),
+                  results=games.RESULTS, today=dt.date.today().isoformat(),
+                  summaries=summaries, left_out=decks.deck_left_out(session, deck),
                   bracket=deck.bracket, brackets=decks.BRACKETS, basic_names=decks.BASIC_LAND_NAMES,
                   tracked_basics=decks.tracked_basic_lands(session, deck), deck_link=decks.deck_url(deck))
 
@@ -527,6 +599,8 @@ async def saved_deck_save(deck_id: int, request: Request, session: Session = Dep
             {key.removeprefix("basic:"): value for key, value in form.items() if key.startswith("basic:")},
             printings,
         )
+        if "commander" in form and str(form["commander"]) != (deck.commander or ""):
+            decks.set_commander(session, deck, str(form["commander"]))
         if "tokens_shown" in form:  # an unticked box is not sent at all
             decks.set_uses_tokens(session, deck, "uses_tokens" in form)
         # The "Remove" / "Put back" buttons submit the same form, so pending edits are saved along.

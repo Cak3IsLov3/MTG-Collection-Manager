@@ -5,7 +5,7 @@ from dataclasses import dataclass
 
 from sqlmodel import Session, select
 
-from app.models import Card, DailyTotal, PriceSnapshot
+from app.models import Card, DailyTotal, PriceRiseAlert, PriceSnapshot
 from app.services.collection import CollectionRow, collection_rows, collection_value
 from app.services.pricing import SCRYFALL, earliest_snapshots, latest_snapshots, price_for
 from app.services.wishlist import recent_alerts, wishlist_cost, wishlist_rows
@@ -56,6 +56,33 @@ def movers(
     return gainers, losers
 
 
+def find_price_rises(
+    session: Session, days: int, min_pct: float, min_eur: float, rows: list[CollectionRow] | None = None
+) -> list[Mover]:
+    """Cards you own whose price went up at least `min_pct` percent and `min_eur` euro in `days` days."""
+    rows = collection_rows(session) if rows is None else rows
+    latest = latest_snapshots(session, SCRYFALL)
+    reference = earliest_snapshots(session, SCRYFALL, dt.date.today() - dt.timedelta(days=days))
+    rises: dict[tuple[int, bool], Mover] = {}
+    for row in rows:
+        new = price_for(latest.get(row.card.id), row.entry.is_foil)
+        old = price_for(reference.get(row.card.id), row.entry.is_foil)
+        if new is None or not old or new - old < min_eur or (new - old) / old * 100 < min_pct:
+            continue
+        rises[(row.card.id, row.entry.is_foil)] = Mover(row.card, row.entry.is_foil, old, new)
+    return sorted(rises.values(), key=lambda mover: mover.change, reverse=True)
+
+
+def recent_price_rise_alerts(session: Session, limit: int = 10) -> list[tuple[PriceRiseAlert, Card]]:
+    statement = (
+        select(PriceRiseAlert, Card)
+        .join(Card, PriceRiseAlert.card_id == Card.id)
+        .order_by(PriceRiseAlert.sent_at.desc(), PriceRiseAlert.new_price.desc())
+        .limit(limit)
+    )
+    return list(session.exec(statement))
+
+
 def dashboard(session: Session) -> dict:
     rows = collection_rows(session)
     wishlist = wishlist_rows(session)
@@ -74,6 +101,7 @@ def dashboard(session: Session) -> dict:
         "gainers": gainers,
         "losers": losers,
         "alerts": recent_alerts(session),
+        "rise_alerts": recent_price_rise_alerts(session),
         "history": {
             "labels": [total.date.isoformat() for total in history],
             "collection": [total.collection_value for total in history],

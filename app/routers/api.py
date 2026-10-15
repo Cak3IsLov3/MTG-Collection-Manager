@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile
-from sqlmodel import Session
+from sqlmodel import Session, select
 
 from app import jobs
 from app.cardmarket import is_cardmarket_url
@@ -29,6 +29,10 @@ from app.schemas import (
     DeckPrintingIn,
     DeckSaveIn,
     DeckSyncOut,
+    DeckCommanderIn,
+    DeckPlaysOut,
+    GameIn,
+    GameOut,
     DeckTokensIn,
     DeckNeedOut,
     DeckUseOut,
@@ -42,7 +46,7 @@ from app.schemas import (
     WishlistPrintingIn,
 )
 from app.scryfall import CardNotFound, InvalidCardRequest, ScryfallClient, ScryfallError
-from app.services import collection, decks, stats, wishlist
+from app.services import collection, decks, games, stats, wishlist
 
 router = APIRouter(prefix="/api", tags=["api"])
 
@@ -349,6 +353,7 @@ def _deck_out(summary: decks.DeckSummary) -> DeckOut:
         deck_size=summary.total_cards, deck_owned=summary.total_owned,
         archidekt_url=decks.deck_url(summary.deck), synced_at=summary.deck.synced_at, colors=summary.deck.colors,
         uses_tokens=summary.uses_tokens, token_count=summary.tokens,
+        commander=summary.deck.commander or None, commander_image=summary.deck.commander_image or None,
     )
 
 
@@ -376,8 +381,9 @@ async def list_decks(
     and `q` the decks whose name or one of whose cards contains every word."""
     try:
         await decks.fill_deck_colors(session, scryfall)
+        await decks.fill_deck_commanders(session, scryfall)
     except ScryfallError:
-        session.rollback()  # the list still works, new decks just have no colours yet
+        session.rollback()  # the list still works, new decks just have no colours or picture yet
     summaries = decks.deck_summaries(session)
     if q:
         summaries = decks.search_decks(summaries, decks.deck_card_names(session), q)
@@ -502,6 +508,72 @@ def let_app_sort(entry_id: int | None = None, session: Session = Depends(get_ses
     released = decks.let_app_sort(session, entry_id)
     session.commit()
     return {"released": released}
+
+
+@router.get("/games", response_model=list[GameOut])
+def list_games(deck_id: int | None = None, session: Session = Depends(get_session)):
+    """The game log, newest first; `deck_id` keeps the games of one deck."""
+    return games.recent_games(session, deck_id=deck_id)
+
+
+@router.post("/games", response_model=GameOut, status_code=201)
+def log_game(payload: GameIn, session: Session = Depends(get_session)):
+    """Log a game played with one of your decks."""
+    deck = _saved_deck(session, payload.deck_id)
+    try:
+        game = games.log_game(session, deck, payload.result, payload.played_on, payload.players, payload.notes)
+    except games.GameError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    session.commit()
+    return game
+
+
+@router.delete("/games/{game_id}", status_code=204)
+def delete_game(game_id: int, session: Session = Depends(get_session)):
+    try:
+        games.delete_game(session, game_id)
+    except games.GameError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    session.commit()
+
+
+@router.get("/games/stats", response_model=list[DeckPlaysOut])
+def game_stats(session: Session = Depends(get_session)):
+    """Per deck that was played: games, wins, losses, draws, win rate and the last time."""
+    plays = games.deck_plays(session)
+    return [
+        DeckPlaysOut(
+            deck_id=deck.id, deck_name=deck.name, played=p.played, wins=p.wins, losses=p.losses, draws=p.draws,
+            win_rate=p.win_rate, last_played=p.last_played,
+        )
+        for deck in session.exec(select(Deck).order_by(Deck.id))
+        if (p := plays.get(deck.id))
+    ]
+
+
+@router.get("/decks/{deck_id}/value-history")
+def deck_value_history(deck_id: int, session: Session = Depends(get_session)):
+    """What the copies this deck uses now were worth on each day with prices: {"labels": [...], "values": [...]}."""
+    return decks.deck_value_history(session, _saved_deck(session, deck_id))
+
+
+@router.put("/decks/{deck_id}/commander", response_model=DeckDetailOut)
+async def set_commander(
+    deck_id: int, payload: DeckCommanderIn, session: Session = Depends(get_session),
+    scryfall: ScryfallClient = Depends(get_scryfall),
+):
+    """Choose the commander of a deck (a card in it); null for none. Its picture is fetched from Scryfall."""
+    deck = _saved_deck(session, deck_id)
+    try:
+        decks.set_commander(session, deck, payload.commander)
+    except decks.DeckError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    session.commit()
+    try:
+        await decks.fill_deck_commanders(session, scryfall)
+    except ScryfallError:
+        session.rollback()
+    return _deck_detail(session, deck)
 
 
 @router.put("/decks/{deck_id}/tokens", response_model=DeckDetailOut)

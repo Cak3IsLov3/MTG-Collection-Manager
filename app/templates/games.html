@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% from "_colour_filter.html" import pips %}
+{% block title %}Games · MTG Collection Manager{% endblock %}
+
+{% block content %}
+<div class="toolbar">
+  <h1>Games <span class="muted">· {{ games | length }} played</span></h1>
+</div>
+
+{% if decks %}
+<div class="panel">
+  <h2>Log a game</h2>
+  <form class="row" method="post" action="/games">
+    <label>Deck
+      <select name="deck_id" required>
+        {% for deck in decks | sort(attribute="name") %}
+        <option value="{{ deck.id }}" {{ 'selected' if deck.id == selected_deck }}>{{ deck.name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Date<input name="played_on" type="date" value="{{ today }}" max="{{ today }}" required></label>
+    <label>Players<input name="players" class="qty" type="number" min="1" max="12" value="4"></label>
+    <label>Notes (optional)<input name="notes" placeholder="Won with a big Treasure turn"></label>
+    <div class="result-buttons" role="group" aria-label="Result">
+      {% for value, label in results.items() %}
+      <button name="result" value="{{ value }}" class="{{ 'secondary' if value != 'win' }}">{{ label }}</button>
+      {% endfor %}
+    </div>
+  </form>
+  <p class="muted">Pick the deck, then click how the game went. The randomizer on the Decks page can prefer the decks you have not played for a while.</p>
+</div>
+{% else %}
+<div class="panel"><p class="muted">Save a deck first, then you can log the games you play with it.</p></div>
+{% endif %}
+
+{% if stats %}
+<div class="panel table-wrap">
+  <h2>Per deck</h2>
+  <table>
+    <tr><th></th><th>Deck</th><th class="num">Played</th><th class="num">Won</th><th class="num">Lost</th><th class="num">Draw</th><th class="num">Win rate</th><th>Last played</th></tr>
+    {% for deck, plays in stats %}
+    <tr>
+      <td>{% if deck.commander_image %}<img class="thumb" src="{{ deck.commander_image }}" alt="" loading="lazy">{% endif %}</td>
+      <td><a href="/decks/{{ deck.id }}">{{ deck.name }}</a> {{ pips(deck.colors) }}</td>
+      <td class="num">{{ plays.played }}</td>
+      <td class="num up">{{ plays.wins }}</td>
+      <td class="num down">{{ plays.losses }}</td>
+      <td class="num">{{ plays.draws }}</td>
+      <td class="num">{{ plays.win_rate }}%</td>
+      <td class="muted">{{ plays.last_played }} · {{ plays.days_since() }} day{{ 's' if plays.days_since() != 1 }} ago</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% if not_played %}
+  <p class="muted">Not played yet: {% for deck in not_played %}<a href="/decks/{{ deck.id }}">{{ deck.name }}</a>{{ ', ' if not loop.last }}{% endfor %}</p>
+  {% endif %}
+</div>
+{% endif %}
+
+<div class="panel table-wrap">
+  <h2>Log</h2>
+  {% if games %}
+  <table>
+    <tr><th>Date</th><th>Deck</th><th>Result</th><th class="num">Players</th><th>Notes</th><th></th></tr>
+    {% for game in games %}
+    <tr>
+      <td class="muted">{{ game.played_on }}</td>
+      <td>{% if game.deck_id %}<a href="/decks/{{ game.deck_id }}">{{ deck_names.get(game.deck_id, game.deck_name) }}</a>{% else %}{{ game.deck_name }} <span class="muted">(deleted)</span>{% endif %}</td>
+      <td><span class="badge result-{{ game.result }}">{{ results[game.result] }}</span></td>
+      <td class="num">{{ game.players or '–' }}</td>
+      <td class="muted">{{ game.notes or '' }}</td>
+      <td>
+        <form class="inline" method="post" action="/games/{{ game.id }}/delete" data-confirm="Click again to remove" data-keep-scroll>
+          <button class="secondary small">Remove</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}
+  <p class="muted">No games logged yet.</p>
+  {% endif %}
+</div>
+{% endblock %}

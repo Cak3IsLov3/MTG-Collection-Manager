@@ -1,6 +1,7 @@
 """Decks: which cards of a deck do you own, which are tied up in other decks, and which are missing."""
 
 import asyncio
+import itertools
 import logging
 import random
 import re
@@ -20,11 +21,13 @@ from app.models import (
     DeckEntry,
     DeckPick,
     DeckSkipped,
+    PriceSnapshot,
     WishlistEntry,
 )
 from app.scryfall import CardRef, ScryfallClient, name_key
 from app.services.collection import CollectionRow, _fold, collection_rows, find_card
-from app.services.pricing import store_scryfall_card
+from app.services.games import forget_deck
+from app.services.pricing import SCRYFALL, price_for, store_scryfall_card
 from app.services.wishlist import add_to_wishlist
 
 ARCHIDEKT_API = "https://archidekt.com/api/decks/{deck_id}/"
@@ -69,6 +72,7 @@ class DeckCard:
     collector_number: str | None = None
     scryfall_id: str | None = None
     foil: bool | None = None
+    commander: bool = False  # the deck list puts it in the Commander category
 
     def wants(self, row: CollectionRow) -> bool:
         """Is this collection entry the printing the deck list asks for?"""
@@ -240,6 +244,7 @@ def parse_decklist(text: str) -> list[DeckCard]:
                 name=match["name"].strip(),
                 quantity=int(match["qty"]),
                 kind=kind,
+                commander=category == "commander",
                 set_code=match["set"].lower() if match["set"] else None,
                 collector_number=match["num"] if match["set"] else None,
                 foil=True if "*F*" in line else None,
@@ -343,6 +348,7 @@ def parse_archidekt_deck(data: dict) -> tuple[str, list[DeckCard]]:
                 collector_number=str(printing.get("collectorNumber") or "") or None,
                 scryfall_id=printing.get("uid") or None,
                 foil={"foil": True, "etched": True, "normal": False}.get(str(item.get("modifier") or "").casefold()),
+                commander=primary == "commander",
             )
         )
     return data.get("name") or "Archidekt deck", cards
@@ -679,10 +685,11 @@ def _one_line_per_card(cards: list[DeckCard]) -> dict[str, DeckCard]:
         key = name_key(card.name)
         if key in merged:
             merged[key].quantity += card.quantity
+            merged[key].commander = merged[key].commander or card.commander
         else:
             merged[key] = DeckCard(
                 card.name.strip(), card.quantity, set_code=card.set_code, collector_number=card.collector_number,
-                scryfall_id=card.scryfall_id, foil=card.foil,
+                scryfall_id=card.scryfall_id, foil=card.foil, commander=card.commander,
             )
     return merged
 
@@ -726,6 +733,8 @@ def save_deck(
                 collector_number=card.collector_number, scryfall_id=card.scryfall_id, foil=card.foil,
             )
         )
+    deck.commander = next((card.name for card in merged.values() if card.commander), None)
+    session.add(deck)
     session.flush()
     return deck
 
@@ -821,6 +830,11 @@ def apply_archidekt(session: Session, deck: Deck, data: dict) -> SyncResult:
     if data.get("name") and name != deck.name:
         result.other.append(f"renamed from {deck.name}")
         deck.name = name
+    commander = next((card.name for card in wanted.values() if card.commander), None)
+    if commander and commander != deck.commander:
+        if deck.commander:
+            result.other.append(f"commander now {commander}")
+        deck.commander, deck.commander_image = commander, None
     deck.synced_at = utcnow()
     if result.added or result.removed:
         deck.colors = None  # worked out again by fill_deck_colors
@@ -934,6 +948,7 @@ def delete_deck(session: Session, deck: Deck) -> None:
     for model in (DeckSkipped, DeckBasicLand):
         for row in session.exec(select(model).where(model.deck_id == deck.id)).all():
             session.delete(row)
+    forget_deck(session, deck.id)  # its games stay in the log
     session.delete(deck)
     session.flush()
 
@@ -1083,6 +1098,84 @@ def move_basic_lands_out(session: Session, deck: Deck) -> int:
     return moved
 
 
+def set_commander(session: Session, deck: Deck, name: str | None) -> None:
+    """Choose the commander of a deck: a card in it, or None/"" for no commander."""
+    name = (name or "").strip()
+    if name:
+        entries = session.exec(select(DeckEntry).where(DeckEntry.deck_id == deck.id)).all()
+        entry = next((e for e in entries if _names(e.name) & _names(name)), None)
+        if entry is None:
+            raise DeckError(f"{name} is not in this deck")
+        name = entry.name
+    if name != deck.commander:
+        deck.commander, deck.commander_image = name, None
+        session.add(deck)
+        session.flush()
+
+
+def _guess_commander(deck: Deck, entries: list[DeckEntry]) -> str | None:
+    """Many decks are named after their commander ("Optimus Prime, Hero", "Rydia, Summoner of
+    Mist - Lands Matter"): the card whose name the deck name starts with."""
+    deck_name = name_key(deck.name)
+    names = [(len(key), entry.name) for entry in entries for key in _names(entry.name) if deck_name.startswith(key)]
+    return max(names)[1] if names else None
+
+
+def _can_command(type_line: str) -> bool:
+    return "Legendary" in type_line and ("Creature" in type_line or "Planeswalker" in type_line)
+
+
+async def fill_deck_commanders(session: Session, scryfall: ScryfallClient) -> int:
+    """Work out the commander of decks that have none yet, and fetch the picture of every commander
+    that has none. Returns the number of pictures found.
+
+    A guess from the deck name only counts when Scryfall says the card is a legendary creature
+    or planeswalker ("Fire Nation Attacks" is a deck name and a spell, not a commander)."""
+    decks = session.exec(select(Deck)).all()
+    guessed: set[int] = set()
+    for deck in decks:
+        if deck.commander is None:
+            entries = session.exec(select(DeckEntry).where(DeckEntry.deck_id == deck.id)).all()
+            guess = _guess_commander(deck, entries)
+            if guess:
+                deck.commander = guess
+                guessed.add(deck.id)
+    pending = [deck for deck in decks if deck.commander and deck.commander_image is None]
+    if not pending:
+        session.commit()
+        return 0
+    images: dict[str, str] = {}
+    for card in session.exec(select(Card).where(Card.image_url != None)).all():  # noqa: E711
+        for key in _names(card.name):
+            images.setdefault(key, card.image_url)
+    # By the front face: Scryfall does not find a double-faced card by both names together.
+    lookups = {name_key(deck.commander): {"name": deck.commander.split(" // ")[0]} for deck in pending
+               if deck.id in guessed or not _names(deck.commander) & images.keys()}
+    commanders: set[str] = set()  # names Scryfall says can be a commander
+    if lookups:
+        found, _ = await scryfall.get_collection(list(lookups.values()))
+        for data in found:
+            for key in _names(data.name):
+                if data.image_url:
+                    images.setdefault(key, data.image_url)
+                if _can_command(data.type_line):
+                    commanders.add(key)
+    for deck in pending:
+        if deck.id in guessed and not _names(deck.commander) & commanders:
+            deck.commander = ""  # the deck name matched a card that cannot be a commander: choose one yourself
+            deck.commander_image = None
+            session.add(deck)
+    pending = [deck for deck in pending if deck.commander]
+    filled = 0
+    for deck in pending:
+        image = next((images[key] for key in _names(deck.commander) if key in images), None)
+        deck.commander_image = image or ""  # "": looked for, nothing found
+        session.add(deck)
+        filled += 1 if image else 0
+    session.commit()
+    return filled
+
+
 def set_uses_tokens(session: Session, deck: Deck, uses_tokens: bool | None) -> None:
     """Mark a deck as one that uses tokens (or not); None goes back to what its deck list says."""
     deck.uses_tokens = uses_tokens
@@ -1124,6 +1217,31 @@ def choose_printing(session: Session, deck: Deck, entry_id: int, collection_entr
         raise DeckError("That printing is not in your collection")
     session.add(DeckPick(deck_entry_id=entry_id, collection_entry_id=collection_entry_id))
     session.flush()
+
+def deck_value_history(session: Session, deck: Deck) -> dict:
+    """What the copies this deck uses now were worth on every day with prices: chart-ready
+    {"labels": [dates], "values": [euros]}. A card without a price that day counts at its last known price."""
+    copies: list[tuple[int, bool, int]] = [
+        (row.entry.card_id, row.entry.is_foil, count)
+        for deck_row in _CardPool(session).rows(deck_id=deck.id)
+        for row, count in deck_row.picks
+    ]
+    card_ids = {card_id for card_id, _, _ in copies}
+    if not card_ids:
+        return {"labels": [], "values": []}
+    snapshots = session.exec(
+        select(PriceSnapshot)
+        .where(PriceSnapshot.source == SCRYFALL, PriceSnapshot.card_id.in_(card_ids))
+        .order_by(PriceSnapshot.date)
+    ).all()
+    labels, values, last = [], [], {}
+    for day, group in itertools.groupby(snapshots, key=lambda snapshot: snapshot.date):
+        for snapshot in group:
+            last[snapshot.card_id] = snapshot
+        labels.append(day.isoformat())
+        values.append(round(sum(count * (price_for(last.get(card_id), foil) or 0.0) for card_id, foil, count in copies), 2))
+    return {"labels": labels, "values": values}
+
 
 def saved_deck_rows(session: Session, deck: Deck) -> list[DeckRow]:
     return _CardPool(session).rows(deck_id=deck.id)

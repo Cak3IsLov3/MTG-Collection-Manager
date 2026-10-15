@@ -11,10 +11,10 @@ from app.cardmarket import CardmarketError, CardmarketPaused, CardmarketScraper
 from app.config import get_settings
 from app.database import engine
 from app.discord import DiscordNotifier
-from app.models import Alert, Card, CollectionEntry, WishlistEntry, utcnow
+from app.models import Alert, Card, CollectionEntry, PriceRiseAlert, WishlistEntry, utcnow
 from app.scryfall import ScryfallClient, ScryfallError
 from app.services.pricing import CARDMARKET, SCRYFALL, latest_snapshots, record_scryfall_price, record_snapshot
-from app.services.stats import record_daily_total
+from app.services.stats import find_price_rises, record_daily_total
 from app.services.wishlist import recently_alerted
 
 logger = logging.getLogger(__name__)
@@ -51,6 +51,63 @@ async def update_collection_prices(session: Session, scryfall: ScryfallClient) -
     record_daily_total(session)
     session.commit()
     return updated
+
+
+async def check_price_rises(
+    session: Session,
+    notifier: DiscordNotifier,
+    now: dt.datetime | None = None,
+    min_pct: float | None = None,
+    min_eur: float | None = None,
+    days: int | None = None,
+) -> list[PriceRiseAlert]:
+    """After the daily price update: tell Discord which cards you own went up in price.
+
+    A card is mentioned once per period of `days` days, so the same rise is not sent every day.
+    """
+    from app.services.decks import collection_decks
+
+    settings = get_settings()
+    min_pct = settings.price_rise_pct if min_pct is None else min_pct
+    min_eur = settings.price_rise_min_eur if min_eur is None else min_eur
+    days = settings.price_rise_days if days is None else days
+    if min_pct <= 0:
+        return []
+    now = now or utcnow()
+    rises = find_price_rises(session, days, min_pct, min_eur)
+    recent = {
+        (alert.card_id, alert.is_foil)
+        for alert in session.exec(select(PriceRiseAlert).where(PriceRiseAlert.sent_at >= now - dt.timedelta(days=days)))
+    }
+    rises = [rise for rise in rises if (rise.card.id, rise.is_foil) not in recent]
+    if not rises:
+        return []
+    # How many copies you have of each, and how many no deck uses or needs (to sell, say).
+    shared = collection_decks(session)
+    owned: dict[tuple[int, bool], list[int]] = {}
+    for entry in session.exec(select(CollectionEntry)):
+        counts = owned.setdefault((entry.card_id, entry.is_foil), [0, 0])
+        in_decks = sum(copies for _, copies in shared.usage.get(entry.id, []))
+        counts[0] += entry.quantity
+        counts[1] += 0 if shared.wanted.get(entry.id) else max(0, entry.quantity - in_decks)
+    alerts, lines = [], []
+    for rise in rises:
+        alerts.append(PriceRiseAlert(
+            card_id=rise.card.id, is_foil=rise.is_foil, sent_at=now, old_price=rise.old_price,
+            new_price=rise.new_price, days=days,
+        ))
+        have, spare = owned.get((rise.card.id, rise.is_foil), [0, 0])
+        lines.append(
+            f"**{rise.card.name}**{' (foil)' if rise.is_foil else ''} · {rise.card.set_code.upper()} · "
+            f"€{rise.old_price:.2f} → €{rise.new_price:.2f} (+{rise.change_pct:.0f}%) · "
+            f"you have {have}{f', {spare} spare' if spare else ''}"
+        )
+    notified = notifier.configured and await notifier.send_price_rises(lines, days)
+    for alert in alerts:
+        alert.notified = bool(notified)
+        session.add(alert)
+    session.commit()
+    return alerts
 
 
 async def fill_missing_colors(session: Session, scryfall: ScryfallClient) -> int:
@@ -144,18 +201,20 @@ async def run_collection_update() -> None:
     try:
         with Session(engine) as session:
             updated = await update_collection_prices(session, deps.get_scryfall())
-        logger.info("Price update done: %s cards", updated)
+            rises = await check_price_rises(session, deps.get_notifier())
+        logger.info("Price update done: %s cards, %s price rises", updated, len(rises))
     except Exception:
         logger.exception("Price update failed")
 
 
 async def run_fill_colors() -> None:
-    from app.services.decks import fill_deck_colors
+    from app.services.decks import fill_deck_colors, fill_deck_commanders
 
     try:
         with Session(engine) as session:
             filled = await fill_missing_colors(session, deps.get_scryfall())
             decks = await fill_deck_colors(session, deps.get_scryfall())
+            await fill_deck_commanders(session, deps.get_scryfall())
         if filled or decks:
             logger.info("Colours filled in for %s cards and %s decks", filled, decks)
     except Exception:

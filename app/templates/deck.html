@@ -47,7 +47,20 @@
 {% block content %}
 {% if deck %}
 <div class="toolbar">
-  <h1>{{ deck.name }}</h1>
+  <div class="deck-title">
+    {% if deck.commander_image %}<img class="commander-art" src="{{ deck.commander_image }}" alt="{{ deck.commander }}">{% endif %}
+    <div>
+      <h1>{{ deck.name }}</h1>
+      <label class="muted commander-pick">Commander
+        <select name="commander" form="deck-form" title="The commander of this deck; its picture shows here and in the list of decks">
+          <option value="">None</option>
+          {% for name in rows | map(attribute="name") | sort %}
+          <option value="{{ name }}" {{ 'selected' if deck.commander == name }}>{{ name }}</option>
+          {% endfor %}
+        </select>
+      </label>
+    </div>
+  </div>
   <div class="actions">
     {# Every editable field on this page belongs to this one form, so a single button saves them all. #}
     <form id="deck-form" class="inline" method="post" action="/decks/{{ deck.id }}/save" data-keep-scroll></form>
@@ -103,6 +116,7 @@
       <th class="num"><button class="sort" data-sort="cards" data-type="number" title="Sort by deck size">Cards</button></th>
       <th><button class="sort" data-sort="percent" data-type="number" title="Sort by how much of the deck you have">Owned</button></th>
       <th class="num"><button class="sort" data-sort="value" data-type="number" title="Sort by value">Value</button></th>
+      <th class="num"><button class="sort" data-sort="played" data-type="number" title="Sort by how often you played the deck">Played</button></th>
       <th><button class="sort" data-sort="missing" data-type="number" title="Sort by how many cards the deck still misses">Missing</button></th>
     </tr>
     </thead>
@@ -113,15 +127,18 @@
         data-cards="{{ s.total_cards }}" data-percent="{{ s.percent }}" data-value="{{ s.value }}" data-missing="{{ s.needed - s.usable }}"
         data-colors="{{ '?' if s.deck.colors is none else s.deck.colors }}"
         data-card-names="{{ (card_names | default({})).get(s.deck.id, []) | join('|') }}"
-        data-tokens="{{ 1 if s.uses_tokens else 0 }}">
-      <td><a href="/decks/{{ s.deck.id }}">{{ s.deck.name }}</a>
+        data-tokens="{{ 1 if s.uses_tokens else 0 }}"
+        {% set p = (plays | default({})).get(s.deck.id) %}data-played="{{ p.played if p else 0 }}">
+      <td class="deck-name-cell">{% if s.deck.commander_image %}<img class="thumb commander-thumb" src="{{ s.deck.commander_image }}" alt="" loading="lazy" title="{{ s.deck.commander }}">{% else %}<span class="commander-thumb empty"></span>{% endif %}
+        <div><a href="/decks/{{ s.deck.id }}">{{ s.deck.name }}</a>
         {{ pips(s.deck.colors) }}
         <div class="muted small deck-hit" hidden></div>{% if s.deck.archidekt_id %} <span class="badge linked" title="Follows its deck on Archidekt">↻ Archidekt</span>{% endif %}
-        {% if s.uses_tokens %}<span class="badge tokens" title="This deck has tokens{% if s.tokens %}: {{ s.tokens }} in its deck list{% endif %}">● tokens</span>{% endif %}</td>
+        {% if s.uses_tokens %}<span class="badge tokens" title="This deck has tokens{% if s.tokens %}: {{ s.tokens }} in its deck list{% endif %}">● tokens</span>{% endif %}</div></td>
       <td>{% if s.bracket_name %}<span class="badge bracket">{{ s.deck.bracket }} · {{ s.bracket_name }}</span>{% else %}<span class="muted">–</span>{% endif %}</td>
       <td class="num" title="Cards you have / cards in the deck, basic lands included">{{ s.total_owned }} / {{ s.total_cards }}</td>
       <td style="width: 35%"><div class="progress slim"><div style="width: {{ s.percent }}%"></div></div></td>
       <td class="num">{{ s.value | eur }}</td>
+      <td class="num" title="{% if p %}Won {{ p.wins }} of {{ p.played }} · last played {{ p.last_played }}{% else %}Not played yet{% endif %}">{% if p %}{{ p.played }}× <span class="muted">· {{ p.win_rate }}%</span>{% else %}<span class="muted">–</span>{% endif %}</td>
       <td>{% if s.complete %}<span class="badge hit">complete</span>{% else %}<span class="badge">{{ s.needed - s.usable }} missing</span>{% endif %}</td>
     </tr>
     {% endfor %}
@@ -152,6 +169,7 @@
     </label>
     <label>Players<input id="random-players" class="qty" type="number" min="1" max="{{ summaries | length }}" step="1" value="1"></label>
     <label class="check"><input id="random-complete" type="checkbox">&nbsp;Only decks I can build right now</label>
+    <label class="check" title="Decks you have not played for a long time (or never) get a bigger chance"><input id="random-fresh" type="checkbox">&nbsp;Prefer decks I haven't played in a while</label>
     <button id="random-go">Pick a random deck</button>
   </div>
   <div id="random-result" class="random-result" aria-live="polite"></div>
@@ -213,6 +231,37 @@
     {% if basics %}· includes {{ basics }} basic land{{ 's' if basics != 1 }}{% if not deck %} ({% for land, count in left_out.basics.items() %}{{ count }} {{ land }}{{ ', ' if not loop.last }}{% endfor %}){% endif %}, counted as owned{% endif %}
     {% if tokens %}· {{ tokens }} token{{ 's' if tokens != 1 }} not counted{% endif %}
   </p>
+  {% if deck %}
+  <div class="deck-games">
+    <h3 class="value-title">Games
+      <span class="muted">· {% if deck_plays %}played {{ deck_plays.played }}×, won {{ deck_plays.wins }} ({{ deck_plays.win_rate }}%), last on {{ deck_plays.last_played }}{% else %}not played yet{% endif %}</span></h3>
+    <form class="row" method="post" action="/games">
+      <input type="hidden" name="deck_id" value="{{ deck.id }}">
+      <input type="hidden" name="back" value="/decks/{{ deck.id }}">
+      <label>Date<input name="played_on" type="date" value="{{ today }}" max="{{ today }}"></label>
+      <label>Players<input name="players" class="qty" type="number" min="1" max="12" value="4"></label>
+      <label>Notes (optional)<input name="notes"></label>
+      <div class="result-buttons" role="group" aria-label="Result">
+        {% for value, label in results.items() %}
+        <button name="result" value="{{ value }}" class="small {{ 'secondary' if value != 'win' }}">{{ label }}</button>
+        {% endfor %}
+      </div>
+    </form>
+    {% if deck_games %}
+    <p class="muted small">Last games: {% for game in deck_games %}<span class="badge result-{{ game.result }}">{{ results[game.result] }}</span> {{ game.played_on }}{{ ' · ' if not loop.last }}{% endfor %} · <a href="/games?deck={{ deck.id }}">all games</a></p>
+    {% endif %}
+  </div>
+  {% endif %}
+  {% if deck and value_history and value_history["values"] | length > 1 %}
+  {% set first_value = value_history["values"][0] %}
+  {% set last_value = value_history["values"][-1] %}
+  <h3 class="value-title">Value over time
+    <span class="muted">· {{ last_value | eur }}{% if first_value %},
+      <span class="{{ 'up' if last_value >= first_value else 'down' }}">{{ '%+.2f' | format(last_value - first_value) }} ({{ '%+.1f' | format((last_value - first_value) / first_value * 100) }}%)</span>
+      since {{ value_history["labels"][0] }}{% endif %}</span></h3>
+  <div class="chart-box small"><canvas id="deck-value-chart"></canvas></div>
+  <p class="muted small">What the copies in this deck now were worth on each day with prices.</p>
+  {% endif %}
   {% if not deck %}
   <form class="row" method="post" action="/deck/save">
     <input type="hidden" name="decklist" value="{{ decklist }}">
@@ -378,6 +427,29 @@
 {% endblock %}
 
 {% block scripts %}
+{% if deck and value_history and value_history["values"] | length > 1 %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script>
+  // The value of this deck's copies over time.
+  const deckValue = {{ value_history | tojson }};
+  new Chart(document.getElementById("deck-value-chart"), {
+    type: "line",
+    data: {
+      labels: deckValue.labels,
+      datasets: [{ label: "Deck value", data: deckValue.values, borderColor: "#e8a33d", backgroundColor: "rgba(232,163,61,.15)", fill: true, tension: 0.25 }],
+    },
+    options: {
+      maintainAspectRatio: false,
+      interaction: { mode: "index", intersect: false },
+      scales: {
+        x: { ticks: { color: "#8b93a3" }, grid: { color: "#2c313c" } },
+        y: { ticks: { color: "#8b93a3", callback: (v) => "€" + v }, grid: { color: "#2c313c" } },
+      },
+      plugins: { legend: { display: false } },
+    },
+  });
+</script>
+{% endif %}
 {% if not deck and summaries %}
 <script>
   // Sort the list of saved decks by clicking a column; a second click reverses. Remembered in this browser.
@@ -510,6 +582,24 @@
     return copy;
   }
 
+  // A deck never played counts as a year ago; one played today still has a small chance.
+  const staleness = (deck) => 1 + (deck.days_since_played ?? 365);
+
+  function weightedPick(list, count) {
+    const left = [...list];
+    const picked = [];
+    while (picked.length < count && left.length) {
+      const total = left.reduce((sum, deck) => sum + staleness(deck), 0);
+      let roll = Math.random() * total;
+      const index = left.findIndex((deck) => (roll -= staleness(deck)) < 0);
+      picked.push(...left.splice(index === -1 ? left.length - 1 : index, 1));
+    }
+    return picked;
+  }
+
+  const pickDecks = (pool, count) =>
+    document.getElementById("random-fresh").checked ? weightedPick(pool, count) : shuffled(pool).slice(0, count);
+
   function card(deck, player, settled) {
     const item = document.createElement(settled ? "a" : "div");
     item.className = "random-card" + (settled ? " settled" : "");
@@ -522,7 +612,15 @@
       player,
       deck.bracket ? `Bracket ${deck.bracket} · ${deck.bracket_name}` : "No bracket",
       deck.complete ? "ready to play" : `${deck.needed - deck.usable} card${deck.needed - deck.usable === 1 ? "" : "s"} missing`,
+      deck.days_since_played === null ? "never played" : `played ${deck.days_since_played} day${deck.days_since_played === 1 ? "" : "s"} ago`,
     ].filter(Boolean).join(" · ");
+    if (deck.commander_image) {
+      const art = document.createElement("img");
+      art.src = deck.commander_image;
+      art.alt = "";
+      art.className = "random-art";
+      item.append(art);
+    }
     item.append(title, detail);
     return item;
   }
@@ -541,9 +639,9 @@
       return;
     }
     // Avoid handing out exactly the same pick twice in a row when there is a choice.
-    let pick = shuffled(pool).slice(0, players);
+    let pick = pickDecks(pool, players);
     for (let attempt = 0; attempt < 5 && pool.length > players && pick.every((d, i) => d.id === lastPick[i]); attempt += 1) {
-      pick = shuffled(pool).slice(0, players);
+      pick = pickDecks(pool, players);
     }
     lastPick = pick.map((d) => d.id);
 

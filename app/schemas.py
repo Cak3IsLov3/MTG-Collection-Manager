@@ -203,6 +203,42 @@ class DeckAssignedIn(BaseModel):
     assigned: bool
 
 
+class GameIn(BaseModel):
+    deck_id: int
+    result: str  # "win", "loss" or "draw"
+    played_on: dt.date | None = None  # today when left out
+    players: int | None = None
+    notes: str | None = None
+
+
+class GameOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    played_on: dt.date
+    deck_id: int | None  # null once the deck is deleted
+    deck_name: str
+    result: str
+    players: int | None
+    notes: str | None
+
+
+class DeckPlaysOut(BaseModel):
+    deck_id: int
+    deck_name: str
+    played: int
+    wins: int
+    losses: int
+    draws: int
+    win_rate: int | None
+    last_played: dt.date | None
+
+
+class DeckCommanderIn(BaseModel):
+    # A card in the deck, or null for no commander.
+    commander: str | None = None
+
+
 class DeckTokensIn(BaseModel):
     # True or false, or null to follow the deck list (it uses tokens when it has any).
     uses_tokens: bool | None = None
@@ -282,6 +318,9 @@ class DeckOut(BaseModel):
     # Whether the deck uses tokens (as you set it, or else whether its deck list has any), and how many it lists.
     uses_tokens: bool = False
     token_count: int = 0
+    # The commander and its picture, when known.
+    commander: str | None = None
+    commander_image: str | None = None
 
 
 class DeckLinkIn(BaseModel):

@@ -15,9 +15,9 @@ price.
 | --- | --- |
 | ![Top 10 most valuable cards, risers and fallers](docs/dashboard-cards.jpg) | ![Wishlist sorted from expensive to cheap](docs/wishlist.jpg) |
 
-| Collection: add by name or card number, edit quantities, tick foil | Saved decks, and the randomizer picking a deck for three players |
+| Collection: add by name or card number, edit quantities, tick foil | Saved decks with their commander, colours, games played and value |
 | --- | --- |
-| ![Collection](docs/collection.jpg) | ![Saved decks with their number, bracket, progress and value, the Archidekt badge and sync, and a random deck for each of three players](docs/decks.jpg) |
+| ![Collection](docs/collection.jpg) | ![Saved decks with their commander, colours, bracket, progress, value and how often they were played](docs/decks.jpg) |
 
 ![Wishlist targets set to 85% of the current price: the changed prices are highlighted until you save them all](docs/wishlist-targets.jpg)
 
@@ -57,7 +57,15 @@ price.
 
 ![The saved decks sorted on missing cards: the decks closest to done first](docs/decks-sorted.jpg)
 
-![A saved deck of exactly 100 cards: its bracket, "Has tokens", deck size, the Archidekt link, adding a card, and basic lands per land](docs/deck.jpg)
+![A saved deck of exactly 100 cards: its commander, bracket, "Has tokens", deck size, games played and its value over time](docs/deck.jpg)
+
+![Logging a game from the deck page, and the value of the deck's copies over the last month](docs/deck-value.jpg)
+
+![The game log: per deck how often it was played, its win rate and when it was last played](docs/games.jpg)
+
+![The randomizer for three players, preferring decks that were not played for a while](docs/decks-random.jpg)
+
+![Price rises in your collection: also sent to Discord after the daily price update](docs/dashboard-rises.jpg)
 
 ![A deck that follows its Archidekt link: Sync now, and when it was last checked](docs/deck-archidekt.jpg)
 
@@ -96,6 +104,7 @@ price.
 - A printing without a price borrows the price of the cheapest printing with the same name, marked "≈ SET"
 - Daily price snapshots, total value over time, top 10 most valuable cards, weekly risers and fallers
 - Price history chart per card
+- A Discord message after the daily price update when cards you own went up in price (by default 25% and at least €1 in 7 days), with how many you have and how many are spare; the dashboard lists them too
 
 **Wishlist (WANT)**
 - Watch cards with a maximum price
@@ -116,7 +125,9 @@ price.
 - Basic lands and tokens are left out of the tracked cards by default, so they do not show up as missing or end up on your wishlist; tick a box to include them
 - Deck size: basic lands count towards the cards of a deck, so you can see at a glance whether a Commander deck has exactly 100 cards, or how many it is short or over
 - Basic lands per deck: fill in how many of each basic land a deck runs, whatever the printing. Imported decks start with the numbers from the list, and older decks can move their lands over in one click
-- Deck randomizer: can't decide what to play? Pick a random deck, or a different one for every player at the table, optionally only from one bracket or only decks you can build right now
+- Deck randomizer: can't decide what to play? Pick a random deck, or a different one for every player at the table, optionally only from one bracket or only decks you can build right now, and with a bigger chance for the decks you have not played for a while
+- Commander picture: every deck shows its commander, taken from the Commander category on Archidekt, recognised from the deck name (only when that card can be a commander), or chosen on the deck page
+- Game log: log a game from the Games page or from a deck (date, players, notes, won, lost or draw). Every deck shows how often it was played, its win rate and when it was last played
 - Add cards to a saved deck the same way as to the collection: by name, or by set and card number for one exact version
 - Take a card out of a deck: "Remove" moves it from "In this deck" to "Still missing" and frees your copies for other decks; "Put back" undoes it
 - Search inside a deck on card name or set
@@ -130,7 +141,7 @@ price.
 - Follow an Archidekt deck: a deck saved from an Archidekt link (or given one later) is brought up to date when the deck changes there, automatically every few hours or with "Sync now"; printings you chose and cards you took out are kept
 - The printing from the deck list comes along: an Archidekt deck (or a text list with sets) knows the set and card number of every card. If you own that printing it goes to that deck, also when another deck had taken it only because any copy would do, and missing cards go on the wishlist in that printing
 - Choose the printing: if you own a card in several printings you pick which one is in the deck (say, the foil); otherwise the cheapest free copy is used
-- Deck value: every saved deck shows what the copies in it are worth
+- Deck value: every saved deck shows what the copies in it are worth, and a chart of their value over time
 
 ## Quick start
 
@@ -164,6 +175,9 @@ All settings are environment variables (see [.env.example](.env.example)).
 | `WISHLIST_CHECK_HOURS` | `6` | Interval of the wishlist check |
 | `DECK_SYNC_HOURS` | `6` | How often decks that follow an Archidekt link are brought up to date (`0` = never automatically) |
 | `ALERT_COOLDOWN_HOURS` | `24` | Minimum time between two alerts for the same card |
+| `PRICE_RISE_PCT` | `25` | Discord message when a card you own rose at least this many percent (`0` turns it off) |
+| `PRICE_RISE_MIN_EUR` | `1` | ...and at least this many euros |
+| `PRICE_RISE_DAYS` | `7` | ...compared with its price this many days ago; a card is mentioned once per period |
 | `SCRYFALL_MIN_INTERVAL` | `0.1` | Seconds between Scryfall requests (their limit is 10/s) |
 | `SCRYFALL_SLOW_INTERVAL` | `0.6` | Seconds between Scryfall name lookups and bulk requests, which have a much lower limit |
 | `CARDMARKET_MIN_INTERVAL` | `5` | Seconds between Cardmarket requests (plus random jitter) |
@@ -216,6 +230,11 @@ product page. Two things to know:
 | `POST` | `/api/collection/let-app-sort` | Let the app share out the new copies from imports over the decks (`?entry_id=` for one card) |
 | `PUT` | `/api/decks/{id}/basic-lands` | Set how many of each basic land a deck runs |
 | `PUT` | `/api/decks/{id}/tokens` | Mark a deck as one that has tokens, or not (`null` follows the deck list) |
+| `PUT` | `/api/decks/{id}/commander` | Choose the commander of a deck (a card in it), or `null` for none |
+| `GET` | `/api/decks/{id}/value-history` | What the copies in a deck were worth on every day with prices |
+| `GET` / `POST` | `/api/games` | The game log (`?deck_id=` for one deck) / log a game |
+| `DELETE` | `/api/games/{id}` | Remove a game from the log |
+| `GET` | `/api/games/stats` | Per deck: games played, wins, losses, draws, win rate and last played |
 | `PUT` | `/api/decks/{id}/bracket` | Set or clear the Commander bracket of a deck |
 | `PUT` | `/api/decks/{id}/archidekt` | Let a deck follow an Archidekt deck, or stop following |
 | `POST` | `/api/decks/{id}/sync`, `/api/decks/sync` | Bring one deck, or every linked deck, up to date with Archidekt |

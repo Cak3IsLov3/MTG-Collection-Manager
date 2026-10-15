@@ -59,6 +59,32 @@ class PriceSnapshot(SQLModel, table=True):
     eur_foil_from_set: str | None = None
 
 
+class PriceRiseAlert(SQLModel, table=True):
+    """A card you own that rose in price; sent to Discord once, after the daily price update."""
+
+    id: int | None = Field(default=None, primary_key=True)
+    card_id: int = Field(foreign_key="card.id", index=True)
+    is_foil: bool = False
+    sent_at: dt.datetime = Field(default_factory=utcnow)
+    old_price: float
+    new_price: float
+    days: int  # compared with the price this many days earlier
+    notified: bool = False  # the Discord message went out
+
+
+class Game(SQLModel, table=True):
+    """One game played with one of your decks."""
+
+    id: int | None = Field(default=None, primary_key=True)
+    played_on: dt.date = Field(index=True)
+    deck_id: int | None = Field(default=None, index=True)  # None once the deck is deleted
+    deck_name: str  # kept, so the log still reads well after a deck is renamed or deleted
+    result: str = "loss"  # "win" | "loss" | "draw"
+    players: int | None = None
+    notes: str | None = None
+    created_at: dt.datetime = Field(default_factory=utcnow)
+
+
 class Alert(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     wishlist_entry_id: int = Field(foreign_key="wishlistentry.id", index=True)
@@ -87,6 +113,10 @@ class Deck(SQLModel, table=True):
     colors: str | None = None
     # Whether the deck uses tokens, as you set it; None: it does when its deck list has tokens.
     uses_tokens: bool | None = None
+    # The commander: a card name from the deck. None: not known yet (worked out from the deck list
+    # or the deck name); "": you chose none.
+    commander: str | None = None
+    commander_image: str | None = None  # Scryfall image of the commander
 
 
 class DeckEntry(SQLModel, table=True):

@@ -37,6 +37,8 @@ CARDS = [
     scryfall_json("Lim-Dûl's Vault", "id-vault", "all", eur="12.34", color_identity=["B", "U"]),
     scryfall_json("Fire // Ice", "id-fire", "mh2", eur="0.25", eur_foil="0.80", color_identity=["R", "U"]),
     scryfall_json("Black Lotus", "id-lotus", "lea", eur=None),
+    scryfall_json("Marwyn, the Nurturer", "id-marwyn", "dom", eur="2.00", color_identity=["G"],
+                  type_line="Legendary Creature — Elf Druid"),
 ]
 
 

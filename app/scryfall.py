@@ -81,6 +81,7 @@ class ScryfallCard:
     eur_foil_from_set: str | None = None
     # Colour identity as letters in WUBRG order; "" is colourless.
     colors: str | None = None
+    type_line: str = ""  # e.g. "Legendary Creature — Robot"
 
     @classmethod
     def from_json(cls, data: dict) -> "ScryfallCard":
@@ -101,6 +102,7 @@ class ScryfallCard:
             price_eur_foil=_to_float(prices.get("eur_foil")),
             cardmarket_url=(data.get("purchase_uris") or {}).get("cardmarket"),
             colors=None if identity is None else "".join(c for c in "WUBRG" if c in identity),
+            type_line=data.get("type_line") or "",
         )
 
 

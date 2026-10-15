@@ -73,6 +73,28 @@
 </div>
 
 <div class="panel">
+  <h2>Price rises in your collection</h2>
+  {% if rise_alerts %}
+  <table>
+    <tr><th>When (UTC)</th><th>Card</th><th class="num">Was</th><th class="num">Now</th><th class="num">Change</th><th></th></tr>
+    {% for alert, card in rise_alerts %}
+    <tr>
+      <td class="muted">{{ alert.sent_at.strftime('%Y-%m-%d %H:%M') }}</td>
+      <td><a href="/cards/{{ card.id }}">{{ card.name }}</a>{% if alert.is_foil %} <span class="badge foil">foil</span>{% endif %}</td>
+      <td class="num muted">{{ alert.old_price | eur }}</td>
+      <td class="num up">{{ alert.new_price | eur }}</td>
+      <td class="num up">+{{ '%.0f' | format((alert.new_price - alert.old_price) / alert.old_price * 100) }}% in {{ alert.days }} days</td>
+      <td class="muted">{{ 'sent to Discord' if alert.notified else 'not sent' }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}
+  <p class="muted">No price rises yet. After the daily price update you get a Discord message when a card you own goes up
+    {{ settings.price_rise_pct | round | int }}% or more (and at least {{ settings.price_rise_min_eur | eur }}) in {{ settings.price_rise_days }} days.</p>
+  {% endif %}
+</div>
+
+<div class="panel">
   <h2>Recent alerts</h2>
   {% if alerts %}
   <table>
