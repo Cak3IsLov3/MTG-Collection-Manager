@@ -159,6 +159,12 @@ class DeckSummary:
     usable: int
     value: float = 0.0  # what the copies in this deck are worth
     basic_lands: int = 0
+    tokens: int = 0  # tokens in its deck list (not counted as cards)
+
+    @property
+    def uses_tokens(self) -> bool:
+        """As you set it on the deck, or else: its deck list has tokens."""
+        return self.deck.uses_tokens if self.deck.uses_tokens is not None else self.tokens > 0
 
     @property
     def bracket_name(self) -> str | None:
@@ -1077,6 +1083,13 @@ def move_basic_lands_out(session: Session, deck: Deck) -> int:
     return moved
 
 
+def set_uses_tokens(session: Session, deck: Deck, uses_tokens: bool | None) -> None:
+    """Mark a deck as one that uses tokens (or not); None goes back to what its deck list says."""
+    deck.uses_tokens = uses_tokens
+    session.add(deck)
+    session.flush()
+
+
 def set_bracket(session: Session, deck: Deck, bracket: int | None) -> None:
     if bracket is not None and bracket not in BRACKETS:
         raise DeckError("A bracket is a number from 1 to 5")
@@ -1121,6 +1134,9 @@ def deck_summaries(session: Session) -> list[DeckSummary]:
     basics: dict[int, int] = {}
     for row in session.exec(select(DeckBasicLand)):
         basics[row.deck_id] = basics.get(row.deck_id, 0) + row.quantity
+    tokens: dict[int, int] = {}
+    for row in session.exec(select(DeckSkipped).where(DeckSkipped.kind == TOKEN)):
+        tokens[row.deck_id] = tokens.get(row.deck_id, 0) + row.quantity
     summaries = []
     for deck in pool.decks:
         rows = pool.rows(deck_id=deck.id)
@@ -1131,6 +1147,7 @@ def deck_summaries(session: Session) -> list[DeckSummary]:
                 usable=sum(row.usable for row in rows),
                 value=round(sum(row.value for row in rows), 2),
                 basic_lands=basics.get(deck.id, 0),
+                tokens=tokens.get(deck.id, 0),
             )
         )
     return summaries

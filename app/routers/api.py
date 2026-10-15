@@ -29,6 +29,7 @@ from app.schemas import (
     DeckPrintingIn,
     DeckSaveIn,
     DeckSyncOut,
+    DeckTokensIn,
     DeckNeedOut,
     DeckUseOut,
     ImportOut,
@@ -347,6 +348,7 @@ def _deck_out(summary: decks.DeckSummary) -> DeckOut:
         bracket=summary.deck.bracket, bracket_name=summary.bracket_name, basic_land_count=summary.basic_lands,
         deck_size=summary.total_cards, deck_owned=summary.total_owned,
         archidekt_url=decks.deck_url(summary.deck), synced_at=summary.deck.synced_at, colors=summary.deck.colors,
+        uses_tokens=summary.uses_tokens, token_count=summary.tokens,
     )
 
 
@@ -500,6 +502,15 @@ def let_app_sort(entry_id: int | None = None, session: Session = Depends(get_ses
     released = decks.let_app_sort(session, entry_id)
     session.commit()
     return {"released": released}
+
+
+@router.put("/decks/{deck_id}/tokens", response_model=DeckDetailOut)
+def set_uses_tokens(deck_id: int, payload: DeckTokensIn, session: Session = Depends(get_session)):
+    """Mark a deck as one that uses tokens, or not; null goes back to what its deck list says."""
+    deck = _saved_deck(session, deck_id)
+    decks.set_uses_tokens(session, deck, payload.uses_tokens)
+    session.commit()
+    return _deck_detail(session, deck)
 
 
 @router.put("/decks/{deck_id}/basic-lands", response_model=DeckDetailOut)

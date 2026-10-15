@@ -59,6 +59,9 @@
         {% endfor %}
       </select>
     </label>
+    <input type="hidden" name="tokens_shown" value="1" form="deck-form">
+    <label class="token-toggle {{ 'on' if uses_tokens }}" title="Tick when this deck makes tokens, so you know to bring them">
+      <input type="checkbox" name="uses_tokens" form="deck-form" {{ 'checked' if uses_tokens }}>Uses tokens</label>
     <button form="deck-form" class="deck-save small">Save changes</button>
     <a href="/deck">← All decks</a>
     <form class="inline" method="post" action="/decks/{{ deck.id }}/delete" data-confirm="Click again to delete">
@@ -85,6 +88,7 @@
       {% if summaries | selectattr('deck.bracket', 'none') | list %}<option value="none">No bracket</option>{% endif %}
     </select>
     <label class="check muted"><input id="deck-complete-filter" type="checkbox">&nbsp;Only complete decks</label>
+    <label class="check muted"><input id="deck-tokens-filter" type="checkbox">&nbsp;Only decks with tokens</label>
     <span id="deck-filter-count" class="muted"></span>
   </div>
   <div class="toolbar search-bar color-bar">
@@ -108,10 +112,12 @@
         data-order="{{ loop.index }}" data-name="{{ s.deck.name }}" data-bracket-number="{{ s.deck.bracket or '' }}"
         data-cards="{{ s.total_cards }}" data-percent="{{ s.percent }}" data-value="{{ s.value }}" data-missing="{{ s.needed - s.usable }}"
         data-colors="{{ '?' if s.deck.colors is none else s.deck.colors }}"
-        data-card-names="{{ (card_names | default({})).get(s.deck.id, []) | join('|') }}">
+        data-card-names="{{ (card_names | default({})).get(s.deck.id, []) | join('|') }}"
+        data-tokens="{{ 1 if s.uses_tokens else 0 }}">
       <td><a href="/decks/{{ s.deck.id }}">{{ s.deck.name }}</a>
         {{ pips(s.deck.colors) }}
-        <div class="muted small deck-hit" hidden></div>{% if s.deck.archidekt_id %} <span class="badge linked" title="Follows its deck on Archidekt">↻ Archidekt</span>{% endif %}</td>
+        <div class="muted small deck-hit" hidden></div>{% if s.deck.archidekt_id %} <span class="badge linked" title="Follows its deck on Archidekt">↻ Archidekt</span>{% endif %}
+        {% if s.uses_tokens %}<span class="badge tokens" title="This deck uses tokens{% if s.tokens %}: {{ s.tokens }} in its deck list{% endif %}">● tokens</span>{% endif %}</td>
       <td>{% if s.bracket_name %}<span class="badge bracket">{{ s.deck.bracket }} · {{ s.bracket_name }}</span>{% else %}<span class="muted">–</span>{% endif %}</td>
       <td class="num" title="Cards you have / cards in the deck, basic lands included">{{ s.total_owned }} / {{ s.total_cards }}</td>
       <td style="width: 35%"><div class="progress slim"><div style="width: {{ s.percent }}%"></div></div></td>
@@ -421,6 +427,7 @@
   // Filter the list of saved decks by bracket; the choice is remembered in this browser.
   const bracketFilter = document.getElementById("deck-bracket-filter");
   const completeFilter = document.getElementById("deck-complete-filter");
+  const tokensFilter = document.getElementById("deck-tokens-filter");
   const deckListRows = [...document.querySelectorAll("#deck-list tr[data-bracket]")];
 
   const deckColours = colourFilter("deck", "deck-colors", "exact", () => filterDecks());
@@ -450,6 +457,7 @@
         hit.match &&
         (!bracketFilter.value || row.dataset.bracket === bracketFilter.value) &&
         (!completeFilter.checked || row.dataset.complete === "1") &&
+        (!tokensFilter.checked || row.dataset.tokens === "1") &&
         deckColours.matches(row.dataset.colors);
       row.hidden = !match;
       if (match) shown += 1;
@@ -463,7 +471,7 @@
     if (deckSearch.value.trim()) url.searchParams.set("q", deckSearch.value.trim());
     else url.searchParams.delete("q");
     history.replaceState(null, "", url);
-    const filtered = bracketFilter.value || completeFilter.checked || deckColours.active() || words.length > 0;
+    const filtered = bracketFilter.value || completeFilter.checked || tokensFilter.checked || deckColours.active() || words.length > 0;
     document.getElementById("deck-filter-count").textContent = filtered ? `${shown} of ${deckListRows.length} decks` : "";
     document.getElementById("deck-filter-empty").hidden = shown > 0;
     document.getElementById("deck-list").hidden = shown === 0;
@@ -476,6 +484,7 @@
   } catch (error) {}
   bracketFilter.addEventListener("change", filterDecks);
   completeFilter.addEventListener("change", filterDecks);
+  tokensFilter.addEventListener("change", filterDecks);
   deckSearch.addEventListener("input", filterDecks);
   filterDecks();
 </script>
@@ -566,9 +575,12 @@
   const deckFields = [...document.querySelectorAll('[form="deck-form"][name]:not(button)')];
   // What the server sent, not what the field shows now: a browser may restore edited values on reload.
   const storedValue = (field) =>
-    field.tagName === "SELECT"
+    field.type === "checkbox"
+      ? String(field.defaultChecked)
+      : field.tagName === "SELECT"
       ? ([...field.options].find((option) => option.defaultSelected) ?? field.options[0]).value
       : field.defaultValue;
+  const currentValue = (field) => (field.type === "checkbox" ? String(field.checked) : field.value);
   const stored = new Map(deckFields.map((field) => [field, storedValue(field)]));
   const saveButtons = document.querySelectorAll('button[form="deck-form"]:not([name])');
   const unsavedBar = document.getElementById("unsaved-bar");
@@ -576,8 +588,9 @@
   function markUnsaved() {
     let dirty = false;
     for (const field of deckFields) {
-      const changed = field.value !== stored.get(field);
-      field.classList.toggle("changed", changed);
+      const changed = currentValue(field) !== stored.get(field);
+      (field.type === "checkbox" ? field.closest("label") : field).classList.toggle("changed", changed);
+      if (field.type === "checkbox") field.closest("label").classList.toggle("on", field.checked);
       dirty = dirty || changed;
     }
     for (const button of saveButtons) button.disabled = !dirty;

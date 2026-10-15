@@ -85,6 +85,8 @@ class Deck(SQLModel, table=True):
     synced_at: dt.datetime | None = None
     # Colour identity of its cards, letters in WUBRG order; None: to be worked out (again).
     colors: str | None = None
+    # Whether the deck uses tokens, as you set it; None: it does when its deck list has tokens.
+    uses_tokens: bool | None = None
 
 
 class DeckEntry(SQLModel, table=True):

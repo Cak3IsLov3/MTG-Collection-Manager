@@ -527,3 +527,30 @@ def test_collection_groups_versions_and_lists_spare_copies(client):
     spare = sorted((i["card"]["name"], i["card"]["set_code"], i["spare"]) for i in items)
     # The deck uses one Sol Ring (the cheapest) and Fire // Ice; everything else is spare.
     assert spare == [("Lim-Dûl's Vault", "all", 1), ("Sol Ring", "cmm", 2), ("Sol Ring", "lea", 1)]
+
+
+def test_mark_a_deck_as_using_tokens(client):
+    with_tokens = client.post("/api/decks", json={"name": "Rabbits", "decklist": "1 Sol Ring\n3 Treasure Token"}).json()
+    plain = client.post("/api/decks", json={"name": "Plain", "decklist": "1 Sol Ring"}).json()
+
+    def tokens():
+        return {d["name"]: (d["uses_tokens"], d["token_count"]) for d in client.get("/api/decks").json()}
+
+    # A deck whose list has tokens uses them, until you say otherwise.
+    assert tokens() == {"Rabbits": (True, 3), "Plain": (False, 0)}
+    client.put(f"/api/decks/{plain['id']}/tokens", json={"uses_tokens": True})
+    client.put(f"/api/decks/{with_tokens['id']}/tokens", json={"uses_tokens": False})
+    assert tokens() == {"Rabbits": (False, 3), "Plain": (True, 0)}
+    client.put(f"/api/decks/{with_tokens['id']}/tokens", json={"uses_tokens": None})
+    assert tokens()["Rabbits"] == (True, 3)
+
+    # The "Uses tokens" box on the deck page is saved with the other changes.
+    client.post(f"/decks/{plain['id']}/save", data={"tokens_shown": "1"})  # unticked
+    assert tokens()["Plain"] == (False, 0)
+    client.post(f"/decks/{plain['id']}/save", data={"tokens_shown": "1", "uses_tokens": "on"})
+    assert tokens()["Plain"] == (True, 0)
+    page = client.get(f"/decks/{plain['id']}").text
+    assert 'name="uses_tokens" form="deck-form" checked' in page
+
+    overview = client.get("/deck").text
+    assert overview.count("● tokens</span>") == 2 and 'id="deck-tokens-filter"' in overview

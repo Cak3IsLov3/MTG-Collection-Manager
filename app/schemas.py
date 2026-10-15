@@ -203,6 +203,11 @@ class DeckAssignedIn(BaseModel):
     assigned: bool
 
 
+class DeckTokensIn(BaseModel):
+    # True or false, or null to follow the deck list (it uses tokens when it has any).
+    uses_tokens: bool | None = None
+
+
 class DeckPrintingIn(BaseModel):
     # A collection entry id, or null to let the app choose again.
     collection_entry_id: int | None = None
@@ -274,6 +279,9 @@ class DeckOut(BaseModel):
     synced_at: dt.datetime | None = None
     # Colour identity of the deck's cards, letters in WUBRG order; null until it is worked out.
     colors: str | None = None
+    # Whether the deck uses tokens (as you set it, or else whether its deck list has any), and how many it lists.
+    uses_tokens: bool = False
+    token_count: int = 0
 
 
 class DeckLinkIn(BaseModel):

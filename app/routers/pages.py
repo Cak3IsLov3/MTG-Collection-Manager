@@ -466,7 +466,8 @@ def saved_deck_page(deck_id: int, request: Request, session: Session = Depends(g
     deck = session.get(Deck, deck_id)
     if deck is None:
         raise HTTPException(status_code=404, detail="Deck not found")
-    return render(request, "deck.html", rows=decks.saved_deck_rows(session, deck), deck=deck,
+    summary = next(s for s in decks.deck_summaries(session) if s.deck.id == deck.id)
+    return render(request, "deck.html", rows=decks.saved_deck_rows(session, deck), deck=deck, uses_tokens=summary.uses_tokens,
                   summaries=decks.deck_summaries(session), left_out=decks.deck_left_out(session, deck),
                   bracket=deck.bracket, brackets=decks.BRACKETS, basic_names=decks.BASIC_LAND_NAMES,
                   tracked_basics=decks.tracked_basic_lands(session, deck), deck_link=decks.deck_url(deck))
@@ -526,6 +527,8 @@ async def saved_deck_save(deck_id: int, request: Request, session: Session = Dep
             {key.removeprefix("basic:"): value for key, value in form.items() if key.startswith("basic:")},
             printings,
         )
+        if "tokens_shown" in form:  # an unticked box is not sent at all
+            decks.set_uses_tokens(session, deck, "uses_tokens" in form)
         # The "Remove" / "Put back" buttons submit the same form, so pending edits are saved along.
         message = "Changes saved"
         # A new Archidekt link: follow it from now on and take over that deck right away.

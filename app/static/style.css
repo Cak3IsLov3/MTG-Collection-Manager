@@ -203,6 +203,12 @@ button.link:disabled { color: var(--muted); cursor: default; text-decoration: no
 [hidden] { display: none !important; }
 
 /* Collection: foil checkbox next to the card name */
+.token-toggle { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border: 1px solid var(--border);
+  border-radius: 10px; font-size: 12px; color: var(--muted); cursor: pointer; }
+.token-toggle input { margin: 0; }
+.token-toggle.on { border-color: var(--accent); color: var(--accent); }
+.token-toggle.changed { box-shadow: 0 0 0 2px var(--want); }
+.badge.tokens { border-color: var(--accent); color: var(--accent); }
 .foil-toggle { display: inline-flex; align-items: center; gap: 3px; margin-left: 6px; padding: 0 7px 0 4px; font-size: 11px;
   border: 1px solid var(--border); border-radius: 10px; color: var(--muted); cursor: pointer; white-space: nowrap; }
 .foil-toggle.on { border-color: var(--accent); color: var(--accent); }

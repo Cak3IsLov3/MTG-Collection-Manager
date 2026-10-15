@@ -29,7 +29,7 @@ def add_missing_columns(target=None) -> None:
         "card": {"colors": "VARCHAR"},
         # Before this column existed only an import could tell, so existing cards count as imported.
         "collectionentry": {"imported": "BOOLEAN NOT NULL DEFAULT 1", "unsorted": "INTEGER NOT NULL DEFAULT 0"},
-        "deck": {"bracket": "INTEGER", "archidekt_id": "INTEGER", "synced_at": "DATETIME", "colors": "VARCHAR"},
+        "deck": {"bracket": "INTEGER", "archidekt_id": "INTEGER", "synced_at": "DATETIME", "colors": "VARCHAR", "uses_tokens": "BOOLEAN"},
         "deckentry": {
             "unassigned": "BOOLEAN NOT NULL DEFAULT 0",
             "set_code": "VARCHAR",
