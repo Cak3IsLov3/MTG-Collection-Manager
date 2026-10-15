@@ -60,7 +60,14 @@
       <option value="wanted">Free copies a deck still needs</option>
       <option value="sort">New cards to sort into decks</option>
       <option value="used">In a deck</option>
+      <option value="spare">Spare copies (no deck uses or needs them)</option>
     </select>
+    <label class="muted" for="collection-sort">Sort</label>
+    <select id="collection-sort" aria-label="Sort the collection">
+      <option value="name">By name</option>
+      <option value="value">By value, high to low</option>
+    </select>
+    <label class="check muted" title="One line per card, with its versions underneath"><input id="collection-group" type="checkbox" checked>&nbsp;Group versions</label>
     <label class="check muted"><input id="collection-foil" type="checkbox">&nbsp;Foil only</label>
     <span id="collection-count" class="muted"></span>
   </div>
@@ -72,16 +79,45 @@
   </div>
   <p id="collection-empty" class="muted" hidden>No cards match your search.</p>
   <table id="collection-table">
+    <thead>
     <tr>
       <th></th><th>Card</th><th>Set</th><th class="num">Qty</th>
       <th class="num">Price</th><th class="num">Total</th><th></th>
     </tr>
-    {% for row in rows %}
+    </thead>
+    {% for name, group in rows | groupby("card.name") %}
+    <tbody class="card-group" data-name="{{ name }}">
+    {% if group | length > 1 %}
+    {% set first = group | selectattr("card.image_url") | first %}
+    {% set prices = group | map(attribute="unit_price") | reject("none") | list %}
+    {% set group_used = namespace(copies=0, new=0) %}
+    {% for row in group %}{% set group_used.copies = group_used.copies + (usage.get(row.entry.id, []) | sum(attribute=1)) %}{% set group_used.new = group_used.new + waiting.get(row.entry.id, 0) %}{% endfor %}
+    {% set group_qty = group | map(attribute="entry.quantity") | sum %}
+    <tr class="group-row">
+      <td>{% if first %}<img class="thumb" src="{{ first.card.image_url }}" alt="" loading="lazy">{% endif %}</td>
+      <td>
+        <button type="button" class="link group-toggle" aria-expanded="false" title="Show or hide the versions of {{ name }}">
+          <span class="group-arrow">▸</span> <strong>{{ name }}</strong></button>
+        {{ pips(group[0].card.colors) }}
+        <span class="muted group-versions">{{ group | length }} versions</span>
+        {% if group_used.copies %}<span class="badge group-in-decks">{{ group_used.copies }} in decks · {{ group_qty - group_used.copies }} free</span>{% endif %}
+        {% if group_used.new %}<span class="badge new">{{ group_used.new }} new</span>{% endif %}
+      </td>
+      <td class="muted">{{ group | map(attribute="card.set_code") | unique | list | length }} sets</td>
+      <td class="num group-qty">{{ group_qty }}</td>
+      <td class="num muted">{% if prices %}{{ prices | min | eur }}{% if prices | max != prices | min %} – {{ prices | max | eur }}{% endif %}{% endif %}</td>
+      <td class="num group-total"></td>
+      <td></td>
+    </tr>
+    {% endif %}
+    {% for row in group %}
     {% set used = usage.get(row.entry.id, []) %}
     {% set in_decks = used | sum(attribute=1) %}
     {% set needs = wanted.get(row.entry.id, []) %}
     {% set new = waiting.get(row.entry.id, 0) %}
-    <tr data-search="{{ row.card.name }} {{ row.card.set_name }} {{ row.card.set_code }} #{{ row.card.collector_number or '' }}{% for deck, count in used %} {{ deck.name }}{% endfor %}{% for deck, count, _ in needs %} {{ deck.name }}{% endfor %}" data-foil="{{ 1 if row.entry.is_foil else 0 }}" data-qty="{{ row.entry.quantity }}" data-used="{{ in_decks }}" data-wanted="{{ needs | length }}" data-waiting="{{ new }}" data-colors="{{ '?' if row.card.colors is none else row.card.colors }}">
+    <tr data-search="{{ row.card.name }} {{ row.card.set_name }} {{ row.card.set_code }} #{{ row.card.collector_number or '' }}{% for deck, count in used %} {{ deck.name }}{% endfor %}{% for deck, count, _ in needs %} {{ deck.name }}{% endfor %}" data-foil="{{ 1 if row.entry.is_foil else 0 }}" data-qty="{{ row.entry.quantity }}" data-used="{{ in_decks }}" data-wanted="{{ needs | length }}" data-waiting="{{ new }}" data-colors="{{ '?' if row.card.colors is none else row.card.colors }}"
+        data-price="{{ row.unit_price if row.unit_price is not none else '' }}" data-basic="{{ 1 if row.card.name in basic_lands else 0 }}"
+        class="{{ 'version' if group | length > 1 }}">
       <td>{% if row.card.image_url %}<img class="thumb" src="{{ row.card.image_url }}" alt="" loading="lazy">{% endif %}</td>
       <td>
         <a href="/cards/{{ row.card.id }}">{{ row.card.name }}</a>
@@ -149,6 +185,8 @@
       </td>
     </tr>
     {% endfor %}
+    </tbody>
+    {% endfor %}
   </table>
   {% else %}
   <p class="muted">No cards yet. Add one above or import a CSV export.</p>
@@ -167,6 +205,7 @@
     const table = document.getElementById("collection-table");
     // Lower-case and strip accents, so "lim-dul" finds "Lim-Dûl's Vault".
     const fold = (text) => text.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
+    const euro = (value) => (value === null ? "–" : "€" + value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
     const rows = [...table.querySelectorAll("tr[data-search]")].map((row) => ({
       row,
       text: fold(row.dataset.search),
@@ -176,7 +215,23 @@
       wanted: Number(row.dataset.wanted),  // decks that miss this card while a copy is free
       waiting: Number(row.dataset.waiting),  // new copies from an import, not in a deck until you choose
       colors: row.dataset.colors,  // colour identity in WUBRG order; "?" not known yet
+      price: row.dataset.price === "" ? null : Number(row.dataset.price),
+      basic: row.dataset.basic === "1",  // basic lands: decks count them by number, not from the collection
+      group: row.closest("tbody"),
     }));
+    const groups = [...table.tBodies].map((body) => ({
+      body,
+      header: body.querySelector("tr.group-row"),
+      items: rows.filter((item) => item.group === body),
+      open: false,
+    }));
+    const grouping = document.getElementById("collection-group");
+    const sortBy = document.getElementById("collection-sort");
+    try {
+      grouping.checked = localStorage.getItem("collection-group") !== "off";
+      sortBy.value = localStorage.getItem("collection-sort") || "name";
+    } catch (error) {}
+    if (!sortBy.value) sortBy.value = "name";
 
     const colours = colourFilter("collection", "collection-colors", "any", () => filter());
     const show = document.getElementById("collection-show");
@@ -187,6 +242,7 @@
       const words = fold(search.value).split(/\s+/).filter(Boolean);
       let shown = 0;
       let cards = 0;
+      let value = 0;
       for (const item of rows) {
         // "Free copies" counts the copies no deck uses, "In a deck" the copies a deck uses, and
         // "a deck still needs" the free copies of cards a deck misses.
@@ -195,21 +251,53 @@
           : show.value === "used" ? Math.min(item.used, item.quantity)
           : show.value === "wanted" ? (item.wanted > 0 ? free : 0)
           : show.value === "sort" ? (item.wanted > 0 ? item.waiting : 0)
+          : show.value === "spare" ? (item.wanted > 0 || item.basic ? 0 : free)
           : item.quantity;
         const match = copies > 0 && (!foilOnly.checked || item.foil) && colours.matches(item.colors)
           && words.every((word) => item.text.includes(word));
-        item.row.hidden = !match;
+        item.match = match;
+        item.copies = copies;
         // Sorting: open the list of decks that need the card, with its "Put in this deck" buttons.
         const needed = item.row.querySelector("details.wanted-by");
         if (needed && show.value === "sort" && match) needed.open = true;
         if (match) {
           shown += 1;
           cards += copies;
+          value += copies * (item.price ?? 0);
         }
       }
+      // One line per card with its versions underneath, or every version on its own line.
+      const opened = show.value === "sort";  // sorting needs the buttons of every version
+      for (const group of groups) {
+        const matching = group.items.filter((item) => item.match);
+        // What the copies in this view are worth, e.g. only the spare ones.
+        group.value = matching.reduce((sum, item) => sum + item.copies * (item.price ?? 0), 0);
+        group.body.hidden = matching.length === 0;
+        const folded = grouping.checked && group.header !== null;
+        if (group.header) {
+          group.header.hidden = !grouping.checked;
+          const open = group.open || opened;
+          group.header.querySelector(".group-toggle").setAttribute("aria-expanded", String(open));
+          group.header.querySelector(".group-arrow").textContent = open ? "▾" : "▸";
+          const total = group.items.length;
+          group.header.querySelector(".group-versions").textContent =
+            matching.length === total ? `${total} versions` : `${matching.length} of ${total} versions`;
+          group.header.querySelector(".group-qty").textContent = matching.reduce((sum, item) => sum + item.copies, 0);
+          group.header.querySelector(".group-total").textContent = euro(group.value);
+        }
+        for (const item of group.items) {
+          item.row.hidden = !item.match || (folded && !(group.open || opened));
+        }
+      }
+      if (sortBy.value === "value") sortGroups();
       const filtered = words.length > 0 || foilOnly.checked || show.value !== "all" || colours.active();
-      const what = { free: "free cards", used: "cards in decks", wanted: "free cards a deck needs", sort: "new cards to sort" }[show.value] || "cards";
-      count.textContent = filtered ? `${shown} of ${rows.length} entries · ${cards} ${what}` : `${rows.length} entries`;
+      const what = {
+        free: "free cards", used: "cards in decks", wanted: "free cards a deck needs", sort: "new cards to sort",
+        spare: "spare cards",
+      }[show.value] || "cards";
+      count.textContent = filtered
+        ? `${shown} of ${rows.length} entries · ${cards} ${what} · worth ${euro(value)}`
+        : `${rows.length} entries`;
       empty.hidden = shown > 0;
       table.hidden = shown === 0;
       const url = new URL(location.href);
@@ -218,8 +306,33 @@
       history.replaceState(null, "", url);
     }
 
+    // Sort by name, or by what the copies in view are worth (a card with several versions moves as one).
+    function sortGroups() {
+      const ordered = [...groups].sort((a, b) =>
+        sortBy.value === "value"
+          ? (b.value ?? 0) - (a.value ?? 0) || a.body.dataset.name.localeCompare(b.body.dataset.name)
+          : a.body.dataset.name.localeCompare(b.body.dataset.name));
+      table.append(...ordered.map((group) => group.body));
+    }
+
     search.addEventListener("input", filter);
     foilOnly.addEventListener("change", filter);
+    grouping.addEventListener("change", () => {
+      try { localStorage.setItem("collection-group", grouping.checked ? "on" : "off"); } catch (error) {}
+      filter();
+    });
+    sortBy.addEventListener("change", () => {
+      try { localStorage.setItem("collection-sort", sortBy.value); } catch (error) {}
+      filter();
+      sortGroups();
+    });
+    table.addEventListener("click", (event) => {
+      const toggle = event.target.closest(".group-toggle");
+      if (!toggle) return;
+      const group = groups.find((candidate) => candidate.body.contains(toggle));
+      group.open = !group.open;
+      filter();
+    });
     const showToSort = document.getElementById("show-to-sort");
     if (showToSort) {
       showToSort.addEventListener("click", () => {
@@ -233,9 +346,9 @@
       filter();
     });
     filter();
+    sortGroups();
 
     // Change a quantity in place: saved through the API, without reloading the page.
-    const euro = (value) => (value === null ? "–" : "€" + value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
     const grandTotal = document.getElementById("collection-total");
 
     async function saveQuantity(input) {

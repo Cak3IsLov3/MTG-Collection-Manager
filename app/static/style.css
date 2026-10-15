@@ -96,6 +96,12 @@ button.small { padding: 3px 8px; font-size: 12px; }
 .sort-notice { border-color: var(--want); }
 .sort-notice p { margin: 0 0 8px; }
 details.in-decks li form.inline { margin-left: 6px; }
+tr.group-row td { background: rgba(255, 255, 255, .025); }
+.group-toggle { color: var(--text); }
+.group-arrow { display: inline-block; width: 1em; color: var(--muted); }
+.group-versions { margin-left: 6px; font-size: 12px; }
+.badge.group-in-decks { margin-left: 6px; border-color: var(--have); color: var(--have); }
+tr.version td:nth-child(2) { padding-left: 28px; }
 button:hover { filter: brightness(1.1); }
 
 .top-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 12px; }

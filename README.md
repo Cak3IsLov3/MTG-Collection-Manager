@@ -35,7 +35,9 @@ price.
 
 ![On the deck page a missing card with a new copy waiting can be put in the deck directly](docs/deck-new-copy.jpg)
 
-![Searching the collection: five versions of Sol Ring, told apart by set and card number](docs/collection-search.jpg)
+![Searching the collection: Sol Ring is one line with its five versions opened underneath, told apart by set and card number](docs/collection-search.jpg)
+
+![Spare copies sorted by value: what no deck uses or needs, and what it is worth together](docs/collection-spare.jpg)
 
 ![Which decks a card is in: the label opened for two Sol Ring printings](docs/collection-decks.jpg)
 
@@ -86,6 +88,8 @@ price.
 - See which decks a card is in: cards that are set aside for a deck carry an "in N decks" label that opens the list of decks, and how many copies are still free
 - Show only the free copies, only the copies a deck uses, or only the free copies a deck still needs: cards you own that are missing from a deck carry a "needed by N decks" label with the decks
 - Instant search in the collection on card name, set or deck (accents and word order do not matter), with a foil-only filter
+- Versions of a card are grouped: one line per card with the number of versions, copies, price range and total value, which opens to show every version. Untick "Group versions" to see every version on its own line
+- Spare copies: the copies no deck uses or needs (basic lands left out), with what they are worth together, to trade or sell. Sort the collection by value to see the most valuable ones first
 - Filter the collection on colour (white, blue, black, red, green, colourless): cards with any of the chosen colours, cards that fit a deck of those colours, or cards with exactly those colours. Every card shows its colour identity
 - A printing without a price borrows the price of the cheapest printing with the same name, marked "≈ SET"
 - Daily price snapshots, total value over time, top 10 most valuable cards, weekly risers and fallers
@@ -185,7 +189,7 @@ product page. Two things to know:
 
 | Method | Path | |
 | --- | --- | --- |
-| `GET` / `POST` | `/api/collection` | List the collection (`?q=` searches name and set, `?in_deck=false` keeps the cards that are in no deck yet, `?colors=WU&color_match=any|within|exact` filters on colour) / add a card and fetch its price |
+| `GET` / `POST` | `/api/collection` | List the collection (`?q=` searches name and set, `?in_deck=false` keeps the cards that are in no deck yet, `?spare=true` the copies no deck uses or needs, `?colors=WU&color_match=any\|within\|exact` filters on colour) / add a card and fetch its price |
 | `POST` | `/api/collection/import` | Upload an Archidekt or Moxfield CSV (`?replace=true` replaces the earlier imported cards, hand-added cards stay) |
 | `PATCH` / `DELETE` | `/api/collection/{id}` | Change the quantity or the foil finish of an entry / remove it |
 | `GET` / `POST` | `/api/wishlist` | List the wishlist (`?colors=WU&color_match=any\|within\|exact`) / watch a card with a max price |

@@ -67,6 +67,8 @@ class CollectionItemOut(BaseModel):
     wanted_by: list[DeckNeedOut] = []
     # New copies from an import: no deck gets them until you put them in one (or let the app decide).
     waiting: int = 0
+    # Copies that no deck uses or needs (basic lands not counted): to trade or sell.
+    spare: int = 0
 
     @classmethod
     def from_row(cls, row: CollectionRow) -> "CollectionItemOut":

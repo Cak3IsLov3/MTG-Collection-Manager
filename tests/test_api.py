@@ -508,3 +508,22 @@ def test_filter_wishlist_on_colour(client):
     # The shared filter is on the other pages too.
     client.post("/api/collection", json={"name": "Sol Ring"})
     assert 'id="collection-colors"' in client.get("/collection").text
+
+
+def test_collection_groups_versions_and_lists_spare_copies(client):
+    client.post("/api/collection", json={"name": "Sol Ring", "set_code": "cmm", "quantity": 3})
+    client.post("/api/collection", json={"name": "Sol Ring", "set_code": "lea"})
+    client.post("/api/collection", json={"name": "Lim-Dûl's Vault"})
+    client.post("/api/collection", json={"name": "Fire // Ice"})
+    client.post("/api/decks", json={"name": "Ramp", "decklist": "1 Sol Ring\n1 Fire // Ice"})
+
+    page = client.get("/collection").text
+    # One summary line for the two Sol Ring versions; cards with a single version have none.
+    assert page.count('class="group-row"') == 1 and "2 versions" in page
+    assert '<tbody class="card-group" data-name="Sol Ring"' in page
+    assert 'id="collection-group"' in page and 'option value="spare"' in page
+
+    items = client.get("/api/collection", params={"spare": True}).json()["items"]
+    spare = sorted((i["card"]["name"], i["card"]["set_code"], i["spare"]) for i in items)
+    # The deck uses one Sol Ring (the cheapest) and Fire // Ice; everything else is spare.
+    assert spare == [("Lim-Dûl's Vault", "all", 1), ("Sol Ring", "cmm", 2), ("Sol Ring", "lea", 1)]

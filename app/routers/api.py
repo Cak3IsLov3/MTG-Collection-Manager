@@ -65,12 +65,15 @@ def list_collection(
     in_deck: bool | None = None,
     colors: str | None = None,
     color_match: Literal["any", "within", "exact"] = "any",
+    spare: bool = False,
     session: Session = Depends(get_session),
 ):
     """The collection; `q` filters on card name, set name or set code (every word must match).
     `in_deck=false` keeps the entries with a copy that is in no saved deck, `in_deck=true` the
     entries a saved deck uses. `colors` filters on colour identity (letters from WUBRG, C for
-    colourless): cards with any of them, cards that fit `within` them, or cards with `exact`ly them."""
+    colourless): cards with any of them, cards that fit `within` them, or cards with `exact`ly them.
+    `spare=true` keeps the entries with copies that no deck uses or needs (basic lands left out),
+    for example to trade or sell."""
     rows = collection.search_rows(collection.collection_rows(session), q)
     rows = collection.filter_colors(rows, colors, color_match)
     shared = decks.collection_decks(session)
@@ -88,6 +91,10 @@ def list_collection(
             for deck, copies, deck_entry_id in wanted.get(row.entry.id, [])
         ]
         item.waiting = shared.waiting.get(row.entry.id, 0)
+        basic = row.card.name.casefold() in decks.BASIC_LANDS
+        item.spare = 0 if item.wanted_by or basic else item.free
+        if spare and item.spare <= 0:
+            continue
         if in_deck is None or (bool(item.in_decks) if in_deck else item.free > 0):
             items.append(item)
             kept.append(row)

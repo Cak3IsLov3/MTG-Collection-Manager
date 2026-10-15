@@ -94,7 +94,8 @@ def collection_page(request: Request, session: Session = Depends(get_session)):
     rows = collection.collection_rows(session)
     shared = decks.collection_decks(session)
     return render(request, "collection.html", rows=rows, total=collection.collection_value(rows),
-                  usage=shared.usage, wanted=shared.wanted, waiting=shared.waiting)
+                  usage=shared.usage, wanted=shared.wanted, waiting=shared.waiting,
+                  basic_lands=decks.BASIC_LAND_NAMES)
 
 
 @router.post("/collection/add")
