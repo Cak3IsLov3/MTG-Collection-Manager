@@ -107,7 +107,7 @@ async def test_price_rise_alerts(client, session):
     assert await check_price_rises(session, notifier, min_pct=25, min_eur=1, days=7) == []
     assert await check_price_rises(session, notifier, min_pct=0, min_eur=1, days=7) == []
     assert len(notifier.sent) == 1
-    assert "Price rises in your collection" in client.get("/").text and "sent to Discord" in client.get("/").text
+    assert "data-tab=\"rises\"" in client.get("/").text and "sent to Discord" in client.get("/").text
 
 
 async def test_price_rise_without_webhook_is_only_logged(client, session):

@@ -43,9 +43,17 @@
 <div class="panel"><p class="muted">Save a deck first, then you can log the games you play with it.</p></div>
 {% endif %}
 
+<div class="tabbed sticky-tabs" data-tabs="games">
+  <nav class="tabs" role="tablist">
+    <button type="button" data-tab="overview" role="tab">Overview</button>
+    <button type="button" data-tab="opponents" role="tab">Opponents</button>
+    <button type="button" data-tab="decks" role="tab">Per deck</button>
+    <button type="button" data-tab="log" role="tab">Log <span class="tab-count">{{ games | length }}</span></button>
+  </nav>
+
 {% if overview.played %}
 {% set o = overview %}
-<div class="grid stats">
+<div class="grid stats" data-tab-panel="overview">
   <div class="panel stat">
     <div class="label">Games played</div>
     <div class="value">{{ o.played }}</div>
@@ -64,12 +72,12 @@
   </div>
 </div>
 
-<div class="panel">
+<div class="panel" data-tab-panel="overview">
   <h2>Games per month</h2>
   <div class="chart-box small"><canvas id="months-chart"></canvas></div>
 </div>
 
-<div class="grid three game-tables">
+<div class="grid three game-tables" data-tab-panel="overview">
   {% macro tally_table(title, items, label) %}
   <div class="panel">
     <h2>{{ title }}</h2>
@@ -95,7 +103,7 @@
 </div>
 
 {% if o.opponents %}
-<div class="panel table-wrap">
+<div class="panel table-wrap" data-tab-panel="opponents">
   <h2>Opponents</h2>
   <table>
     <tr><th>Player</th><th>Commanders</th><th class="num">Games together</th><th class="num">You won</th><th class="num">They won</th><th class="num">Your win rate</th></tr>
@@ -115,7 +123,7 @@
 {% endif %}
 
 {% if o is defined and o.commanders %}
-<div class="panel table-wrap">
+<div class="panel table-wrap" data-tab-panel="opponents">
   <h2>Commanders you played against</h2>
   <table>
     <tr><th>Commander</th><th class="num">Games</th><th class="num">You won</th><th class="num">It won</th><th class="num">Your win rate</th></tr>
@@ -134,7 +142,7 @@
 {% endif %}
 
 {% if stats %}
-<div class="panel table-wrap">
+<div class="panel table-wrap" data-tab-panel="decks">
   <h2>Per deck</h2>
   <table>
     <tr><th></th><th>Deck</th><th class="num">Played</th><th class="num">Won</th><th class="num">Lost</th><th class="num">Draw</th><th class="num">Win rate</th><th>Last played</th></tr>
@@ -157,7 +165,7 @@
 </div>
 {% endif %}
 
-<div class="panel table-wrap">
+<div class="panel table-wrap" data-tab-panel="log">
   <h2>Log</h2>
   {% if games %}
   <table>
@@ -182,6 +190,7 @@
   {% else %}
   <p class="muted">No games logged yet.</p>
   {% endif %}
+</div>
 </div>
 {% endblock %}
 

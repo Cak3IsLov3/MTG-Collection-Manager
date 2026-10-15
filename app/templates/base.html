@@ -146,6 +146,31 @@
     }
   </script>
   <script>
+    // Tabs: a .tabbed element with buttons [data-tab] in its .tabs, and parts [data-tab-panel]. The tab
+    // you chose is remembered per kind of page (data-tabs); a link like #improve opens that tab.
+    for (const box of document.querySelectorAll(".tabbed")) {
+      const buttons = [...box.querySelectorAll(":scope > .tabs [data-tab], :scope > .panel-head .tabs [data-tab]")];
+      const parts = [...box.querySelectorAll(":scope > [data-tab-panel]")];
+      const names = buttons.map((button) => button.dataset.tab).filter((name) => parts.some((part) => part.dataset.tabPanel === name));
+      buttons.forEach((button) => { button.hidden = !names.includes(button.dataset.tab); });
+      const bar = box.querySelector(":scope > .tabs");
+      if (bar) bar.hidden = names.length < 2;  // one tab is no choice
+      const key = "tab:" + box.dataset.tabs;
+      const open = (name, remember) => {
+        buttons.forEach((button) => button.setAttribute("aria-selected", String(button.dataset.tab === name)));
+        parts.forEach((part) => part.classList.toggle("tab-hidden", part.dataset.tabPanel !== name));
+        if (remember) { try { localStorage.setItem(key, name); } catch (error) {} }
+        window.dispatchEvent(new Event("resize"));  // charts in a tab that was hidden take their size
+      };
+      let start = location.hash.slice(1);
+      if (!names.includes(start) && box.dataset.open) start = box.dataset.open;  // the page asks for a tab
+      if (!names.includes(start)) { try { start = localStorage.getItem(key); } catch (error) { start = null; } }
+      open(names.includes(start) ? start : names[0], false);
+      buttons.forEach((button) => button.addEventListener("click", () => open(button.dataset.tab, true)));
+      box.openTab = (name) => open(name, true);
+    }
+  </script>
+  <script>
     // Typing ahead: an input with data-autocomplete="card|token|commander" suggests card names from
     // Scryfall, with a picture of the highlighted one. Arrow keys and Enter pick; Escape closes.
     (() => {

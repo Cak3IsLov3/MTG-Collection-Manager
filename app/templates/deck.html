@@ -50,6 +50,7 @@
   <div class="deck-title">
     {% if deck.commander_image %}<img class="commander-art" src="{{ deck.commander_image }}" alt="{{ deck.commander }}">{% endif %}
     <div>
+      <a class="back-link" href="/deck">← All decks</a>
       <h1>{{ deck.name }}</h1>
       <label class="muted commander-pick">Commander
         <select name="commander" form="deck-form" title="The commander of this deck; its picture shows here and in the list of decks">
@@ -61,7 +62,8 @@
       </label>
     </div>
   </div>
-  <div class="actions">
+  <div class="deck-actions">
+  <div class="actions deck-settings">
     {# Every editable field on this page belongs to this one form, so a single button saves them all. #}
     <form id="deck-form" class="inline" method="post" action="/decks/{{ deck.id }}/save" data-keep-scroll></form>
     <label class="muted">Bracket
@@ -76,19 +78,29 @@
     <label class="token-toggle {{ 'on' if uses_tokens }}" title="Tick when this deck has tokens, so you know to bring them">
       <input type="checkbox" name="uses_tokens" form="deck-form" {{ 'checked' if uses_tokens }}>Has tokens</label>
     <button form="deck-form" class="deck-save small">Save changes</button>
-    <a href="/deck">← All decks</a>
-    <a class="small-link" href="/decks/{{ deck.id }}/export.txt" title="Download this deck as a text list for Archidekt or Moxfield">Export list</a>
-    <a class="small-link" href="/decks/{{ deck.id }}/proxies" title="A printable sheet of the cards you still miss, to play-test with">Proxies</a>
+  </div>
+  <div class="actions deck-tools">
+    <a class="button-link" href="/table" title="Play this deck on the live table">▶ Play</a>
+    <a class="button-link" href="/decks/{{ deck.id }}/export.txt" title="Download this deck as a text list for Archidekt or Moxfield">⤓ Export list</a>
+    <a class="button-link" href="/decks/{{ deck.id }}/proxies" title="A printable sheet of the cards you still miss, to play-test with">⎙ Proxies</a>
     <form class="inline" method="post" action="/decks/{{ deck.id }}/delete" data-confirm="Click again to delete">
       <button class="secondary small">Delete deck</button>
     </form>
+  </div>
   </div>
 </div>
 {% else %}
 <h1>Decks <span class="muted">· {{ summaries | length }} saved</span></h1>
 
+<div class="tabbed sticky-tabs" data-tabs="decks" {% if rows is not none or not summaries %}data-open="add"{% endif %}>
+  <nav class="tabs" role="tablist">
+    <button type="button" data-tab="decks" role="tab">Your decks{% if summaries %} <span class="tab-count">{{ summaries | length }}</span>{% endif %}</button>
+    <button type="button" data-tab="random" role="tab">Randomizer</button>
+    <button type="button" data-tab="add" role="tab">Add or check a deck</button>
+  </nav>
+
 {% if summaries %}
-<div class="panel table-wrap">
+<div class="panel table-wrap" data-tab-panel="decks">
   {% set complete = summaries | selectattr('complete') | list | length %}
   <h2>Your saved decks ({{ summaries | length }}) <span class="muted">· {{ complete }} complete, {{ summaries | length - complete }} still missing cards</span></h2>
   <div class="toolbar search-bar">
@@ -160,7 +172,7 @@
   </form>
 </div>
 
-<div class="panel randomizer">
+<div class="panel randomizer" data-tab-panel="random">
   <h2>Can't decide what to play?</h2>
   <div class="row">
     <label>Bracket
@@ -180,7 +192,7 @@
 </div>
 {% endif %}
 
-<div class="panel">
+<div class="panel" data-tab-panel="add">
   <h2>Add a deck</h2>
   <form method="post" action="/deck" enctype="multipart/form-data">
     <div class="row deck-sources">
@@ -202,6 +214,7 @@
       Basic lands and tokens are left out unless you tick the boxes.</p>
   </form>
 </div>
+</div>
 {% endif %}
 
 {% if rows is not none %}
@@ -222,6 +235,31 @@
   {% else %}
   <h2>You have {{ usable }} of the {{ total }} cards for this deck available ({{ pct }}%)</h2>
   {% endif %}
+  {% if deck %}
+  <div class="deck-stats-row">
+    <div class="mini-stat">
+      <div class="label">Cards you have</div>
+      <div class="value">{{ usable }} <span class="muted">/ {{ total }}</span></div>
+      <div class="progress slim"><div style="width: {{ pct }}%"></div></div>
+      <div class="sub">{{ pct }}% · {{ need | length }} still to get</div>
+    </div>
+    <div class="mini-stat">
+      <div class="label">Worth</div>
+      <div class="value">{{ value | eur }}</div>
+      <div class="sub">the copies you have for it</div>
+    </div>
+    <div class="mini-stat">
+      <div class="label">Deck size</div>
+      <div class="value">{{ total }}</div>
+      <div class="sub">{% if total == 100 %}<span class="up">exactly 100 ✓</span>{% elif total < 100 %}{{ 100 - total }} short of 100{% else %}{{ total - 100 }} over 100{% endif %}{% if basics %} · {{ basics }} basic lands{% endif %}</div>
+    </div>
+    <div class="mini-stat">
+      <div class="label">Games</div>
+      <div class="value">{% if deck_plays %}{{ deck_plays.played }}× <span class="muted">· {{ deck_plays.win_rate }}%</span>{% else %}–{% endif %}</div>
+      <div class="sub">{% if deck_plays %}won {{ deck_plays.wins }}, last on {{ deck_plays.last_played }}{% else %}not played yet{% endif %}</div>
+    </div>
+  </div>
+  {% else %}
   <div class="progress"><div style="width: {{ pct }}%"></div></div>
   <p class="muted">
     {{ have | length }} different cards {{ 'set aside for this deck' if deck else 'ready to pull from your collection' }} · {{ need | length }} still to get
@@ -235,7 +273,37 @@
     {% if basics %}· includes {{ basics }} basic land{{ 's' if basics != 1 }}{% if not deck %} ({% for land, count in left_out.basics.items() %}{{ count }} {{ land }}{{ ', ' if not loop.last }}{% endfor %}){% endif %}, counted as owned{% endif %}
     {% if tokens %}· {{ tokens }} token{{ 's' if tokens != 1 }} not counted{% endif %}
   </p>
-  {% if deck %}
+  {% endif %}
+  {% if not deck %}
+  <form class="row" method="post" action="/deck/save">
+    <input type="hidden" name="decklist" value="{{ decklist }}">
+    {% for land, count in (left_out.basics if left_out else {}).items() %}<input type="hidden" name="basic:{{ land }}" value="{{ count }}">{% endfor %}
+    <input type="hidden" name="bracket" value="{{ bracket or '' }}">
+    <input type="hidden" name="archidekt_id" value="{{ archidekt_id or '' }}">
+    <input type="hidden" name="skipped_token" value="{{ tokens }}">
+    {% for token in (left_out.token_cards if left_out else []) %}<input type="hidden" name="token:{{ token.name }}" value="{{ token.quantity }}">{% endfor %}
+    <label>Deck name<input name="name" required size="30" value="{{ deck_name or '' }}" placeholder="My Commander deck"></label>
+    <button>Save deck &amp; set these cards aside</button>
+  </form>
+  <p class="muted"><strong>This deck is not saved yet.</strong> Saved decks keep their cards, so the next deck does not count the same Sol Ring again.</p>
+  {% endif %}
+</div>
+
+{% if deck %}
+{% set weak_count = weakest | length if weakest is defined and weakest else 0 %}
+{% set token_todo = token_suggestions | rejectattr("status", "equalto", "ok") | list | length if token_suggestions is defined else 0 %}
+{% set bracket_bad = bracket_check is defined and bracket_check and bracket_check.problems %}
+<div class="tabbed sticky-tabs deck-tabbed" data-tabs="deck">
+  <nav class="tabs" role="tablist" aria-label="Parts of this deck">
+    <button type="button" data-tab="cards" role="tab">Cards{% if need %} <span class="tab-count">{{ need | length }} missing</span>{% endif %}</button>
+    <button type="button" data-tab="analysis" role="tab">Analysis{% if bracket_bad %} <span class="tab-count warn">⚠ bracket</span>{% endif %}</button>
+    <button type="button" data-tab="improve" role="tab">Improve{% if weak_count %} <span class="tab-count">{{ weak_count }} weak</span>{% endif %}</button>
+    <button type="button" data-tab="lands" role="tab">Lands &amp; tokens{% if token_todo %} <span class="tab-count">{{ token_todo }} to add</span>{% endif %}</button>
+    <button type="button" data-tab="games" role="tab">Games &amp; value</button>
+    <button type="button" data-tab="settings" role="tab">Archidekt</button>
+  </nav>
+
+<div class="panel" data-tab-panel="games" style="order: 1">
   <div class="deck-games">
     <h3 class="value-title">Games
       <span class="muted">· {% if deck_plays %}played {{ deck_plays.played }}×, won {{ deck_plays.wins }} ({{ deck_plays.win_rate }}%), last on {{ deck_plays.last_played }}{% else %}not played yet{% endif %}</span></h3>
@@ -255,7 +323,6 @@
     <p class="muted small">Last games: {% for game in deck_games %}<span class="badge result-{{ game.result }}">{{ results[game.result] }}</span> {{ game.played_on }}{{ ' · ' if not loop.last }}{% endfor %} · <a href="/games?deck={{ deck.id }}">all games</a></p>
     {% endif %}
   </div>
-  {% endif %}
   {% if deck and value_history and value_history["values"] | length > 1 %}
   {% set first_value = value_history["values"][0] %}
   {% set last_value = value_history["values"][-1] %}
@@ -266,23 +333,11 @@
   <div class="chart-box small"><canvas id="deck-value-chart"></canvas></div>
   <p class="muted small">What the copies in this deck now were worth on each day with prices.</p>
   {% endif %}
-  {% if not deck %}
-  <form class="row" method="post" action="/deck/save">
-    <input type="hidden" name="decklist" value="{{ decklist }}">
-    {% for land, count in (left_out.basics if left_out else {}).items() %}<input type="hidden" name="basic:{{ land }}" value="{{ count }}">{% endfor %}
-    <input type="hidden" name="bracket" value="{{ bracket or '' }}">
-    <input type="hidden" name="archidekt_id" value="{{ archidekt_id or '' }}">
-    <input type="hidden" name="skipped_token" value="{{ tokens }}">
-    {% for token in (left_out.token_cards if left_out else []) %}<input type="hidden" name="token:{{ token.name }}" value="{{ token.quantity }}">{% endfor %}
-    <label>Deck name<input name="name" required size="30" value="{{ deck_name or '' }}" placeholder="My Commander deck"></label>
-    <button>Save deck &amp; set these cards aside</button>
-  </form>
-  <p class="muted"><strong>This deck is not saved yet.</strong> Saved decks keep their cards, so the next deck does not count the same Sol Ring again.</p>
-  {% endif %}
 </div>
+{% endif %}
 
 {% if deck %}
-<div class="panel">
+<div class="panel" data-tab-panel="settings" style="order: 1">
   <h2>Archidekt link</h2>
   <div class="row">
     <label>Deck on Archidekt<input name="archidekt_url" form="deck-form" type="url" size="46" value="{{ deck_link or '' }}"
@@ -303,7 +358,7 @@
   </p>
 </div>
 
-<div class="panel">
+<div class="panel" data-tab-panel="cards" style="order: 4">
   <h2>Add a card to this deck</h2>
   <form class="row" method="post" action="/decks/{{ deck.id }}/cards" data-keep-scroll>
     <label>Card name<input name="name" placeholder="Lim-Dûl's Vault" data-autocomplete="card"></label>
@@ -317,7 +372,7 @@
 </div>
 
 {% macro land_picture(land) %}{% if (land_images | default({})).get(land) %}<img src="{{ land_images[land] }}" alt="{{ land }}" title="{{ land }}" loading="lazy">{% else %}<span class="land-name">{{ land | replace('Snow-Covered ', 'Snow ') }}</span>{% endif %}{% endmacro %}
-<div class="panel">
+<div class="panel" data-tab-panel="lands" style="order: 1">
   <h2>Basic lands <span class="muted">· {{ basics }} in this deck</span></h2>
   <div class="row">
     {% for land in basic_names[:6] %}
@@ -341,7 +396,7 @@
   {% endif %}
 </div>
 
-<div class="panel tokens-panel">
+<div class="panel tokens-panel" data-tab-panel="lands" style="order: 2">
   <h2>Tokens{% if deck_token_list %} <span class="muted">· {{ deck_token_list | sum(attribute='quantity') }} to bring</span>{% endif %}</h2>
   {% if deck_token_list %}
   <div class="token-grid">
@@ -380,7 +435,7 @@
 
 {% if token_suggestions is defined %}
 {% set to_do = token_suggestions | rejectattr("status", "equalto", "ok") | list %}
-<div class="panel token-suggestions">
+<div class="panel token-suggestions" data-tab-panel="lands" style="order: 3">
   <div class="toolbar panel-head">
     <h2>Token suggestions{% if token_suggestions %} <span class="muted">· {{ token_suggestions | length }} token{{ 's' if token_suggestions | length != 1 }} made by this deck, about {{ token_suggestions | sum(attribute='needed') }} needed{% if to_do %} · {{ to_do | length }} not (enough) in your list{% endif %}</span>{% endif %}</h2>
     {% if to_do %}
@@ -420,7 +475,7 @@
 {% if bracket_check is defined and bracket_check %}
 {% set bc = bracket_check %}
 {% set lowest = '1 or 2' if bc.minimum == 1 else bc.minimum ~ ' or higher' %}
-<div class="panel bracket-check {{ 'bad' if bc.problems }}">
+<div class="panel bracket-check {{ 'bad' if bc.problems }}" data-tab-panel="analysis" style="order: 2">
   <h2>Bracket check <span class="muted">· {% if bc.bracket %}set to {{ bc.bracket }} · {{ brackets[bc.bracket] }}{% else %}no bracket set{% endif %}</span></h2>
   {% if bc.problems %}
   <p class="down"><strong>⚠ Does not fit bracket {{ bc.bracket }}:</strong> {{ bc.problems | join('; ') }}. By its cards it is bracket {{ lowest }}.</p>
@@ -448,7 +503,7 @@
 {% endif %}
 
 {% if deck_combos is defined and deck_combos.checked %}
-<div class="panel combos-panel">
+<div class="panel combos-panel" data-tab-panel="analysis" style="order: 3">
   <h2>Combos <span class="muted">· {{ deck_combos.included | length }} in this deck{% if deck_combos.almost %}, {{ deck_combos.almost | length }} one card away{% endif %}</span></h2>
   {% if deck_combos.included %}
   <ul class="combo-list">
@@ -477,7 +532,7 @@
 {% endif %}
 
 {% if edhrec is defined and (edhrec or edhrec_error) %}
-<div class="panel edhrec-panel">
+<div class="panel edhrec-panel" data-tab-panel="improve" style="order: 2">
   {% if edhrec %}
   {% set e = edhrec %}
   <div class="toolbar panel-head">
@@ -517,7 +572,7 @@
 {% endif %}
 
 {% if weakest is defined and weakest is not none %}
-<div class="panel weakest-panel">
+<div class="panel weakest-panel" data-tab-panel="improve" style="order: 1">
   <div class="toolbar panel-head">
     <h2>Weakest cards <span class="muted">· the cards the fewest {{ edhrec.commander }} decks play</span></h2>
     {% if weakest %}<label class="check muted" title="Only the weak cards you have a better card for in your collection"><input type="checkbox" id="weakest-mine">&nbsp;Only cards I have free</label>{% endif %}
@@ -548,7 +603,7 @@
 
 {% if deck_suggestions is defined %}
 {% set sg = deck_suggestions %}
-<div class="panel suggestions-panel">
+<div class="panel suggestions-panel" data-tab-panel="improve" style="order: 3">
   <h2>Suggestions from your collection{% if sg.candidates %} <span class="muted">· {{ sg.candidates }} free card{{ 's' if sg.candidates != 1 }} fit this deck</span>{% endif %}</h2>
   {% if sg.no_colours %}
   <p class="muted">The colours of this deck are still being worked out; reload in a minute.</p>
@@ -586,7 +641,7 @@
 {% endif %}
 
 {% if deck_stats and deck_stats.has_data %}
-<div class="panel">
+<div class="panel" data-tab-panel="analysis" style="order: 1">
   <h2>Mana curve and card types{% if deck_stats.average_cmc is not none %} <span class="muted">· average mana value {{ deck_stats.average_cmc }}</span>{% endif %}</h2>
   <div class="grid two deck-stats">
     <div class="chart-box small"><canvas id="curve-chart"></canvas></div>
@@ -605,14 +660,14 @@
 {% endif %}
 {% endif %}
 
-<div class="panel search-panel">
+<div class="panel search-panel" data-tab-panel="cards" style="order: 1">
   <div class="toolbar search-bar">
     <input id="deck-search" type="search" size="40" autocomplete="off" placeholder="Search in this deck…" aria-label="Search in this deck">
     <span id="deck-count" class="muted"></span>
   </div>
 </div>
 
-<div class="panel table-wrap">
+<div class="panel table-wrap" data-tab-panel="cards" style="order: 2">
   <h2 class="up">{{ 'In this deck' if deck else 'Available in your collection' }} ({{ have | length }})</h2>
   {% if have %}
   <table>
@@ -647,7 +702,7 @@
   {% endif %}
 </div>
 
-<div class="panel table-wrap">
+<div class="panel table-wrap" data-tab-panel="cards" style="order: 3">
   <div class="toolbar">
     <h2>Still missing ({{ need | length }})</h2>
     {% if addable %}
@@ -692,6 +747,7 @@
   <p class="up">{{ 'This deck is complete.' if deck else 'You have every card for this deck available.' }}</p>
   {% endif %}
 </div>
+{% if deck %}</div>{% endif %}
 {% endif %}
 {% endblock %}
 

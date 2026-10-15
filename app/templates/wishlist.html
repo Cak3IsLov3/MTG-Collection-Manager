@@ -22,7 +22,14 @@
 
 <p class="muted">Your collection is worth {{ collection_value | eur }}, your wishlist still costs {{ total | eur }}.</p>
 
-<div class="panel">
+<div class="tabbed sticky-tabs" data-tabs="wishlist" {% if not rows %}data-open="add"{% endif %}>
+  <nav class="tabs" role="tablist">
+    <button type="button" data-tab="cards" role="tab">Watching{% if rows %} <span class="tab-count">{{ rows | length }}</span>{% endif %}</button>
+    <button type="button" data-tab="add" role="tab">Watch a card</button>
+    <button type="button" data-tab="history" role="tab">Alert history{% if alerts %} <span class="tab-count">{{ alerts | length }}</span>{% endif %}</button>
+  </nav>
+
+<div class="panel" data-tab-panel="add" style="order: 2">
   <h2>Watch a card</h2>
   <form class="row" method="post" action="/wishlist/add">
     <label>Card name<input name="name" required placeholder="Fire // Ice" data-autocomplete="card"></label>
@@ -33,7 +40,7 @@
   </form>
 </div>
 
-<div class="panel table-wrap">
+<div class="panel table-wrap" data-tab-panel="cards" style="order: 1">
   {% if rows %}
   <div class="toolbar search-bar color-bar wishlist-colors">
     {{ colour_filter("wishlist", "Cards") }}
@@ -118,7 +125,7 @@
   {% endif %}
 </div>
 
-<div class="panel">
+<div class="panel" data-tab-panel="history" style="order: 3">
   <h2>Alert history</h2>
   {% if alerts %}
   <table>
@@ -138,6 +145,7 @@
   {% if settings.price_drop_pct > 0 %}
   <p class="muted small">Besides that, a card that gets {{ settings.price_drop_pct | round | int }}% or more (and at least {{ settings.price_drop_min_eur | eur }}) cheaper in {{ settings.price_drop_days }} days is marked "cheaper" here and sent to Discord once, even when it is not at your target yet.</p>
   {% endif %}
+</div>
 </div>
 {% endblock %}
 

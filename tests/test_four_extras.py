@@ -199,5 +199,5 @@ async def test_price_drop_alerts(client, session):
     assert await check_price_drops(session, notifier, min_pct=15, min_eur=0.5, days=7) == []
     assert await check_price_drops(session, notifier, min_pct=0, min_eur=0.5, days=7) == []
     assert len(session.exec(select(PriceDropAlert)).all()) == 1
-    assert "Price drops on your wishlist" in client.get("/").text and "sent to Discord" in client.get("/").text
+    assert "data-tab=\"drops\"" in client.get("/").text and "sent to Discord" in client.get("/").text
     assert "% cheaper" in client.get("/wishlist").text

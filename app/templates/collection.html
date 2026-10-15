@@ -12,7 +12,27 @@
   {% endif %}
 </div>
 
-<div class="grid two">
+{% set to_sort = rows | selectattr("entry.id", "in", waiting) | selectattr("entry.id", "in", wanted) | list %}
+{% if waiting %}
+<div class="panel sort-notice">
+  <p><strong>{{ waiting.values() | sum }} new cop{{ 'y' if waiting.values() | sum == 1 else 'ies' }} from your import wait for you.</strong>
+    No deck gets them until you put them in one{% if to_sort %}: {{ to_sort | length }} card{{ 's' if to_sort | length != 1 }} {{ 'is' if to_sort | length == 1 else 'are' }} needed by a deck{% endif %}.</p>
+  <div class="row">
+    {% if to_sort %}<button type="button" class="small" id="show-to-sort">Show the cards to sort</button>{% endif %}
+    <form class="inline" method="post" action="/collection/let-app-sort" data-confirm="Click again: the app puts them in decks">
+      <button class="secondary small">Let the app decide for all</button>
+    </form>
+  </div>
+</div>
+{% endif %}
+
+<div class="tabbed sticky-tabs" data-tabs="collection" {% if not rows %}data-open="add"{% endif %}>
+  <nav class="tabs" role="tablist">
+    <button type="button" data-tab="cards" role="tab">Your cards{% if rows %} <span class="tab-count">{{ rows | map(attribute='entry.quantity') | sum }}</span>{% endif %}</button>
+    <button type="button" data-tab="add" role="tab">Add &amp; import</button>
+  </nav>
+
+<div class="grid two" data-tab-panel="add">
   <div class="panel">
     <h2>Add a card</h2>
     <form class="row" method="post" action="/collection/add">
@@ -40,29 +60,15 @@
   </div>
 </div>
 
-{% set to_sort = rows | selectattr("entry.id", "in", waiting) | selectattr("entry.id", "in", wanted) | list %}
-{% if waiting %}
-<div class="panel sort-notice">
-  <p><strong>{{ waiting.values() | sum }} new cop{{ 'y' if waiting.values() | sum == 1 else 'ies' }} from your import wait for you.</strong>
-    No deck gets them until you put them in one{% if to_sort %}: {{ to_sort | length }} card{{ 's' if to_sort | length != 1 }} {{ 'is' if to_sort | length == 1 else 'are' }} needed by a deck{% endif %}.</p>
-  <div class="row">
-    {% if to_sort %}<button type="button" class="small" id="show-to-sort">Show the cards to sort</button>{% endif %}
-    <form class="inline" method="post" action="/collection/let-app-sort" data-confirm="Click again: the app puts them in decks">
-      <button class="secondary small">Let the app decide for all</button>
-    </form>
-  </div>
-</div>
-{% endif %}
-
 {% if purchases.copies %}
-<div class="panel purchases">
+<div class="panel purchases" data-tab-panel="cards">
   <p>You paid <strong>{{ purchases.paid | eur }}</strong> for the {{ purchases.copies }} card{{ 's' if purchases.copies != 1 }} you filled in a price for. They are worth
     <strong>{{ purchases.worth | eur }}</strong> now:
     <strong class="{{ 'up' if purchases.gain >= 0 else 'down' }}">{{ '+' if purchases.gain >= 0 else '−' }}{{ purchases.gain | abs | eur }}{% if purchases.gain_pct is not none %} ({{ '%+.1f' | format(purchases.gain_pct) }}%){% endif %}</strong>.</p>
 </div>
 {% endif %}
 
-<div class="panel table-wrap">
+<div class="panel table-wrap" data-tab-panel="cards">
   {% if rows %}
   <div class="toolbar search-bar">
     <input id="collection-search" type="search" size="40" autocomplete="off" value="{{ request.query_params.get('q', '') }}"
@@ -216,6 +222,7 @@
   {% else %}
   <p class="muted">No cards yet. Add one above or import a CSV export.</p>
   {% endif %}
+</div>
 </div>
 {% endblock %}
 
@@ -371,6 +378,7 @@
     const showToSort = document.getElementById("show-to-sort");
     if (showToSort) {
       showToSort.addEventListener("click", () => {
+        document.querySelector('[data-tabs="collection"]').openTab("cards");
         show.value = "sort";
         show.dispatchEvent(new Event("change"));
         show.scrollIntoView({ block: "start" });

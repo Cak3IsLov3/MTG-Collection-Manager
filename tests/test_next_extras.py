@@ -287,5 +287,5 @@ async def test_reprint_alerts(client, session, scryfall, fake_scryfall):
     assert await check_reprints(session, scryfall, notifier, min_eur=5, days=60) == []
     assert await check_reprints(session, scryfall, notifier, min_eur=0, days=60) == []
     page = client.get("/").text
-    assert "Reprints of cards you own" in page and "Set FDN (FDN)" in page and f"out {soon}" in page
+    assert "data-tab=\"reprints\"" in page and "Set FDN (FDN)" in page and f"out {soon}" in page
     assert client.get("/api/reprints").json()[0]["card"] == "Lim-Dûl's Vault"

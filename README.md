@@ -9,15 +9,15 @@ price.
 
 > "Your collection is worth €850, your wishlist still costs €120."
 
-![Dashboard: collection value, wishlist cost and value over time](docs/dashboard.jpg)
+![Dashboard: collection value, wishlist cost and what you paid on top, and tabs for the value over time, the top cards and movers, alerts and backups](docs/dashboard.jpg)
 
 | Top cards and weekly movers | Wishlist with targets, sorted by current price |
 | --- | --- |
-| ![Top 10 most valuable cards, risers and fallers](docs/dashboard-cards.jpg) | ![Wishlist sorted from expensive to cheap](docs/wishlist.jpg) |
+| ![The "Top cards & movers" tab: the 10 most valuable cards, with risers and fallers below](docs/dashboard-cards.jpg) | ![The wishlist: the cards you watch, with tabs to add a card and for the alert history](docs/wishlist.jpg) |
 
 | Collection: add by name or card number, edit quantities, tick foil | Saved decks with their commander, colours, games played and value |
 | --- | --- |
-| ![Collection](docs/collection.jpg) | ![Saved decks with their commander, colours, bracket, progress, value and how often they were played](docs/decks.jpg) |
+| ![The collection: your cards, with adding and importing in their own tab](docs/collection.jpg) | ![Saved decks with their commander, colours, bracket, progress, value and how often they were played](docs/decks.jpg) |
 
 ![Wishlist targets set to 85% of the current price: the changed prices are highlighted until you save them all](docs/wishlist-targets.jpg)
 
@@ -63,7 +63,9 @@ price.
 
 ![The saved decks sorted on missing cards: the decks closest to done first](docs/decks-sorted.jpg)
 
-![A saved deck of exactly 100 cards: its commander, bracket, "Has tokens", deck size, games played and its value over time](docs/deck.jpg)
+![A saved deck: its commander, bracket and "Has tokens", an overview of cards, value, deck size and games, and tabs for its cards, analysis, improvements, lands and tokens, games and value, and Archidekt](docs/deck.jpg)
+
+![The Analysis tab of a deck: mana curve and card types, then the bracket check and the combos](docs/deck-analysis.jpg)
 
 ![Logging a game from the deck page, and the value of the deck's copies over the last month](docs/deck-value.jpg)
 
@@ -101,7 +103,7 @@ price.
 
 ![Starting a game on the live table: your deck, the number of players, starting life, and the names and commanders of the others](docs/table-setup.jpg)
 
-![Logging a game: per opponent a field for their commander, filled in with the one they played last time](docs/games.jpg)
+![The Games page: log a game, then tabs for the overview (win rate, streak, nemesis, games per month), opponents, per deck and the log](docs/games.jpg)
 
 ![Win rates by table size, deck colour and bracket, and per opponent; the player who beats you most is your nemesis](docs/games-stats.jpg)
 
@@ -111,7 +113,7 @@ price.
 
 ![Price rises in your collection: also sent to Discord after the daily price update](docs/dashboard-rises.jpg)
 
-![Price drops on the wishlist and reprints of valuable cards you own, both also sent to Discord](docs/dashboard-reprints.jpg)
+![The Alerts tab of the dashboard: reprints of valuable cards you own, next to wishlist targets, price drops and price rises; all of them also go to Discord](docs/dashboard-reprints.jpg)
 
 ![A deck that follows its Archidekt link: Sync now, and when it was last checked](docs/deck-archidekt.jpg)
 
@@ -169,6 +171,7 @@ price.
 - Alert history
 
 **Both**
+- Tabs on every page: what you always need stays on top, the rest is in tabs (with counts such as "80 missing" or "⚠ bracket"). The tab bar stays in view while you scroll, the tab you chose is remembered, and a link like `/decks/3#improve` opens that tab
 - Fold away what you do not need: click the title of a part (say "Basic lands" or "Add a card") to fold it, click again to open it. It is remembered, and on deck pages it counts for every deck
 - Collection value next to wishlist cost
 - "Bought it" moves a card from WANT to HAVE
