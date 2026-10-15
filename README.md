@@ -57,7 +57,7 @@ price.
 
 ![The saved decks sorted on missing cards: the decks closest to done first](docs/decks-sorted.jpg)
 
-![A saved deck of exactly 100 cards: its bracket, "Uses tokens", deck size, the Archidekt link, adding a card, and basic lands per land](docs/deck.jpg)
+![A saved deck of exactly 100 cards: its bracket, "Has tokens", deck size, the Archidekt link, adding a card, and basic lands per land](docs/deck.jpg)
 
 ![A deck that follows its Archidekt link: Sync now, and when it was last checked](docs/deck-archidekt.jpg)
 
@@ -123,7 +123,7 @@ price.
 - One "Save changes" button per deck: bracket, basic lands and chosen printings are edited freely and stored together, with a reminder while there are unsaved changes
 - Commander bracket per deck: taken from Archidekt when the deck has one, and changeable at any time
 - Filter the list of saved decks by bracket, or show only the decks that are complete
-- "Uses tokens" on a deck: a deck whose list has tokens is marked by itself, and you can tick or untick it on the deck page. The saved decks show a "tokens" badge and can be filtered on it, so you know which decks need tokens at the table
+- "Has tokens" on a deck: a deck whose list has tokens is marked by itself, and you can tick or untick it on the deck page. The saved decks show a "tokens" badge and can be filtered on it, so you know which decks need tokens at the table
 - Search the saved decks on deck name or on a card: "arcane signet" lists every deck that runs it, with the matching cards under the deck name
 - Filter the saved decks on colour: every deck shows the colour identity of its cards, and you pick decks with exactly, any of, or within the chosen colours
 - Sort the saved decks by how many cards they still miss, or by name, bracket, size, progress or value
@@ -215,7 +215,7 @@ product page. Two things to know:
 | `POST` | `/api/decks/{id}/cards/{entry_id}/new-copy` | Put a new copy from an import, that waits to be sorted, in this deck |
 | `POST` | `/api/collection/let-app-sort` | Let the app share out the new copies from imports over the decks (`?entry_id=` for one card) |
 | `PUT` | `/api/decks/{id}/basic-lands` | Set how many of each basic land a deck runs |
-| `PUT` | `/api/decks/{id}/tokens` | Mark a deck as one that uses tokens, or not (`null` follows the deck list) |
+| `PUT` | `/api/decks/{id}/tokens` | Mark a deck as one that has tokens, or not (`null` follows the deck list) |
 | `PUT` | `/api/decks/{id}/bracket` | Set or clear the Commander bracket of a deck |
 | `PUT` | `/api/decks/{id}/archidekt` | Let a deck follow an Archidekt deck, or stop following |
 | `POST` | `/api/decks/{id}/sync`, `/api/decks/sync` | Bring one deck, or every linked deck, up to date with Archidekt |

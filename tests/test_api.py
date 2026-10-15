@@ -544,7 +544,7 @@ def test_mark_a_deck_as_using_tokens(client):
     client.put(f"/api/decks/{with_tokens['id']}/tokens", json={"uses_tokens": None})
     assert tokens()["Rabbits"] == (True, 3)
 
-    # The "Uses tokens" box on the deck page is saved with the other changes.
+    # The "Has tokens" box on the deck page is saved with the other changes.
     client.post(f"/decks/{plain['id']}/save", data={"tokens_shown": "1"})  # unticked
     assert tokens()["Plain"] == (False, 0)
     client.post(f"/decks/{plain['id']}/save", data={"tokens_shown": "1", "uses_tokens": "on"})
