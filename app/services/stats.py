@@ -5,10 +5,12 @@ from dataclasses import dataclass
 
 from sqlmodel import Session, select
 
-from app.models import Card, CollectionEntry, DailyTotal, Deck, Game, PriceRiseAlert, PriceSnapshot, utcnow
-from app.services.collection import CollectionRow, collection_rows, collection_value
+from app.models import (
+    Card, CollectionEntry, DailyTotal, Deck, Game, PriceDropAlert, PriceRiseAlert, PriceSnapshot, WishlistEntry, utcnow,
+)
+from app.services.collection import CollectionRow, collection_rows, collection_value, purchase_summary
 from app.services.pricing import SCRYFALL, earliest_snapshots, latest_snapshots, price_for
-from app.services.wishlist import recent_alerts, wishlist_cost, wishlist_rows
+from app.services.wishlist import WishlistRow, recent_alerts, wishlist_cost, wishlist_rows
 
 
 @dataclass
@@ -71,6 +73,34 @@ def find_price_rises(
             continue
         rises[(row.card.id, row.entry.is_foil)] = Mover(row.card, row.entry.is_foil, old, new)
     return sorted(rises.values(), key=lambda mover: mover.change, reverse=True)
+
+
+def find_price_drops(
+    session: Session, days: int, min_pct: float, min_eur: float, rows: list[WishlistRow] | None = None
+) -> list[tuple[WishlistRow, Mover]]:
+    """Wishlist cards whose price went down at least `min_pct` percent and `min_eur` euro in `days` days."""
+    rows = wishlist_rows(session) if rows is None else rows
+    latest = latest_snapshots(session, SCRYFALL)
+    reference = earliest_snapshots(session, SCRYFALL, dt.date.today() - dt.timedelta(days=days))
+    drops = []
+    for row in rows:
+        new = price_for(latest.get(row.card.id), False)
+        old = price_for(reference.get(row.card.id), False)
+        if new is None or not old or old - new < min_eur or (old - new) / old * 100 < min_pct:
+            continue
+        drops.append((row, Mover(row.card, False, old, new)))
+    return sorted(drops, key=lambda item: item[1].change_pct)
+
+
+def recent_price_drop_alerts(session: Session, limit: int = 10) -> list[tuple[PriceDropAlert, Card, WishlistEntry]]:
+    statement = (
+        select(PriceDropAlert, Card, WishlistEntry)
+        .join(Card, PriceDropAlert.card_id == Card.id)
+        .join(WishlistEntry, PriceDropAlert.wishlist_entry_id == WishlistEntry.id)
+        .order_by(PriceDropAlert.sent_at.desc(), PriceDropAlert.new_price)
+        .limit(limit)
+    )
+    return list(session.exec(statement))
 
 
 def recent_price_rise_alerts(session: Session, limit: int = 10) -> list[tuple[PriceRiseAlert, Card]]:
@@ -164,6 +194,8 @@ def dashboard(session: Session) -> dict:
         "losers": losers,
         "alerts": recent_alerts(session),
         "rise_alerts": recent_price_rise_alerts(session),
+        "drop_alerts": recent_price_drop_alerts(session),
+        "purchases": purchase_summary(rows),
         "week": weekly_summary(session),
         "history": {
             "labels": [total.date.isoformat() for total in history],

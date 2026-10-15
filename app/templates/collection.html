@@ -20,6 +20,7 @@
       <label>Set (optional)<input name="set_code" class="narrow" placeholder="cmm"></label>
       <label>Card number (optional)<input name="collector_number" class="narrow" placeholder="410"></label>
       <label>Quantity<input name="quantity" type="number" min="1" value="1"></label>
+      <label>Paid per copy (optional)<input name="purchase_price" class="narrow" inputmode="decimal" placeholder="2.50"></label>
       <label class="check"><input name="is_foil" type="checkbox">&nbsp;Foil</label>
       <button>Add</button>
     </form>
@@ -50,6 +51,14 @@
       <button class="secondary small">Let the app decide for all</button>
     </form>
   </div>
+</div>
+{% endif %}
+
+{% if purchases.copies %}
+<div class="panel purchases">
+  <p>You paid <strong>{{ purchases.paid | eur }}</strong> for the {{ purchases.copies }} card{{ 's' if purchases.copies != 1 }} you filled in a price for. They are worth
+    <strong>{{ purchases.worth | eur }}</strong> now:
+    <strong class="{{ 'up' if purchases.gain >= 0 else 'down' }}">{{ '+' if purchases.gain >= 0 else '−' }}{{ purchases.gain | abs | eur }}{% if purchases.gain_pct is not none %} ({{ '%+.1f' | format(purchases.gain_pct) }}%){% endif %}</strong>.</p>
 </div>
 {% endif %}
 
@@ -87,7 +96,7 @@
     <thead>
     <tr>
       <th></th><th>Card</th><th>Set</th><th class="num">Qty</th>
-      <th class="num">Price</th><th class="num">Total</th><th></th>
+      <th class="num">Price</th><th class="num">Total</th><th class="num" title="What you paid per copy; click a field to fill it in">Paid</th><th></th>
     </tr>
     </thead>
     {% for name, group in rows | groupby("card.name") %}
@@ -108,10 +117,12 @@
         {% if group_used.copies %}<span class="badge group-in-decks">{{ group_used.copies }} in decks · {{ group_qty - group_used.copies }} free</span>{% endif %}
         {% if group_used.new %}<span class="badge new">{{ group_used.new }} new</span>{% endif %}
       </td>
-      <td class="muted">{{ group | map(attribute="card.set_code") | unique | list | length }} sets</td>
+      {% set set_count = group | map(attribute="card.set_code") | unique | list | length %}
+      <td class="muted">{{ set_count }} set{{ 's' if set_count != 1 }}</td>
       <td class="num group-qty">{{ group_qty }}</td>
       <td class="num muted">{% if prices %}{{ prices | min | eur }}{% if prices | max != prices | min %} – {{ prices | max | eur }}{% endif %}{% endif %}</td>
       <td class="num group-total"></td>
+      <td></td>
       <td></td>
     </tr>
     {% endif %}
@@ -178,9 +189,18 @@
           <input class="qty" name="quantity" type="number" min="1" step="1" value="{{ row.entry.quantity }}"
                  data-entry="{{ row.entry.id }}" aria-label="Quantity of {{ row.card.name }}">
         </form>
+        <div class="muted small view-copies" hidden></div>
       </td>
       <td class="num">{{ row.unit_price | eur }}{% if row.price_from_set %} <span class="badge est" title="This printing has no price. Shown is the cheapest printing with a price: {{ row.price_from_set | upper }}.">≈ {{ row.price_from_set | upper }}</span>{% endif %}</td>
       <td class="num row-total" data-value="{{ row.total_price or 0 }}">{{ row.total_price | eur }}</td>
+      <td class="num">
+        <form class="inline paid-form" method="post" action="/collection/{{ row.entry.id }}/paid">
+          <input class="paid" name="purchase_price" inputmode="decimal" placeholder="–" data-entry="{{ row.entry.id }}"
+                 value="{{ '%.2f' | format(row.entry.purchase_price) if row.entry.purchase_price is not none else '' }}"
+                 aria-label="What you paid per copy of {{ row.card.name }}" title="What you paid per copy">
+        </form>
+        <div class="gain small {{ 'up' if (row.gain or 0) >= 0 else 'down' }}">{% if row.gain is not none %}{{ '+' if row.gain >= 0 else '−' }}{{ row.gain | abs | eur }}{% endif %}</div>
+      </td>
       <td>
         <div class="actions">
           <form class="inline" method="post" action="/collection/{{ row.entry.id }}/delete" data-confirm="Click again to remove">
@@ -262,6 +282,16 @@
           && words.every((word) => item.text.includes(word));
         item.match = match;
         item.copies = copies;
+        // Another view than "All cards": the row says how many of its copies are in view, and the
+        // total is what those copies are worth.
+        const partial = show.value !== "all" && copies !== item.quantity;
+        const note = item.row.querySelector(".view-copies");
+        note.hidden = !partial;
+        const label = { free: "free", wanted: "free", used: "in decks", sort: "new", spare: "spare" }[show.value];
+        note.textContent = partial ? `${copies} ${label}` : "";
+        const totalCell = item.row.querySelector(".row-total");
+        totalCell.textContent = item.price === null ? "–" : euro((partial ? copies : item.quantity) * item.price);
+        totalCell.title = partial ? `What the ${copies} cop${copies === 1 ? "y" : "ies"} in view are worth` : "";
         // Sorting: open the list of decks that need the card, with its "Put in this deck" buttons.
         const needed = item.row.querySelector("details.wanted-by");
         if (needed && show.value === "sort" && match) needed.open = true;
@@ -413,14 +443,50 @@
       }
     }
 
+    // What you paid per copy: saved through the API when you leave the field; empty clears it.
+    async function savePaid(input) {
+      const text = input.value.trim().replace("€", "").replace(",", ".");
+      const price = text === "" ? null : Number(text);
+      if (price !== null && (!Number.isFinite(price) || price < 0)) {
+        input.value = input.defaultValue;
+        input.classList.add("failed");
+        return;
+      }
+      input.disabled = true;
+      try {
+        const response = await fetch(`/api/collection/${input.dataset.entry}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ purchase_price: price }),
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const saved = await response.json();
+        input.value = saved.purchase_price === null ? "" : saved.purchase_price.toFixed(2);
+        input.defaultValue = input.value;
+        const gain = input.closest("td").querySelector(".gain");
+        gain.textContent = saved.gain === null ? "" : (saved.gain >= 0 ? "+" : "−") + euro(Math.abs(saved.gain));
+        gain.classList.toggle("up", (saved.gain ?? 0) >= 0);
+        gain.classList.toggle("down", (saved.gain ?? 0) < 0);
+        input.classList.remove("failed");
+        input.classList.add("saved");
+        setTimeout(() => input.classList.remove("saved"), 1200);
+      } catch (error) {
+        input.value = input.defaultValue;
+        input.classList.add("failed");
+      } finally {
+        input.disabled = false;
+      }
+    }
+
     table.addEventListener("change", (event) => {
       if (event.target.matches("input.qty")) saveQuantity(event.target);
       if (event.target.matches("input.foil")) saveFoil(event.target);
+      if (event.target.matches("input.paid")) savePaid(event.target);
     });
     table.addEventListener("submit", (event) => {
-      if (!event.target.matches(".qty-form")) return;
+      if (!event.target.matches(".qty-form, .paid-form")) return;
       event.preventDefault();  // Enter in the field: already handled by the change event
-      event.target.querySelector("input.qty").blur();
+      event.target.querySelector("input").blur();
     });
   }
 </script>

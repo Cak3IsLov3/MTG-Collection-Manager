@@ -26,11 +26,12 @@ def add_missing_columns(target=None) -> None:
     if target.dialect.name != "sqlite":
         return
     added = {
-        "card": {"colors": "VARCHAR"},
+        "card": {"colors": "VARCHAR", "type_line": "VARCHAR", "cmc": "FLOAT", "roles": "VARCHAR"},
         # Before this column existed only an import could tell, so existing cards count as imported.
-        "collectionentry": {"imported": "BOOLEAN NOT NULL DEFAULT 1", "unsorted": "INTEGER NOT NULL DEFAULT 0"},
+        "collectionentry": {"imported": "BOOLEAN NOT NULL DEFAULT 1", "unsorted": "INTEGER NOT NULL DEFAULT 0",
+                            "purchase_price": "FLOAT"},
         "deck": {"bracket": "INTEGER", "archidekt_id": "INTEGER", "synced_at": "DATETIME", "colors": "VARCHAR", "uses_tokens": "BOOLEAN",
-                 "commander": "VARCHAR", "commander_image": "VARCHAR"},
+                 "commander": "VARCHAR", "commander_image": "VARCHAR", "combos": "VARCHAR", "combos_key": "VARCHAR"},
         "deckentry": {
             "unassigned": "BOOLEAN NOT NULL DEFAULT 0",
             "set_code": "VARCHAR",
@@ -41,7 +42,10 @@ def add_missing_columns(target=None) -> None:
             "cmc": "FLOAT",
             "roles": "VARCHAR",
             "image_url": "VARCHAR",
+            "bracket_flags": "VARCHAR",
+            "token_parts": "VARCHAR",
         },
+        "game": {"opponents": "VARCHAR", "winner": "VARCHAR"},
         "pricesnapshot": {"eur_from_set": "VARCHAR", "eur_foil_from_set": "VARCHAR"},
     }
     with target.begin() as connection:

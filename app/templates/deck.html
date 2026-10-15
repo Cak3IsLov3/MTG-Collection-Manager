@@ -136,7 +136,9 @@
         {{ pips(s.deck.colors) }}
         <div class="muted small deck-hit" hidden></div>{% if s.deck.archidekt_id %} <span class="badge linked" title="Follows its deck on Archidekt">↻ Archidekt</span>{% endif %}
         {% if s.uses_tokens %}<span class="badge tokens" title="This deck has tokens{% if s.tokens %}: {{ s.tokens }} in its deck list{% endif %}">● tokens</span>{% endif %}</div></td>
-      <td>{% if s.bracket_name %}<span class="badge bracket">{{ s.deck.bracket }} · {{ s.bracket_name }}</span>{% else %}<span class="muted">–</span>{% endif %}</td>
+      {% set warning = (bracket_warnings | default({})).get(s.deck.id) %}
+      <td>{% if s.bracket_name %}<span class="badge bracket">{{ s.deck.bracket }} · {{ s.bracket_name }}</span>{% else %}<span class="muted">–</span>{% endif %}
+        {% if warning %}<a class="badge warn" href="/decks/{{ s.deck.id }}" title="Does not fit bracket {{ s.deck.bracket }}: {{ warning | join('; ') }}">⚠</a>{% endif %}</td>
       <td class="num" title="Cards you have / cards in the deck, basic lands included">{{ s.total_owned }} / {{ s.total_cards }}</td>
       <td style="width: 35%"><div class="progress slim"><div style="width: {{ s.percent }}%"></div></div></td>
       <td class="num">{{ s.value | eur }}</td>
@@ -375,6 +377,183 @@
     <button class="secondary">Add token</button>
   </form>
 </div>
+
+{% if token_suggestions is defined %}
+{% set to_do = token_suggestions | rejectattr("status", "equalto", "ok") | list %}
+<div class="panel token-suggestions">
+  <div class="toolbar panel-head">
+    <h2>Token suggestions{% if token_suggestions %} <span class="muted">· {{ token_suggestions | length }} token{{ 's' if token_suggestions | length != 1 }} made by this deck, about {{ token_suggestions | sum(attribute='needed') }} needed{% if to_do %} · {{ to_do | length }} not (enough) in your list{% endif %}</span>{% endif %}</h2>
+    {% if to_do %}
+    <form class="inline" method="post" action="/decks/{{ deck.id }}/tokens/suggested" data-keep-scroll>
+      <button class="small" title="Add the missing tokens and raise the ones you have too few of">Take over all {{ to_do | length }}</button>
+    </form>
+    {% endif %}
+  </div>
+  {% if token_suggestions %}
+  <div class="token-grid">
+    {% for s in token_suggestions %}
+    <div class="token-card suggested {{ s.status }}">
+      {% if s.image_url %}<img src="{{ s.image_url }}" alt="{{ s.name }}" loading="lazy">{% else %}<div class="token-blank">{{ s.name }}</div>{% endif %}
+      <div><strong>{{ s.name }}</strong></div>
+      <div class="token-need">about <strong>{{ s.needed }}</strong> needed</div>
+      <div class="muted small" title="{{ s.made_by | join(', ') }}">made by {{ s.made_by[:3] | join(', ') }}{% if s.made_by | length > 3 %} and {{ s.made_by | length - 3 }} more{% endif %}</div>
+      {% if s.status == "ok" %}
+      <span class="badge hit">✓ {{ s.have.quantity }} in your list</span>
+      {% else %}
+      {% if s.status == "short" %}<span class="badge warn">{{ s.have.quantity }} in your list</span>{% else %}<span class="badge">not in your list</span>{% endif %}
+      <form class="inline" method="post" action="/decks/{{ deck.id }}/tokens/suggested" data-keep-scroll>
+        <input type="hidden" name="scryfall_id" value="{{ s.scryfall_id }}">
+        <button class="small secondary">{% if s.status == "short" %}Set to {{ s.needed }}{% else %}Add {{ s.needed }}{% endif %}</button>
+      </form>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  <p class="muted small">Which tokens a card makes comes from Scryfall. How many you need is a guess from the rules text: "create two" is 2, and a card that makes them again and again ("whenever", "at the beginning of", a tap ability) counts three times, at most 20 per token.{% if standard_tokens %}
+    Left out, because you always bring them: {{ standard_tokens | join(', ') }} (STANDARD_TOKENS).{% endif %}</p>
+  {% else %}
+  <p class="muted">The cards of this deck make no tokens{% if rows | selectattr("name") | list %} (or Scryfall has not told yet; reload in a minute){% endif %}.</p>
+  {% endif %}
+</div>
+{% endif %}
+
+{% if bracket_check is defined and bracket_check %}
+{% set bc = bracket_check %}
+{% set lowest = '1 or 2' if bc.minimum == 1 else bc.minimum ~ ' or higher' %}
+<div class="panel bracket-check {{ 'bad' if bc.problems }}">
+  <h2>Bracket check <span class="muted">· {% if bc.bracket %}set to {{ bc.bracket }} · {{ brackets[bc.bracket] }}{% else %}no bracket set{% endif %}</span></h2>
+  {% if bc.problems %}
+  <p class="down"><strong>⚠ Does not fit bracket {{ bc.bracket }}:</strong> {{ bc.problems | join('; ') }}. By its cards it is bracket {{ lowest }}.</p>
+  {% elif bc.bracket %}
+  <p class="up"><strong>✓ Fits bracket {{ bc.bracket }}.</strong>{% if bc.minimum < bc.bracket %} <span class="muted">By its cards alone it could also be bracket {{ lowest }}; the rest is about how strong it plays.</span>{% endif %}</p>
+  {% else %}
+  <p>By its cards this deck is bracket <strong>{{ lowest }}</strong>. Set its bracket above to have it checked.</p>
+  {% endif %}
+  <ul class="bracket-lines">
+    <li><strong>Game Changers: {{ bc.game_changers | length }}</strong>
+      {% if bc.game_changers %}· {% for name in bc.game_changers %}<span class="badge changer">{{ name }}</span> {% endfor %}{% endif %}
+      <span class="muted small">(bracket 1–2: none, 3: up to three, 4–5: any)</span></li>
+    <li><strong>Mass land denial: {{ bc.land_denial | length }}</strong>
+      {% if bc.land_denial %}· {{ bc.land_denial | join(', ') }}{% endif %} <span class="muted small">(only bracket 4–5)</span></li>
+    <li><strong>Extra turns: {{ bc.extra_turns | length }}</strong>
+      {% if bc.extra_turns %}· {{ bc.extra_turns | join(', ') }}{% endif %} <span class="muted small">(fine on their own; chaining them is for bracket 4–5)</span></li>
+    <li><strong>Two-card combos: {% if bc.combos_checked %}{{ bc.two_card_combos | length }}{% else %}?{% endif %}</strong>
+      {% if bc.two_card_combos %}· {{ bc.two_card_combos | join('; ') }}{% endif %}
+      <span class="muted small">(bracket 1–2: none, 3: not early in the game, 4–5: any){% if not bc.combos_checked %} · Commander Spellbook could not be reached, reload later{% endif %}</span></li>
+  </ul>
+  {% if not bc.known %}<p class="muted small">The Game Changers list could not be fetched from Scryfall, so those are not counted. Reload later.</p>{% endif %}
+  {% if bc.unchecked %}<p class="muted small">{{ bc.unchecked }} card{{ 's' if bc.unchecked != 1 }} not checked yet; reload in a minute.</p>{% endif %}
+  <p class="muted small">Game Changers come from the official list on Scryfall and combos from Commander Spellbook. Mass land denial and extra turns are found from the rules text, so look over the result yourself.</p>
+</div>
+{% endif %}
+
+{% if deck_combos is defined and deck_combos.checked %}
+<div class="panel combos-panel">
+  <h2>Combos <span class="muted">· {{ deck_combos.included | length }} in this deck{% if deck_combos.almost %}, {{ deck_combos.almost | length }} one card away{% endif %}</span></h2>
+  {% if deck_combos.included %}
+  <ul class="combo-list">
+    {% for combo in deck_combos.included %}
+    <li><strong>{{ combo.label() }}</strong>{% if combo.two_card %} <span class="badge warn" title="A two-card infinite combo: not in bracket 1–2">two cards</span>{% endif %}
+      <span class="muted">→ {{ combo.produces[:3] | join(', ') }}</span>
+      {% if combo.url %}<a class="small-link" href="{{ combo.url }}" target="_blank" rel="noopener">how ↗</a>{% endif %}</li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="muted">No combos found in this deck.</p>
+  {% endif %}
+  {% if deck_combos.almost %}
+  <h3>One card away</h3>
+  <ul class="combo-list">
+    {% for combo in deck_combos.almost %}
+    {% set missing = combo.missing[0] %}
+    <li>add <strong>{{ missing }}</strong>{% if missing in owned %} <span class="badge hit" title="You have this card">you have it</span>{% endif %}
+      <span class="muted">· {{ combo.label() }} → {{ combo.produces[:3] | join(', ') }}</span>
+      {% if combo.url %}<a class="small-link" href="{{ combo.url }}" target="_blank" rel="noopener">how ↗</a>{% endif %}</li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+  <p class="muted small">From <a href="https://commanderspellbook.com" target="_blank" rel="noopener">Commander Spellbook</a>, checked again whenever the cards of the deck change.</p>
+</div>
+{% endif %}
+
+{% if edhrec is defined and (edhrec or edhrec_error) %}
+<div class="panel edhrec-panel">
+  {% if edhrec %}
+  {% set e = edhrec %}
+  <div class="toolbar panel-head">
+    <h2>EDHREC <span class="muted">· {{ e.commander }} · {{ '{:,}'.format(e.decks) }} decks · this deck has {{ e.in_deck }} of their {{ e.cards | length }} most played cards</span></h2>
+    <div class="row">
+      <label class="check muted"><input type="checkbox" id="edhrec-mine">&nbsp;Only cards I have free</label>
+      <a class="small-link" href="{{ e.url }}" target="_blank" rel="noopener">EDHREC ↗</a>
+    </div>
+  </div>
+  {% if e.missing %}
+  <table class="compact edhrec-table">
+    <thead><tr><th>Card</th><th>Kind</th><th class="num" title="How many of the decks with this commander play it">In decks</th><th class="num" title="How much more it is played with this commander than elsewhere">Synergy</th><th>You</th><th class="num">Price</th></tr></thead>
+    <tbody>
+    {% for c in e.missing %}
+    <tr data-free="{{ 1 if c.free else 0 }}" {% if loop.index > 25 %}class="more" hidden{% endif %}>
+      <td>{% if c.card %}<a href="/cards/{{ c.card.id }}">{{ c.name }}</a>{% else %}{{ c.name }}{% endif %}</td>
+      <td class="muted">{{ c.category }}</td>
+      <td class="num"><div class="inclusion"><div style="width: {{ c.inclusion }}%"></div></div>{{ c.inclusion }}%</td>
+      <td class="num {{ 'up' if c.synergy > 0 }}">{{ '%+d' | format(c.synergy) }}%</td>
+      <td>{% if c.free %}<span class="badge hit">{{ c.free }} free</span>{% elif c.owned %}<span class="badge" title="All your copies are in other decks">in other decks</span>{% else %}<span class="muted">–</span>{% endif %}</td>
+      <td class="num">{{ c.price | eur if c.price is not none else '' }}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <p class="muted small">
+    {% if e.missing | length > 25 %}<button type="button" class="link" id="edhrec-more">Show all {{ e.missing | length }}</button> · {% endif %}
+    The cards EDHREC lists for this commander that are not in this deck, the most played first. {{ e.free_to_add | length }} of them you have a free copy of.</p>
+  {% else %}
+  <p class="muted">This deck already has every card EDHREC lists for {{ e.commander }}.</p>
+  {% endif %}
+  {% else %}
+  <h2>EDHREC</h2>
+  <p class="muted">{{ edhrec_error }}.</p>
+  {% endif %}
+</div>
+{% endif %}
+
+{% if deck_suggestions is defined %}
+{% set sg = deck_suggestions %}
+<div class="panel suggestions-panel">
+  <h2>Suggestions from your collection{% if sg.candidates %} <span class="muted">· {{ sg.candidates }} free card{{ 's' if sg.candidates != 1 }} fit this deck</span>{% endif %}</h2>
+  {% if sg.no_colours %}
+  <p class="muted">The colours of this deck are still being worked out; reload in a minute.</p>
+  {% elif not sg.groups %}
+  <p class="muted">No free cards in your collection fit this deck{% if sg.pending %} yet ({{ sg.pending }} still to look up; reload in a minute){% endif %}.</p>
+  {% else %}
+  <p class="muted small">Cards in the colours of this deck that are in none of your decks and not in this one yet. What the cards do is guessed from their rules text; the priciest come first.
+    {% if deck.archidekt_id %}This deck follows Archidekt: add a card there, or it is removed again at the next sync.{% endif %}</p>
+  {% for group in sg.groups %}
+  <h3>{{ group.title }}{% if group.target %} <span class="muted small">· the deck has {{ group.have }}, about {{ group.target }} is usual{% if group.short %} · <span class="down">{{ group.short }} short</span>{% endif %}</span>{% endif %}</h3>
+  <div class="suggestion-list">
+    {% for s in group.cards %}
+    <div class="suggestion">
+      {% if s.card.image_url %}<img src="{{ s.card.image_url }}" alt="" loading="lazy">{% endif %}
+      <div>
+        <a href="/cards/{{ s.card.id }}">{{ s.card.name }}</a>
+        <div class="muted small">{{ s.price | eur }} · {{ s.free }} free{% if s.kind %} · {{ s.kind }}{% endif %}</div>
+        {% if not deck.archidekt_id %}
+        <form class="inline" method="post" action="/decks/{{ deck.id }}/cards" data-keep-scroll>
+          <input type="hidden" name="name" value="{{ s.card.name }}">
+          <input type="hidden" name="set_code" value="{{ s.card.set_code }}">
+          <input type="hidden" name="collector_number" value="{{ s.card.collector_number or '' }}">
+          <input type="hidden" name="quantity" value="1">
+          <button class="small secondary" title="Add {{ s.card.name }} to this deck">Add to deck</button>
+        </form>
+        {% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endfor %}
+  {% if sg.pending %}<p class="muted small">{{ sg.pending }} card{{ 's' if sg.pending != 1 }} still to look up; reload in a minute.</p>{% endif %}
+  {% endif %}
+</div>
+{% endif %}
 
 {% if deck_stats and deck_stats.has_data %}
 <div class="panel">
@@ -886,4 +1065,28 @@
   filterDeck();
 </script>
 {% endif %}
+<script>
+  // EDHREC: the first 25 cards, or all; optionally only the ones you have a free copy of.
+  const edhrecRows = [...document.querySelectorAll(".edhrec-table tbody tr")];
+  if (edhrecRows.length) {
+    const mine = document.getElementById("edhrec-mine");
+    const more = document.getElementById("edhrec-more");
+    let all = false;
+    const showEdhrec = () => {
+      let shown = 0;
+      for (const row of edhrecRows) {
+        const match = !mine.checked || row.dataset.free === "1";
+        row.hidden = !match || (!all && !mine.checked && shown >= 25);
+        if (match) shown += 1;
+      }
+    };
+    try { mine.checked = localStorage.getItem("edhrec-mine") === "1"; } catch (error) {}
+    mine.addEventListener("change", () => {
+      try { localStorage.setItem("edhrec-mine", mine.checked ? "1" : "0"); } catch (error) {}
+      showEdhrec();
+    });
+    if (more) more.addEventListener("click", () => { all = true; more.hidden = true; showEdhrec(); });
+    showEdhrec();
+  }
+</script>
 {% endblock %}

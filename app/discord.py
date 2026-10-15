@@ -30,6 +30,46 @@ class DiscordNotifier:
         }
         return await self._post({"embeds": [embed]})
 
+    async def send_price_drops(self, lines: list[str], days: int) -> bool:
+        """Post one message listing wishlist cards that got cheaper; False (never raises) when delivery fails."""
+        if not self.webhook_url or not lines:
+            return False
+        shown = lines[:15]
+        more = len(lines) - len(shown)
+        embed = {
+            "title": f"{len(lines)} card{'s' if len(lines) != 1 else ''} on your wishlist got cheaper",
+            "description": "\n".join(shown) + (f"\n… and {more} more" if more else "")
+            + f"\n\nCompared with {days} days ago.",
+            "color": 0x3ECF8E,
+        }
+        return await self._post({"embeds": [embed]})
+
+    async def send_reprints(self, lines: list[str]) -> bool:
+        """One message listing reprints of valuable cards you own; False (never raises) when delivery fails."""
+        if not self.webhook_url or not lines:
+            return False
+        shown = lines[:15]
+        more = len(lines) - len(shown)
+        embed = {
+            "title": f"{len(lines)} card{'s' if len(lines) != 1 else ''} you own got reprinted",
+            "description": "\n".join(shown) + (f"\n… and {more} more" if more else "")
+            + "\n\nA reprint often makes the price drop.",
+            "color": 0xC77DFF,
+        }
+        return await self._post({"embeds": [embed]})
+
+    async def send_deck_changes(self, changes: list[dict]) -> bool:
+        """One message for decks that changed on Archidekt: {"name", "url", "lines"} each (at most ten
+        are shown). False (never raises) when delivery fails."""
+        if not self.webhook_url or not changes:
+            return False
+        embeds = [
+            {"title": f"{change['name']} changed on Archidekt", "description": "\n".join(change["lines"])[:4000],
+             "color": 0x9B6DFF, **({"url": change["url"]} if change.get("url") else {})}
+            for change in changes[:10]
+        ]
+        return await self._post({"embeds": embeds})
+
     async def send_weekly_summary(self, lines: list[str], period: str) -> bool:
         """Post the weekly summary; False (never raises) when delivery fails."""
         if not self.webhook_url:

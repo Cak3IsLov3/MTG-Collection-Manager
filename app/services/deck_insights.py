@@ -1,9 +1,12 @@
-"""What is in a deck: mana curve, card types and roles, token pictures, proxies and a text export."""
+"""What is in a deck: mana curve, card types and roles, the bracket check, token pictures, proxies
+and a text export."""
 
+import datetime as dt
+import json
 import re
 from dataclasses import dataclass, field
 
-from sqlmodel import Session, select
+from sqlmodel import Session, or_, select
 
 from app.models import Deck, DeckBasicLand, DeckEntry, DeckToken
 from app.scryfall import ScryfallClient, ScryfallCard, name_key
@@ -23,6 +26,18 @@ _REMOVAL = re.compile(
     r"[^.]* to its owner's hand|deals \w+ damage to (any target|target creature|target planeswalker)", re.I,
 )
 _WIPE = re.compile(r"(destroy|exile) all (creatures|nonland permanents|artifacts|enchantments)|deals \w+ damage to each creature", re.I)
+# For the Commander brackets: mass land denial (Armageddon, Ruination, Winter Orb, ...) and extra turns.
+_LAND_DENIAL = re.compile(
+    r"(destroy|exile|return) all (\w+ )?lands|destroy all [^.]*\band lands\b|sacrifices? (all|half|\w+) [^.]*\blands\b"
+    r"|lands (don't|do not) untap|lands? (tapped for mana|a player controls) (doesn't|don't|do not) untap", re.I,
+)
+_EXTRA_TURN = re.compile(r"takes? (an|one|two|\w+) extra turns?", re.I)
+# How many tokens a card makes at once ("create two ..."), and whether it does so again and again.
+_CREATE = re.compile(r"\bcreates? (a|an|one|two|three|four|five|six|seven|eight|nine|ten|x|that many|\d+)\b", re.I)
+_NUMBERS = {"a": 1, "an": 1, "one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7,
+            "eight": 8, "nine": 9, "ten": 10, "x": 3, "that many": 3}
+_REPEATS = re.compile(r"\b(whenever|at the beginning of|landfall)\b|\{t\}[^.]*create", re.I)
+MAX_TOKENS_PER_CARD = 10
 
 
 def card_type(type_line: str | None) -> str | None:
@@ -45,20 +60,50 @@ def card_roles(type_line: str, oracle_text: str) -> str:
     return ",".join(roles)
 
 
+def bracket_flags(oracle_text: str) -> str:
+    """What in the rules text matters for the Commander brackets: "mld" (mass land denial), "extraturn"."""
+    flags = []
+    if _LAND_DENIAL.search(oracle_text):
+        flags.append("mld")
+    if _EXTRA_TURN.search(oracle_text):
+        flags.append("extraturn")
+    return ",".join(flags)
+
+
+def tokens_needed(oracle_text: str) -> int:
+    """About how many tokens of a kind you need for one card: what it makes at once ("create two" is
+    2, X counts as 3), three times over when it makes them again and again (whenever ..., at the
+    beginning of ..., a tap ability)."""
+    found = [_NUMBERS.get(word.lower()) or int(word) for word in (m.group(1) for m in _CREATE.finditer(oracle_text))
+             if word.lower() in _NUMBERS or word.isdigit()]
+    once = max(found, default=1)
+    return min(MAX_TOKENS_PER_CARD, once * 3 if _REPEATS.search(oracle_text) else once)
+
+
+def _token_parts(data: ScryfallCard) -> str:
+    count = tokens_needed(data.oracle_text)
+    return json.dumps([{"id": token_id, "name": name, "count": count} for token_id, name in data.token_parts])
+
+
 def _store(entry: DeckEntry, data: ScryfallCard | None) -> None:
     if data is None:
-        entry.type_line, entry.roles = "", ""  # looked up, not found: not again
+        entry.type_line, entry.roles, entry.bracket_flags = "", "", ""  # looked up, not found: not again
+        entry.token_parts = "[]"
         return
+    entry.token_parts = _token_parts(data)
     entry.type_line = data.type_line
     entry.cmc = data.cmc
     entry.roles = card_roles(data.type_line, data.oracle_text)
+    entry.bracket_flags = bracket_flags(data.oracle_text)
     entry.image_url = data.image_url
 
 
 async def fill_card_info(session: Session, scryfall: ScryfallClient, deck_id: int | None = None) -> int:
     """Look up type, mana value, rules text and picture of deck cards that do not have them yet
     (of one deck, or of all), and the pictures of their tokens. Returns the number of cards filled in."""
-    statement = select(DeckEntry).where(DeckEntry.type_line == None)  # noqa: E711
+    statement = select(DeckEntry).where(or_(
+        DeckEntry.type_line == None, DeckEntry.bracket_flags == None, DeckEntry.token_parts == None,  # noqa: E711
+    ))
     if deck_id is not None:
         statement = statement.where(DeckEntry.deck_id == deck_id)
     entries = list(session.exec(statement))
@@ -115,6 +160,195 @@ async def basic_land_images(scryfall: ScryfallClient) -> dict[str, str]:
         found, _ = await scryfall.get_collection([{"name": name} for name in BASIC_LAND_NAMES])
         _land_images.update({data.name: data.image_url for data in found if data.image_url})
     return _land_images
+
+
+_game_changers: dict = {"day": None, "names": frozenset()}
+
+
+async def game_changers(scryfall: ScryfallClient) -> frozenset[str]:
+    """The names (name keys, every face too) of the cards on the Game Changers list. Wizards changes
+    the list now and then, so it is fetched from Scryfall once a day."""
+    today = dt.date.today()
+    if _game_changers["day"] != today:
+        results = await scryfall.search("is:gamechanger", unique="cards")
+        names: set[str] = set()
+        for data in results:
+            names |= _names(data.get("name", ""))
+        _game_changers.update(day=today, names=frozenset(names))
+    return _game_changers["names"]
+
+
+@dataclass
+class BracketCheck:
+    """What a deck has that the Commander brackets limit: Game Changers (none in brackets 1 and 2, up
+    to three in bracket 3), mass land denial (not before bracket 4), extra turns (not to be chained
+    before bracket 4) and two-card infinite combos (none in brackets 1 and 2, not early in the game in
+    bracket 3)."""
+
+    bracket: int | None  # the bracket you set
+    game_changers: list[str] = field(default_factory=list)
+    land_denial: list[str] = field(default_factory=list)
+    extra_turns: list[str] = field(default_factory=list)
+    two_card_combos: list[str] = field(default_factory=list)  # "Thassa's Oracle + Demonic Consultation"
+    known: bool = True  # False: the Game Changers list could not be fetched
+    combos_checked: bool = True  # False: Commander Spellbook was not asked (yet)
+    unchecked: int = 0  # cards Scryfall has not told about yet
+
+    @property
+    def minimum(self) -> int:
+        """The lowest bracket the deck fits in (1 means 1 or 2: they differ in intent, not in cards)."""
+        if len(self.game_changers) > 3 or self.land_denial:
+            return 4
+        return 3 if self.game_changers or self.two_card_combos else 1
+
+    @property
+    def problems(self) -> list[str]:
+        """Why the deck does not fit the bracket you set; empty when it does (or none is set)."""
+        if self.bracket is None or self.bracket >= 4:
+            return []
+        found = []
+        count = len(self.game_changers)
+        if self.bracket <= 2 and count:
+            found.append(f"{count} Game Changer{'s' if count != 1 else ''}, while bracket {self.bracket} has none")
+        elif self.bracket == 3 and count > 3:
+            found.append(f"{count} Game Changers, while bracket 3 allows three")
+        if self.land_denial:
+            found.append(f"mass land denial ({', '.join(self.land_denial)}), which only bracket 4 and up allow")
+        if self.bracket <= 2 and self.two_card_combos:
+            count = len(self.two_card_combos)
+            found.append(f"{count} two-card combo{'s' if count != 1 else ''} ({'; '.join(self.two_card_combos)}), "
+                         f"while bracket {self.bracket} has none")
+        return found
+
+    @property
+    def fits(self) -> bool:
+        return not self.problems
+
+
+def bracket_check(session: Session, deck: Deck, changers: frozenset[str] | None, combos=None) -> BracketCheck:
+    """Check a deck against the bracket rules; `changers` None: the Game Changers list is not known.
+    `combos` are the deck's combos from Commander Spellbook (services.combos.DeckCombos); without
+    them the combos found the last time are used."""
+    from app.services.combos import deck_combos
+
+    combos = combos if combos is not None else deck_combos(deck)
+    check = BracketCheck(
+        bracket=deck.bracket, known=changers is not None, combos_checked=combos.checked,
+        two_card_combos=[combo.label() for combo in combos.two_card],
+    )
+    for entry in session.exec(select(DeckEntry).where(DeckEntry.deck_id == deck.id).order_by(DeckEntry.name)):
+        if changers and _names(entry.name) & changers:
+            check.game_changers.append(entry.name)
+        if entry.bracket_flags is None:
+            check.unchecked += 1
+            continue
+        flags = entry.bracket_flags.split(",")
+        if "mld" in flags:
+            check.land_denial.append(entry.name)
+        if "extraturn" in flags:
+            check.extra_turns.append(entry.name)
+    return check
+
+
+def bracket_warnings(session: Session, decks: list[Deck], changers: frozenset[str] | None) -> dict[int, list[str]]:
+    """Per deck that does not fit the bracket you set: why not."""
+    warnings = {}
+    for deck in decks:
+        if deck.bracket is not None and deck.bracket < 4:
+            problems = bracket_check(session, deck, changers).problems
+            if problems:
+                warnings[deck.id] = problems
+    return warnings
+
+
+@dataclass
+class TokenSuggestion:
+    """A token the cards of a deck make, and about how many of it you need."""
+
+    scryfall_id: str
+    name: str
+    needed: int
+    made_by: list[str] = field(default_factory=list)
+    have: DeckToken | None = None  # the same token in the deck's token list
+    image_url: str | None = None
+
+    @property
+    def status(self) -> str:
+        """"missing", "short" (fewer than needed in the list) or "ok"."""
+        if self.have is None:
+            return "missing"
+        return "short" if self.have.quantity < self.needed else "ok"
+
+
+MAX_TOKENS = 20
+_token_images: dict[str, str] = {}
+
+
+def token_suggestions(session: Session, deck: Deck) -> list[TokenSuggestion]:
+    """The tokens the cards of a deck make (from Scryfall), each with about how many you need, next
+    to the deck's own token list. Missing ones first, then the ones you have too few of."""
+    from app.config import get_settings
+
+    standard = {name_key(name) for name in get_settings().standard_tokens}  # you always bring these
+    # Per token name: cards point at different prints of the same token (many Food tokens).
+    found: dict[str, TokenSuggestion] = {}
+    for entry in session.exec(select(DeckEntry).where(DeckEntry.deck_id == deck.id).order_by(DeckEntry.name)):
+        for part in json.loads(entry.token_parts or "[]"):
+            if name_key(part["name"]) in standard:
+                continue
+            suggestion = found.setdefault(name_key(part["name"]), TokenSuggestion(part["id"], part["name"], 0))
+            suggestion.needed = min(MAX_TOKENS, suggestion.needed + part["count"] * entry.quantity)
+            if entry.name not in suggestion.made_by:
+                suggestion.made_by.append(entry.name)
+    listed = deck_tokens(session, deck)
+    for suggestion in found.values():
+        same_name = [t for t in listed if name_key(t.name) == name_key(suggestion.name)]
+        suggestion.have = max(same_name, key=lambda t: t.quantity, default=None)
+        if suggestion.have and suggestion.have.scryfall_id and suggestion.have.image_url:
+            # The version you chose for your list.
+            suggestion.scryfall_id, suggestion.image_url = suggestion.have.scryfall_id, suggestion.have.image_url
+        else:
+            suggestion.image_url = _token_images.get(suggestion.scryfall_id) or None
+    order = {"missing": 0, "short": 1, "ok": 2}
+    return sorted(found.values(), key=lambda s: (order[s.status], name_key(s.name)))
+
+
+async def fill_token_images(scryfall: ScryfallClient, suggestions: list[TokenSuggestion]) -> None:
+    """Pictures of the suggested tokens (looked up once, then kept)."""
+    todo = [s.scryfall_id for s in suggestions if not s.image_url and s.scryfall_id not in _token_images]
+    if todo:
+        found, _ = await scryfall.get_collection([{"id": token_id} for token_id in todo])
+        for data in found:
+            _token_images[data.scryfall_id] = data.image_url or ""
+    for suggestion in suggestions:
+        suggestion.image_url = suggestion.image_url or _token_images.get(suggestion.scryfall_id) or None
+
+
+def apply_token_suggestions(session: Session, deck: Deck, scryfall_id: str | None = None) -> int:
+    """Put suggested tokens in the deck's token list: missing ones are added with the number needed,
+    and ones with fewer than needed are raised to it. Only `scryfall_id` when given. Returns how many
+    tokens changed."""
+    from app.services.decks import _count_named_tokens
+
+    changed = 0
+    for suggestion in token_suggestions(session, deck):
+        if scryfall_id and suggestion.scryfall_id != scryfall_id or suggestion.status == "ok":
+            continue
+        token = suggestion.have or DeckToken(
+            deck_id=deck.id, name=suggestion.name, scryfall_id=suggestion.scryfall_id,
+            image_url=_token_images.get(suggestion.scryfall_id) or None,
+        )
+        token.quantity = max(token.quantity if suggestion.have else 0, suggestion.needed)
+        session.add(token)
+        changed += 1
+    if changed:
+        session.flush()
+        _count_named_tokens(session, deck)
+        if deck.uses_tokens is False:
+            deck.uses_tokens = None  # it has tokens now
+            session.add(deck)
+        session.flush()
+    return changed
 
 
 @dataclass

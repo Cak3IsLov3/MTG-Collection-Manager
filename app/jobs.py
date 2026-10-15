@@ -11,10 +11,10 @@ from app.cardmarket import CardmarketError, CardmarketPaused, CardmarketScraper
 from app.config import get_settings
 from app.database import engine
 from app.discord import DiscordNotifier
-from app.models import Alert, Card, CollectionEntry, PriceRiseAlert, WishlistEntry, utcnow
+from app.models import Alert, Card, CollectionEntry, PriceDropAlert, PriceRiseAlert, WishlistEntry, utcnow
 from app.scryfall import ScryfallClient, ScryfallError
 from app.services.pricing import CARDMARKET, SCRYFALL, latest_snapshots, record_scryfall_price, record_snapshot
-from app.services.stats import find_price_rises, record_daily_total, weekly_lines, weekly_summary
+from app.services.stats import find_price_drops, find_price_rises, record_daily_total, weekly_lines, weekly_summary
 from app.services.wishlist import recently_alerted
 
 logger = logging.getLogger(__name__)
@@ -106,6 +106,107 @@ async def check_price_rises(
     for alert in alerts:
         alert.notified = bool(notified)
         session.add(alert)
+    session.commit()
+    return alerts
+
+
+async def check_price_drops(
+    session: Session,
+    notifier: DiscordNotifier,
+    now: dt.datetime | None = None,
+    min_pct: float | None = None,
+    min_eur: float | None = None,
+    days: int | None = None,
+) -> list[PriceDropAlert]:
+    """After the daily price update: tell Discord which wishlist cards got cheaper, a card once per
+    period of `days` days. Separate from the alert for reaching your target price."""
+    settings = get_settings()
+    min_pct = settings.price_drop_pct if min_pct is None else min_pct
+    min_eur = settings.price_drop_min_eur if min_eur is None else min_eur
+    days = settings.price_drop_days if days is None else days
+    if min_pct <= 0:
+        return []
+    now = now or utcnow()
+    recent = {
+        alert.wishlist_entry_id
+        for alert in session.exec(select(PriceDropAlert).where(PriceDropAlert.sent_at >= now - dt.timedelta(days=days)))
+    }
+    drops = [(row, drop) for row, drop in find_price_drops(session, days, min_pct, min_eur) if row.entry.id not in recent]
+    if not drops:
+        return []
+    alerts, lines = [], []
+    for row, drop in drops:
+        alerts.append(PriceDropAlert(
+            wishlist_entry_id=row.entry.id, card_id=row.card.id, sent_at=now, old_price=drop.old_price,
+            new_price=drop.new_price, days=days,
+        ))
+        target = row.entry.target_price
+        lines.append(
+            f"**{row.card.name}** · {row.card.set_code.upper()} · €{drop.old_price:.2f} → €{drop.new_price:.2f} "
+            f"(−{abs(drop.change_pct):.0f}%) · your target €{target:.2f}{' ✓' if drop.new_price <= target else ''}"
+        )
+    notified = notifier.configured and await notifier.send_price_drops(lines, days)
+    for alert in alerts:
+        alert.notified = bool(notified)
+        session.add(alert)
+    session.commit()
+    return alerts
+
+
+def deck_change_message(session: Session, result) -> dict | None:
+    """What to tell about a deck the sync changed: cards added and removed, and which new cards you
+    do not have a copy for."""
+    from app.services.decks import deck_url, saved_deck_rows
+
+    if result.error or not (result.added or result.removed or result.changed):
+        return None
+    added = set(result.added)
+    missing = [row for row in saved_deck_rows(session, result.deck) if row.name in added and row.missing > 0]
+    lines = []
+
+    def names(items: list[str]) -> str:
+        return ", ".join(items[:12]) + (f" and {len(items) - 12} more" if len(items) > 12 else "")
+
+    if result.added:
+        lines.append(f"**Added** {names(result.added)}")
+    if result.removed:
+        lines.append(f"**Removed** {names(result.removed)}")
+    if result.changed:
+        lines.append(f"**Changed** {names(result.changed)}")
+    if missing:
+        lines.append(f"**You still need** {names([f'{row.missing}× {row.name}' for row in missing])}")
+    elif result.added:
+        lines.append("You have all the new cards.")
+    return {"name": result.deck.name, "url": deck_url(result.deck), "lines": lines}
+
+
+async def notify_deck_changes(session: Session, results: list, notifier: DiscordNotifier) -> int:
+    """Tell Discord about the decks that changed on Archidekt; returns how many decks were mentioned."""
+    if not get_settings().deck_change_alerts or not notifier.configured:
+        return 0
+    changes = [message for result in results if (message := deck_change_message(session, result))]
+    if changes and await notifier.send_deck_changes(changes):
+        return len(changes)
+    return 0
+
+
+async def check_reprints(
+    session: Session, scryfall: ScryfallClient, notifier: DiscordNotifier,
+    min_eur: float | None = None, days: int | None = None,
+) -> list:
+    """New printings of valuable cards you own; each is told once."""
+    from app.services.reprints import find_reprints, record_reprints, reprint_lines
+
+    settings = get_settings()
+    min_eur = settings.reprint_min_eur if min_eur is None else min_eur
+    days = settings.reprint_days if days is None else days
+    if min_eur <= 0:
+        return []
+    reprints = await find_reprints(session, scryfall, days, min_eur)
+    if not reprints:
+        return []
+    notified = notifier.configured and await notifier.send_reprints(reprint_lines(reprints))
+    alerts = record_reprints(session, reprints, bool(notified))
     session.commit()
     return alerts
 
@@ -217,7 +318,14 @@ async def run_collection_update() -> None:
         with Session(engine) as session:
             updated = await update_collection_prices(session, deps.get_scryfall())
             rises = await check_price_rises(session, deps.get_notifier())
-        logger.info("Price update done: %s cards, %s price rises", updated, len(rises))
+            drops = await check_price_drops(session, deps.get_notifier())
+            try:
+                reprints = await check_reprints(session, deps.get_scryfall(), deps.get_notifier())
+                if reprints:
+                    logger.info("%s reprints of cards you own", len(reprints))
+            except ScryfallError as exc:
+                logger.warning("Could not look for reprints: %s", exc)
+        logger.info("Price update done: %s cards, %s price rises, %s wishlist price drops", updated, len(rises), len(drops))
     except Exception:
         logger.exception("Price update failed")
 
@@ -258,12 +366,37 @@ async def run_deck_sync() -> None:
         with Session(engine) as session:
             results = await sync_all_decks(session)
             session.commit()
+            await notify_deck_changes(session, results, deps.get_notifier())
         changed = [result.summary() for result in results if result.anything]
         logger.info("Deck sync done: %s decks checked, %s updated", len(results), len(changed))
         for line in changed:
             logger.info(line)
+        if changed:
+            await run_combo_checks()  # the combos of the changed decks
     except Exception:
         logger.exception("Deck sync failed")
+
+
+async def run_combo_checks() -> None:
+    """Ask Commander Spellbook for the combos of the decks whose cards changed."""
+    from app.services.combos import check_all_decks
+
+    try:
+        with Session(engine) as session:
+            checked = await check_all_decks(session, deps.get_spellbook())
+        if checked:
+            logger.info("Combos checked for %s decks", checked)
+    except Exception:
+        logger.exception("Combo check failed")
+
+
+def run_backup() -> None:
+    from app.backup import make_backup
+
+    try:
+        make_backup()
+    except Exception:
+        logger.exception("Database backup failed")
 
 
 def start_scheduler() -> AsyncIOScheduler:
@@ -279,5 +412,12 @@ def start_scheduler() -> AsyncIOScheduler:
             hour=settings.weekly_summary_hour, id="weekly-summary",
         )
     scheduler.add_job(run_fill_colors, "date", id="card-colors")  # once, right after starting
+    scheduler.add_job(run_combo_checks, "date", run_date=dt.datetime.now() + dt.timedelta(minutes=2), id="combos")
+    if settings.backup_keep > 0:
+        from app.backup import has_backup_today
+
+        scheduler.add_job(run_backup, "cron", hour=settings.backup_hour, id="backup")
+        if not has_backup_today():
+            scheduler.add_job(run_backup, "date", id="backup-now")  # the PC was off at backup time
     scheduler.start()
     return scheduler

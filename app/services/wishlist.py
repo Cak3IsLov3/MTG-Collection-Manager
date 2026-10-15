@@ -165,10 +165,12 @@ def set_targets(session: Session, targets: dict[int, float]) -> int:
     return changed
 
 
-def purchase(session: Session, entry: WishlistEntry, quantity: int = 1, is_foil: bool = False) -> CollectionEntry:
-    """WANT -> HAVE: move a bought card into the collection and stop watching it."""
+def purchase(
+    session: Session, entry: WishlistEntry, quantity: int = 1, is_foil: bool = False, price: float | None = None
+) -> CollectionEntry:
+    """WANT -> HAVE: move a bought card (for `price` per copy, if given) into the collection and stop watching it."""
     card = session.get(Card, entry.card_id)
-    collection_entry = add_to_collection(session, card, quantity, is_foil)
+    collection_entry = add_to_collection(session, card, quantity, is_foil, price)
     entry.active = False  # kept (inactive) so the alert history stays intact
     session.add(entry)
     session.flush()

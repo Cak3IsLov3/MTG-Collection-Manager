@@ -23,6 +23,8 @@ price.
 
 ![The wishlist filtered on colour: the red and green cards, each with its colours](docs/wishlist-colors.jpg)
 
+![Wishlist cards that got 26% cheaper in a week are marked, also when they are not at the target yet; "Bought it" takes what you paid](docs/wishlist-drops.jpg)
+
 ![Choosing the set of a wishlist card: every printing of Force of Will with its price](docs/wishlist-set.jpg)
 
 ![Remove all asks for a second click before it empties the wishlist](docs/wishlist-remove-all.jpg)
@@ -44,6 +46,10 @@ price.
 ![Filtering on colour: the cards that fit a blue-black deck, each with its colour identity](docs/collection-colors.jpg)
 
 ![Free copies a deck still needs: cards you own that are missing from a deck, with the decks that need them](docs/collection-needed.jpg)
+
+![Only the free copies: a card with copies in decks shows how many of its copies are free, and the total is what those are worth](docs/collection-free.jpg)
+
+![What you paid per card, filled in right in the list, with what each card gained or lost since and the total for all of them](docs/collection-paid.jpg)
 
 ![Printings without a price of their own borrow one from another printing, marked ≈ SET (Dragon Egg and Fellwar Stone)](docs/collection-borrowed.jpg)
 
@@ -69,15 +75,31 @@ price.
 
 ![Mana curve and card types of a 100-card deck, with ramp, card draw, removal and board wipes](docs/deck-curve.jpg)
 
+![The bracket check: eight Game Changers do not fit bracket 3; below it the combos in the deck and the ones it is one card away from, from Commander Spellbook](docs/deck-bracket.jpg)
+
+![The deck next to EDHREC: the cards other Marwyn decks play most, how often, their synergy, and which ones you have a free copy of](docs/deck-edhrec.jpg)
+
+![EDHREC with "Only cards I have free": the popular cards you could put in the deck right away](docs/deck-edhrec-free.jpg)
+
+![Suggestions from your collection: free cards in the deck's colours, grouped by what the deck is short of](docs/deck-suggestions.jpg)
+
+![Token suggestions: the tokens the cards of a deck make and about how many you need, next to the token list](docs/deck-token-suggestions.jpg)
+
+![Basic lands shown as land cards, and the token list with the number per token as text that turns into a field when clicked](docs/deck-lands.jpg)
+
 ![Proxies: the cards a deck still misses at real card size, ready to print](docs/proxies.jpg)
 
 ![This week on the dashboard: the same summary goes to Discord every Monday](docs/dashboard-week.jpg)
 
-![The game log: per deck how often it was played, its win rate and when it was last played](docs/games.jpg)
+![The game log: who you played against and who won, your win rate, current streak and nemesis, and games per month](docs/games.jpg)
+
+![Win rates by table size, deck colour and bracket, and per opponent; the player who beats you most is your nemesis](docs/games-stats.jpg)
 
 ![The randomizer for three players, preferring decks that were not played for a while](docs/decks-random.jpg)
 
 ![Price rises in your collection: also sent to Discord after the daily price update](docs/dashboard-rises.jpg)
+
+![Price drops on the wishlist and reprints of valuable cards you own, both also sent to Discord](docs/dashboard-reprints.jpg)
 
 ![A deck that follows its Archidekt link: Sync now, and when it was last checked](docs/deck-archidekt.jpg)
 
@@ -108,7 +130,8 @@ price.
 - Change the quantity of a card in place, without removing and re-adding it
 - Tick or untick "foil" on a card you already have; price and totals follow, and it merges with the same card in the other finish
 - See which decks a card is in: cards that are set aside for a deck carry an "in N decks" label that opens the list of decks, and how many copies are still free
-- Show only the free copies, only the copies a deck uses, or only the free copies a deck still needs: cards you own that are missing from a deck carry a "needed by N decks" label with the decks
+- Show only the free copies, only the copies a deck uses, or only the free copies a deck still needs: cards you own that are missing from a deck carry a "needed by N decks" label with the decks. Every card then shows how many of its copies are in view ("2 free"), and the total is what those copies are worth
+- Purchase price: fill in what you paid per card (in the list, when adding a card, on "Bought it", or from the "Purchase Price" column of a CSV), and see what every card gained or lost since, and in total. Buying more copies keeps the average price
 - Instant search in the collection on card name, set or deck (accents and word order do not matter), with a foil-only filter
 - Versions of a card are grouped: one line per card with the number of versions, copies, price range and total value, which opens to show every version. Untick "Group versions" to see every version on its own line
 - Spare copies: the copies no deck uses or needs (basic lands left out), with what they are worth together, to trade or sell. Sort the collection by value to see the most valuable ones first
@@ -118,11 +141,14 @@ price.
 - Price history chart per card
 - Export the collection as a CSV in Moxfield's format (Moxfield, Archidekt and this app import it), and the wishlist with target and current prices
 - A Discord message after the daily price update when cards you own went up in price (by default 25% and at least €1 in 7 days), with how many you have and how many are spare; the dashboard lists them too
+- Reprint alert: when a card you own worth €5 or more gets a new printing, also one that is only announced, you get a Discord message with the sets and release dates (a reprint often makes the price drop). Every card and set is mentioned once
+- Daily backup of the database (by default at 3:00, or when the app starts and there is none of that day yet); the newest 14 are kept in `backups/`. The dashboard shows the last one and has a "Back up now" button
 
 **Wishlist (WANT)**
 - Watch cards with a maximum price
 - Periodic price check against Cardmarket, with Scryfall as a fallback
 - Discord webhook alert when a price is at or below your target, at most once per card per 24 hours
+- Price drop alert: a wishlist card that got 15% or more (and at least €0.50) cheaper in 7 days is marked "cheaper" and sent to Discord once, also when it is not at your target yet
 - Choose the set you want a card from: "Change set" lists every printing with its price; the target price is kept
 - Sort the wishlist by card name, current price, target price or difference, in either direction
 - "Remove all" empties the wishlist in one go, after a second click to confirm
@@ -146,7 +172,14 @@ price.
 - Export a deck as a text list for Archidekt or Moxfield, with the commander first and its tokens at the end
 - Weekly summary on Discord (by default on Monday at 9:00): collection value and its change, new cards, risers and fallers, and the games you played. The dashboard shows the same under "This week"
 - Commander picture: every deck shows its commander, taken from the Commander category on Archidekt, recognised from the deck name (only when that card can be a commander), or chosen on the deck page
-- Game log: log a game from the Games page or from a deck (date, players, notes, won, lost or draw). Every deck shows how often it was played, its win rate and when it was last played
+- Game log: log a game from the Games page or from a deck (date, players, who you played against, who won, notes). Every deck shows how often it was played, its win rate and when it was last played
+- Game statistics: your win rate, current streak and longest winning streak, games per month, win rates by table size (next to your fair share), deck colour and bracket, and per opponent, with the player who beats you most as your nemesis
+- Bracket check per deck: Game Changers (the official list, from Scryfall), mass land denial, extra turns and two-card infinite combos, against the bracket you set. A deck that does not fit gets a ⚠ in the list of decks
+- Combos per deck from Commander Spellbook: the combos in the deck and what they do, and the combos it is one card away from, marked when you own that card
+- EDHREC next to every deck with a commander: the cards other decks with that commander play most, how often and their synergy, with the ones you have a free copy of marked
+- Suggestions from your collection: free cards in the colours of a deck that are not in it yet, grouped by what the deck is short of (ramp, card draw, removal, board wipes), with an "Add to deck" button
+- Token suggestions: the tokens the cards of a deck make (from Scryfall) and about how many you need, next to the deck's token list, with buttons to add them or raise the number. Tokens you always bring (Clue and Copy by default) are left out
+- A Discord message when the automatic sync finds changes in a deck on Archidekt: what was added, removed and changed, and which new cards you still need
 - Add cards to a saved deck the same way as to the collection: by name, or by set and card number for one exact version
 - Take a card out of a deck: "Remove" moves it from "In this deck" to "Still missing" and frees your copies for other decks; "Put back" undoes it
 - Search inside a deck on card name or set
@@ -197,6 +230,16 @@ All settings are environment variables (see [.env.example](.env.example)).
 | `PRICE_RISE_PCT` | `25` | Discord message when a card you own rose at least this many percent (`0` turns it off) |
 | `PRICE_RISE_MIN_EUR` | `1` | ...and at least this many euros |
 | `PRICE_RISE_DAYS` | `7` | ...compared with its price this many days ago; a card is mentioned once per period |
+| `PRICE_DROP_PCT` | `15` | Discord message when a wishlist card got at least this many percent cheaper (`0` turns it off) |
+| `PRICE_DROP_MIN_EUR` | `0.5` | ...and at least this many euros |
+| `PRICE_DROP_DAYS` | `7` | ...compared with its price this many days ago; a card is mentioned once per period |
+| `REPRINT_MIN_EUR` | `5` | Discord message when a card you own worth at least this much gets a new printing (`0` turns it off) |
+| `REPRINT_DAYS` | `60` | ...looking at printings released or announced in the last this many days |
+| `DECK_CHANGE_ALERTS` | `true` | Discord message when the automatic sync finds changes in a deck on Archidekt |
+| `STANDARD_TOKENS` | `Clue,Copy` | Tokens you always bring along; the token suggestions leave them out |
+| `BACKUP_DIR` | `backups` | Folder of the daily database backups |
+| `BACKUP_KEEP` | `14` | How many backups are kept (`0` turns backups off) |
+| `BACKUP_HOUR` | `3` | Hour of the daily backup |
 | `WEEKLY_SUMMARY_DAY` | `mon` | Day of the weekly Discord summary (`mon` … `sun`; empty turns it off) |
 | `WEEKLY_SUMMARY_HOUR` | `9` | Hour of the weekly summary |
 | `SCRYFALL_MIN_INTERVAL` | `0.1` | Seconds between Scryfall requests (their limit is 10/s) |
@@ -229,7 +272,7 @@ product page. Two things to know:
 | --- | --- | --- |
 | `GET` / `POST` | `/api/collection` | List the collection (`?q=` searches name and set, `?in_deck=false` keeps the cards that are in no deck yet, `?spare=true` the copies no deck uses or needs, `?colors=WU&color_match=any\|within\|exact` filters on colour) / add a card and fetch its price |
 | `POST` | `/api/collection/import` | Upload an Archidekt or Moxfield CSV (`?replace=true` replaces the earlier imported cards, hand-added cards stay) |
-| `PATCH` / `DELETE` | `/api/collection/{id}` | Change the quantity or the foil finish of an entry / remove it |
+| `PATCH` / `DELETE` | `/api/collection/{id}` | Change the quantity, the foil finish or the purchase price of an entry / remove it |
 | `GET` / `POST` | `/api/wishlist` | List the wishlist (`?colors=WU&color_match=any\|within\|exact`) / watch a card with a max price |
 | `POST` | `/api/wishlist/{id}/purchase` | Move a card from WANT to HAVE |
 | `PUT` | `/api/wishlist/targets` | Set several target prices at once |
@@ -258,6 +301,14 @@ product page. Two things to know:
 | `GET` / `POST` | `/api/games` | The game log (`?deck_id=` for one deck) / log a game |
 | `DELETE` | `/api/games/{id}` | Remove a game from the log |
 | `GET` | `/api/games/stats` | Per deck: games played, wins, losses, draws, win rate and last played |
+| `GET` | `/api/games/overview` | Win rate, streaks, and win rates per month, table size, colour, bracket and opponent |
+| `GET` | `/api/decks/{id}/bracket-check` | Game Changers, mass land denial, extra turns and two-card combos against the deck's bracket |
+| `GET` | `/api/decks/{id}/combos` | The combos in a deck and the ones it is one card away from (Commander Spellbook) |
+| `GET` | `/api/decks/{id}/edhrec` | EDHREC's most played cards for the deck's commander, next to the deck and your collection |
+| `GET` | `/api/decks/{id}/suggestions` | Free cards from your collection that fit the deck |
+| `GET` / `POST` | `/api/decks/{id}/token-suggestions` | The tokens the deck's cards make and how many / take them over (`?scryfall_id=` for one) |
+| `GET` | `/api/reprints` | Reprints found of valuable cards you own |
+| `POST` | `/api/backup` | Back up the database now |
 | `PUT` | `/api/decks/{id}/bracket` | Set or clear the Commander bracket of a deck |
 | `PUT` | `/api/decks/{id}/archidekt` | Let a deck follow an Archidekt deck, or stop following |
 | `POST` | `/api/decks/{id}/sync`, `/api/decks/sync` | Bring one deck, or every linked deck, up to date with Archidekt |
@@ -271,11 +322,15 @@ app/
   models.py            Card, CollectionEntry, WishlistEntry, PriceSnapshot, Alert, DailyTotal, Deck, DeckEntry, DeckPick, DeckBasicLand, DeckSkipped
   scryfall.py          async Scryfall client (httpx), batch lookups, 429 retry
   cardmarket.py        product page scraper (BeautifulSoup), selectors from JSON
+  spellbook.py         Commander Spellbook client: the combos in a deck
+  edhrec.py            EDHREC client: the most played cards per commander
+  backup.py            daily copies of the SQLite database
   rate_limit.py        one independent rate-limit queue per external source
   csv_import.py        CSV parsing and format detection
   discord.py           webhook alerts
-  jobs.py              APScheduler jobs: daily prices, periodic wishlist check
-  services/            collection, wishlist, pricing snapshots, dashboard stats, deck check
+  jobs.py              APScheduler jobs: daily prices, wishlist check, deck sync, backups, Discord messages
+  services/            collection, wishlist, pricing snapshots, dashboard stats, decks, games, combos,
+                       suggestions, EDHREC comparison, reprints
   routers/             JSON API (api.py) and Jinja2 pages (pages.py)
   templates/, static/  dashboard UI with Chart.js
 tests/                 pytest suite: Scryfall client, scraper, alert logic, CSV import, API
@@ -297,5 +352,7 @@ tests/                 pytest suite: Scryfall client, scraper, alert logic, CSV 
 FastAPI · SQLModel + SQLite · httpx · BeautifulSoup4 · APScheduler · Discord
 webhooks · Jinja2 · Chart.js · pytest
 
-Card data and prices by [Scryfall](https://scryfall.com). Not affiliated with
-Wizards of the Coast, Scryfall, Cardmarket or Archidekt.
+Card data and prices by [Scryfall](https://scryfall.com), combos by
+[Commander Spellbook](https://commanderspellbook.com), popular cards per commander by
+[EDHREC](https://edhrec.com). Not affiliated with Wizards of the Coast, Scryfall,
+Cardmarket, Archidekt, Commander Spellbook or EDHREC.

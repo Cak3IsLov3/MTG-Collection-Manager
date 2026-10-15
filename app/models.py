@@ -19,6 +19,11 @@ class Card(SQLModel, table=True):
     image_url: str | None = None
     # Colour identity as letters in WUBRG order; "" is colourless, None not fetched yet.
     colors: str | None = None
+    # For the deck suggestions: type line, mana value and what the card does ("ramp,draw"),
+    # from Scryfall; type_line None: not looked up yet.
+    type_line: str | None = None
+    cmc: float | None = None
+    roles: str | None = None
 
 
 class CollectionEntry(SQLModel, table=True):
@@ -32,6 +37,8 @@ class CollectionEntry(SQLModel, table=True):
     # Copies from an import that wait for you to sort them into decks: the app does not hand
     # them out to decks on its own until you put them in a deck or let it decide.
     unsorted: int = 0
+    # What you paid per copy, in euro, when you filled it in (or the CSV had it).
+    purchase_price: float | None = None
 
 
 class WishlistEntry(SQLModel, table=True):
@@ -72,6 +79,35 @@ class PriceRiseAlert(SQLModel, table=True):
     notified: bool = False  # the Discord message went out
 
 
+class PriceDropAlert(SQLModel, table=True):
+    """A card on your wishlist that got cheaper; sent to Discord once, after the daily price update."""
+
+    id: int | None = Field(default=None, primary_key=True)
+    wishlist_entry_id: int = Field(foreign_key="wishlistentry.id", index=True)
+    card_id: int = Field(foreign_key="card.id", index=True)
+    sent_at: dt.datetime = Field(default_factory=utcnow)
+    old_price: float
+    new_price: float
+    days: int  # compared with the price this many days earlier
+    notified: bool = False  # the Discord message went out
+
+
+class ReprintAlert(SQLModel, table=True):
+    """A new printing of a valuable card you own; told once (Discord and the dashboard)."""
+
+    id: int | None = Field(default=None, primary_key=True)
+    card_id: int = Field(foreign_key="card.id", index=True)  # the printing you own
+    new_scryfall_id: str = Field(unique=True, index=True)
+    set_code: str
+    set_name: str
+    released_at: dt.date | None = None  # in the future: announced, not out yet
+    image_url: str | None = None
+    price: float  # what your card was worth when the reprint was found
+    copies: int = 1
+    found_at: dt.datetime = Field(default_factory=utcnow)
+    notified: bool = False
+
+
 class Game(SQLModel, table=True):
     """One game played with one of your decks."""
 
@@ -82,6 +118,9 @@ class Game(SQLModel, table=True):
     result: str = "loss"  # "win" | "loss" | "draw"
     players: int | None = None
     notes: str | None = None
+    # Who else played ("Sam, Robin"), and who won when it was not you.
+    opponents: str | None = None
+    winner: str | None = None
     created_at: dt.datetime = Field(default_factory=utcnow)
 
 
@@ -117,6 +156,9 @@ class Deck(SQLModel, table=True):
     # or the deck name); "": you chose none.
     commander: str | None = None
     commander_image: str | None = None  # Scryfall image of the commander
+    # The combos in the deck from Commander Spellbook (JSON), and the card list they were found for.
+    combos: str | None = None
+    combos_key: str | None = None
 
 
 class DeckEntry(SQLModel, table=True):
@@ -135,6 +177,12 @@ class DeckEntry(SQLModel, table=True):
     type_line: str | None = None
     cmc: float | None = None
     roles: str | None = None  # "ramp,draw,removal,wipe": what the card does, guessed from its rules text
+    # What matters for the Commander brackets, from the rules text: "mld" (mass land denial),
+    # "extraturn"; None: not looked at yet.
+    bracket_flags: str | None = None
+    # The tokens the card makes, as JSON: [{"id": Scryfall id, "name": "Treasure", "count": 3}], count
+    # being about how many you need of it for this card; None: not looked up yet.
+    token_parts: str | None = None
     image_url: str | None = None
 
 

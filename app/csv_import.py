@@ -12,6 +12,7 @@ SET_COLUMNS = ("edition code", "set code", "edition", "set")
 NUMBER_COLUMNS = ("collector number", "collector_number")
 SCRYFALL_ID_COLUMNS = ("scryfall id", "scryfall_id")
 FOIL_COLUMNS = ("foil", "finish")
+PRICE_COLUMNS = ("purchase price", "purchase_price", "price paid", "paid")
 FOIL_VALUES = {"foil", "etched", "true", "yes", "1"}
 
 
@@ -23,6 +24,17 @@ class CsvFormatError(ValueError):
 class ImportRow(CardRef):
     quantity: int = 1
     is_foil: bool = False
+    purchase_price: float | None = None  # per copy
+
+
+def _price(text: str) -> float | None:
+    """"€1,50", "$2.00", "1.5" -> a price; empty, 0 or not a number: none."""
+    cleaned = text.replace("€", "").replace("$", "").replace(" ", "").replace(",", ".")
+    try:
+        value = float(cleaned)
+    except ValueError:
+        return None
+    return round(value, 2) if value > 0 else None
 
 
 @dataclass
@@ -83,6 +95,7 @@ def parse_collection_csv(content: bytes | str) -> ParsedCsv:
                 scryfall_id=_pick(row, SCRYFALL_ID_COLUMNS) or None,
                 quantity=quantity,
                 is_foil=_pick(row, FOIL_COLUMNS).lower() in FOIL_VALUES,
+                purchase_price=_price(_pick(row, PRICE_COLUMNS)),
             )
         )
     return parsed

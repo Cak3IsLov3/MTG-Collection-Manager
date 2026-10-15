@@ -27,12 +27,15 @@ class CollectionAdd(BaseModel):
     collector_number: str | None = None
     quantity: int = Field(default=1, ge=1)
     is_foil: bool = False
+    purchase_price: float | None = Field(default=None, ge=0)  # what you paid per copy
 
 
 class CollectionUpdate(BaseModel):
-    # Send what should change: the number of copies, the finish, or both.
+    # Send what should change: the number of copies, the finish, what you paid per copy
+    # (null clears it), or several at once.
     quantity: int | None = Field(default=None, ge=1)
     is_foil: bool | None = None
+    purchase_price: float | None = Field(default=None, ge=0)
 
 
 class DeckUseOut(BaseModel):
@@ -69,6 +72,10 @@ class CollectionItemOut(BaseModel):
     waiting: int = 0
     # Copies that no deck uses or needs (basic lands not counted): to trade or sell.
     spare: int = 0
+    # What you paid per copy and for all copies, and what they gained (or lost) since.
+    purchase_price: float | None = None
+    paid_total: float | None = None
+    gain: float | None = None
 
     @classmethod
     def from_row(cls, row: CollectionRow) -> "CollectionItemOut":
@@ -81,6 +88,9 @@ class CollectionItemOut(BaseModel):
             unit_price=row.unit_price,
             total_price=row.total_price,
             price_from_set=row.price_from_set,
+            purchase_price=row.entry.purchase_price,
+            paid_total=row.paid_total,
+            gain=row.gain,
         )
 
 
@@ -158,6 +168,7 @@ class WishlistOut(BaseModel):
 class PurchaseIn(BaseModel):
     quantity: int = Field(default=1, ge=1)
     is_foil: bool = False
+    price: float | None = Field(default=None, ge=0)  # what you paid per copy
 
 
 class AlertOut(BaseModel):
@@ -209,6 +220,8 @@ class GameIn(BaseModel):
     played_on: dt.date | None = None  # today when left out
     players: int | None = None
     notes: str | None = None
+    opponents: list[str] = []  # who else played
+    winner: str | None = None  # who won, when you lost
 
 
 class GameOut(BaseModel):
@@ -221,6 +234,8 @@ class GameOut(BaseModel):
     result: str
     players: int | None
     notes: str | None
+    opponents: str | None = None  # "Sam, Robin"
+    winner: str | None = None
 
 
 class DeckPlaysOut(BaseModel):

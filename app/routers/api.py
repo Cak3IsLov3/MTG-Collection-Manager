@@ -10,7 +10,8 @@ from app import jobs
 from app.cardmarket import is_cardmarket_url
 from app.csv_import import CsvFormatError, parse_collection_csv
 from app.database import get_session
-from app.deps import get_scryfall
+from app.deps import get_edhrec, get_scryfall, get_spellbook
+from app.edhrec import EdhrecClient, EdhrecError
 from app.models import Card, CollectionEntry, Deck, WishlistEntry
 from app.schemas import (
     AlertOut,
@@ -47,6 +48,7 @@ from app.schemas import (
 )
 from app.scryfall import CardNotFound, InvalidCardRequest, ScryfallClient, ScryfallError
 from app.services import collection, decks, games, stats, wishlist
+from app.spellbook import SpellbookClient, SpellbookError
 
 router = APIRouter(prefix="/api", tags=["api"])
 
@@ -128,7 +130,7 @@ async def add_to_collection(
     try:
         entry = await collection.add_card_by_name(
             session, scryfall, (payload.name or "").strip(), payload.set_code, payload.quantity, payload.is_foil,
-            (payload.collector_number or "").strip() or None,
+            (payload.collector_number or "").strip() or None, payload.purchase_price,
         )
     except ScryfallError as exc:
         raise _scryfall_http_error(exc) from exc
@@ -178,13 +180,15 @@ async def update_collection_entry(
     Changing the finish can merge the entry into an existing one for the same
     printing; the response is the entry that holds the copies afterwards.
     """
-    if payload.quantity is None and payload.is_foil is None:
-        raise HTTPException(status_code=400, detail="Send a quantity, is_foil, or both")
+    if not payload.model_fields_set & {"quantity", "is_foil", "purchase_price"}:
+        raise HTTPException(status_code=400, detail="Send a quantity, is_foil or purchase_price")
     entry = session.get(CollectionEntry, entry_id)
     if entry is None:
         raise HTTPException(status_code=404, detail="Collection entry not found")
     if payload.quantity is not None:
         collection.set_quantity(session, entry, payload.quantity)
+    if "purchase_price" in payload.model_fields_set:
+        collection.set_purchase_price(session, entry, payload.purchase_price)
     if payload.is_foil is not None:
         entry = await collection.change_finish(session, scryfall, entry, payload.is_foil)
     stats.record_daily_total(session)
@@ -322,7 +326,9 @@ def _wishlist_entry(session: Session, entry_id: int) -> WishlistEntry:
 def purchase(entry_id: int, payload: PurchaseIn | None = None, session: Session = Depends(get_session)):
     """WANT -> HAVE: move a wishlist card into the collection."""
     payload = payload or PurchaseIn()
-    bought = wishlist.purchase(session, _wishlist_entry(session, entry_id), payload.quantity, payload.is_foil)
+    bought = wishlist.purchase(
+        session, _wishlist_entry(session, entry_id), payload.quantity, payload.is_foil, payload.price
+    )
     stats.record_daily_total(session)
     session.commit()
     return CollectionItemOut.from_row(collection.collection_rows(session, bought.id)[0])
@@ -546,7 +552,10 @@ def log_game(payload: GameIn, session: Session = Depends(get_session)):
     """Log a game played with one of your decks."""
     deck = _saved_deck(session, payload.deck_id)
     try:
-        game = games.log_game(session, deck, payload.result, payload.played_on, payload.players, payload.notes)
+        game = games.log_game(
+            session, deck, payload.result, payload.played_on, payload.players, payload.notes,
+            payload.opponents, payload.winner,
+        )
     except games.GameError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     session.commit()
@@ -574,6 +583,174 @@ def game_stats(session: Session = Depends(get_session)):
         for deck in session.exec(select(Deck).order_by(Deck.id))
         if (p := plays.get(deck.id))
     ]
+
+
+@router.get("/games/overview")
+def games_overview(session: Session = Depends(get_session)):
+    """Win rates over the whole log: overall, per month, table size, deck colour, bracket and opponent."""
+    overview = games.log_stats(session)
+
+    def tallies(items: list[games.Tally], key: str) -> list[dict]:
+        return [{key: t.label, "played": t.played, "wins": t.wins, "win_rate": t.win_rate} for t in items]
+
+    nemesis = overview.nemesis
+    return {
+        "played": overview.played, "wins": overview.wins, "losses": overview.losses, "draws": overview.draws,
+        "win_rate": overview.win_rate,
+        "streak": {"result": overview.streak[0], "games": overview.streak[1]} if overview.streak else None,
+        "longest_win_streak": overview.longest_win_streak,
+        "months": tallies(overview.months, "month"),
+        "table_sizes": [{**item, "players": int(item["players"])} for item in tallies(overview.table_sizes, "players")],
+        "colours": tallies(overview.colours, "colour"),
+        "brackets": [{**item, "bracket": int(item["bracket"])} for item in tallies(overview.brackets, "bracket")],
+        "opponents": [
+            {"name": t.label, "played": t.played, "your_wins": t.wins, "their_wins": t.their_wins}
+            for t in overview.opponents
+        ],
+        "nemesis": nemesis.label if nemesis else None,
+    }
+
+
+@router.get("/decks/{deck_id}/combos")
+async def deck_combos(
+    deck_id: int, session: Session = Depends(get_session), spellbook: SpellbookClient = Depends(get_spellbook)
+):
+    """The combos in a deck and the ones it is one card away from, from Commander Spellbook."""
+    from app.services import combos
+
+    deck = _saved_deck(session, deck_id)
+    try:
+        found = await combos.check_deck_combos(session, deck, spellbook)
+    except SpellbookError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    session.commit()
+
+    def out(combo: combos.Combo) -> dict:
+        return {"cards": combo.cards, "produces": combo.produces, "missing": combo.missing,
+                "two_card": combo.two_card, "url": combo.url}
+
+    return {"included": [out(c) for c in found.included], "one_card_away": [out(c) for c in found.almost]}
+
+
+@router.get("/decks/{deck_id}/edhrec")
+async def deck_edhrec(
+    deck_id: int, session: Session = Depends(get_session), edhrec: EdhrecClient = Depends(get_edhrec)
+):
+    """The cards EDHREC's decks with this commander play most, next to this deck and your collection."""
+    from app.services import edhrec_compare
+
+    deck = _saved_deck(session, deck_id)
+    try:
+        found = await edhrec_compare.compare_deck(session, deck, edhrec)
+    except EdhrecError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    if found is None:
+        raise HTTPException(status_code=400, detail="This deck has no commander")
+    return {
+        "commander": found.commander, "decks": found.decks, "url": found.url, "in_deck": found.in_deck,
+        "cards": [
+            {"name": c.name, "category": c.category, "inclusion": c.inclusion, "synergy": c.synergy,
+             "in_deck": c.in_deck, "owned": c.owned, "free": c.free, "price": c.price}
+            for c in found.cards
+        ],
+    }
+
+
+@router.get("/reprints")
+def list_reprints(session: Session = Depends(get_session)):
+    """Reprints found of valuable cards you own, newest first."""
+    from app.services.reprints import recent_reprint_alerts
+
+    return [
+        {"card": card.name, "card_id": card.id, "set_code": alert.set_code, "set_name": alert.set_name,
+         "released_at": alert.released_at, "your_price": alert.price, "copies": alert.copies,
+         "found_at": alert.found_at, "notified": alert.notified}
+        for alert, card in recent_reprint_alerts(session, 100)
+    ]
+
+
+@router.get("/decks/{deck_id}/token-suggestions")
+def token_suggestions(deck_id: int, session: Session = Depends(get_session)):
+    """The tokens the cards of a deck make and about how many are needed, next to its token list."""
+    from app.services import deck_insights
+
+    deck = _saved_deck(session, deck_id)
+    return [
+        {"name": s.name, "scryfall_id": s.scryfall_id, "needed": s.needed, "made_by": s.made_by,
+         "in_list": s.have.quantity if s.have else 0, "status": s.status}
+        for s in deck_insights.token_suggestions(session, deck)
+    ]
+
+
+@router.post("/decks/{deck_id}/token-suggestions", response_model=DeckDetailOut)
+def apply_token_suggestions(deck_id: int, scryfall_id: str | None = None, session: Session = Depends(get_session)):
+    """Take over the suggested tokens (or only `?scryfall_id=`): missing ones are added, too few raised."""
+    from app.services import deck_insights
+
+    deck = _saved_deck(session, deck_id)
+    deck_insights.apply_token_suggestions(session, deck, scryfall_id)
+    session.commit()
+    return _deck_detail(session, deck)
+
+
+@router.get("/decks/{deck_id}/suggestions")
+async def deck_suggestions(
+    deck_id: int, session: Session = Depends(get_session), scryfall: ScryfallClient = Depends(get_scryfall)
+):
+    """Cards from your collection that fit the deck: in its colours, with a free copy, not in it yet."""
+    from app.services import suggestions
+
+    deck = _saved_deck(session, deck_id)
+    try:
+        found = await suggestions.suggest(session, scryfall, deck)
+    except ScryfallError as exc:
+        raise _scryfall_http_error(exc) from exc
+    return {
+        "groups": [
+            {"group": group.key, "title": group.title, "deck_has": group.have, "aim_for": group.target,
+             "cards": [{"name": s.card.name, "card_id": s.card.id, "set_code": s.card.set_code, "free": s.free,
+                        "price": s.price, "roles": s.roles} for s in group.cards]}
+            for group in found.groups
+        ],
+        "colours_known": not found.no_colours,
+    }
+
+
+@router.post("/backup", status_code=201)
+def make_backup():
+    """Back up the database now (the app also does it every day)."""
+    from app import backup
+
+    made = backup.make_backup()
+    if made is None:
+        raise HTTPException(status_code=400, detail="Backups are off (BACKUP_KEEP=0) or the database is not a file")
+    return {"file": str(made), "backups": [b.name for b in backup.list_backups()]}
+
+
+@router.get("/decks/{deck_id}/bracket-check")
+async def bracket_check(
+    deck_id: int, session: Session = Depends(get_session), scryfall: ScryfallClient = Depends(get_scryfall)
+):
+    """Does the deck fit the bracket you set? Game Changers, mass land denial and extra turns."""
+    from app.services import deck_insights
+
+    deck = _saved_deck(session, deck_id)
+    try:
+        await deck_insights.fill_card_info(session, scryfall, deck.id)
+        changers = await deck_insights.game_changers(scryfall)
+    except ScryfallError as exc:
+        raise _scryfall_http_error(exc) from exc
+    check = deck_insights.bracket_check(session, deck, changers)
+    return {
+        "two_card_combos": check.two_card_combos,
+        "bracket": check.bracket,
+        "fits": check.fits,
+        "lowest_bracket": check.minimum,
+        "problems": check.problems,
+        "game_changers": check.game_changers,
+        "mass_land_denial": check.land_denial,
+        "extra_turns": check.extra_turns,
+    }
 
 
 @router.get("/decks/{deck_id}/value-history")

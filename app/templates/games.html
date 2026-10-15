@@ -20,17 +20,95 @@
     </label>
     <label>Date<input name="played_on" type="date" value="{{ today }}" max="{{ today }}" required></label>
     <label>Players<input name="players" class="qty" type="number" min="1" max="12" value="4"></label>
+    <label>Played against (optional)<input id="opponents" name="opponents" placeholder="Sam, Robin, Alex" autocomplete="off"></label>
+    <label>Won by, if not you<input name="winner" list="known-players" placeholder="Sam" autocomplete="off"></label>
     <label>Notes (optional)<input name="notes" placeholder="Won with a big Treasure turn"></label>
+    <datalist id="known-players">{% for name in players %}<option value="{{ name }}">{% endfor %}</datalist>
     <div class="result-buttons" role="group" aria-label="Result">
       {% for value, label in results.items() %}
       <button name="result" value="{{ value }}" class="{{ 'secondary' if value != 'win' }}">{{ label }}</button>
       {% endfor %}
     </div>
   </form>
-  <p class="muted">Pick the deck, then click how the game went. The randomizer on the Decks page can prefer the decks you have not played for a while.</p>
+  {% if players %}
+  <p class="player-chips"><span class="muted">Played before:</span>
+    {% for name in players[:12] %}<button type="button" class="chip" data-player="{{ name }}" title="Add {{ name }} to the players">{{ name }}</button>{% endfor %}</p>
+  {% endif %}
+  <p class="muted">Pick the deck, fill in who played (names separated by commas), then click how the game went. Lost? Fill in who won, so you can see who beats you most often.
+    The randomizer on the Decks page can prefer the decks you have not played for a while.</p>
 </div>
 {% else %}
 <div class="panel"><p class="muted">Save a deck first, then you can log the games you play with it.</p></div>
+{% endif %}
+
+{% if overview.played %}
+{% set o = overview %}
+<div class="grid stats">
+  <div class="panel stat">
+    <div class="label">Games played</div>
+    <div class="value">{{ o.played }}</div>
+    <div class="sub">{{ o.wins }} won · {{ o.losses }} lost{% if o.draws %} · {{ o.draws }} draw{{ 's' if o.draws != 1 }}{% endif %}</div>
+  </div>
+  <div class="panel stat">
+    <div class="label">Win rate</div>
+    <div class="value">{{ o.win_rate }}%</div>
+    <div class="sub">Longest winning streak: {{ o.longest_win_streak }}</div>
+  </div>
+  <div class="panel stat">
+    <div class="label">Right now</div>
+    {% set kind, run = o.streak %}
+    <div class="value {{ 'up' if kind == 'win' else 'down' if kind == 'loss' }}">{{ run }} {{ {'win': 'win', 'loss': 'loss', 'draw': 'draw'}[kind] }}{{ ('s' if kind != 'loss' else 'es') if run != 1 }}</div>
+    <div class="sub">in a row{% if o.nemesis %} · nemesis: <strong>{{ o.nemesis.label }}</strong> ({{ o.nemesis.their_wins }} wins against you){% endif %}</div>
+  </div>
+</div>
+
+<div class="panel">
+  <h2>Games per month</h2>
+  <div class="chart-box small"><canvas id="months-chart"></canvas></div>
+</div>
+
+<div class="grid three game-tables">
+  {% macro tally_table(title, items, label) %}
+  <div class="panel">
+    <h2>{{ title }}</h2>
+    {% if items %}
+    <table class="compact">
+      <tr><th></th><th class="num">Games</th><th class="num">Won</th><th class="num">Win rate</th></tr>
+      {% for t in items %}
+      <tr><td>{{ label(t) }}</td><td class="num">{{ t.played }}</td><td class="num">{{ t.wins }}</td><td class="num">{{ t.win_rate }}%</td></tr>
+      {% endfor %}
+    </table>
+    {% else %}
+    <p class="muted">Nothing to show yet.</p>
+    {% endif %}
+    {{ caller() }}
+  </div>
+  {% endmacro %}
+  {% macro players_label(t) %}{{ t.label }} players{% endmacro %}
+  {% macro colour_label(t) %}{{ pips(t.label if t.label != 'C' else '') }} {{ {'W': 'White', 'U': 'Blue', 'B': 'Black', 'R': 'Red', 'G': 'Green', 'C': 'Colourless'}[t.label] }}{% endmacro %}
+  {% macro bracket_label(t) %}{{ t.label }} · {{ brackets[t.label | int] }}{% endmacro %}
+  {% call tally_table("By table size", o.table_sizes, players_label) %}<p class="muted small">Your fair share: {% for t in o.table_sizes %}{{ (100 / (t.label | int)) | round | int }}% with {{ t.label }} players{{ ', ' if not loop.last }}{% endfor %}.</p>{% endcall %}
+  {% call tally_table("By colour", o.colours, colour_label) %}<p class="muted small">A game counts for every colour of the deck you played.</p>{% endcall %}
+  {% call tally_table("By bracket", o.brackets, bracket_label) %}<p class="muted small">The bracket your deck has now.</p>{% endcall %}
+</div>
+
+{% if o.opponents %}
+<div class="panel table-wrap">
+  <h2>Opponents</h2>
+  <table>
+    <tr><th>Player</th><th class="num">Games together</th><th class="num">You won</th><th class="num">They won</th><th class="num">Your win rate</th></tr>
+    {% for t in o.opponents %}
+    <tr>
+      <td>{{ t.label }}{% if o.nemesis and o.nemesis.label == t.label %} <span class="badge warn" title="Beat you most often">nemesis</span>{% endif %}</td>
+      <td class="num">{{ t.played }}</td>
+      <td class="num up">{{ t.wins }}</td>
+      <td class="num down">{{ t.their_wins }}</td>
+      <td class="num">{{ t.win_rate }}%</td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+{% endif %}
 {% endif %}
 
 {% if stats %}
@@ -61,13 +139,14 @@
   <h2>Log</h2>
   {% if games %}
   <table>
-    <tr><th>Date</th><th>Deck</th><th>Result</th><th class="num">Players</th><th>Notes</th><th></th></tr>
+    <tr><th>Date</th><th>Deck</th><th>Result</th><th class="num">Players</th><th>Against</th><th>Notes</th><th></th></tr>
     {% for game in games %}
     <tr>
       <td class="muted">{{ game.played_on }}</td>
       <td>{% if game.deck_id %}<a href="/decks/{{ game.deck_id }}">{{ deck_names.get(game.deck_id, game.deck_name) }}</a>{% else %}{{ game.deck_name }} <span class="muted">(deleted)</span>{% endif %}</td>
       <td><span class="badge result-{{ game.result }}">{{ results[game.result] }}</span></td>
       <td class="num">{{ game.players or '–' }}</td>
+      <td>{{ game.opponents or '' }}{% if game.winner %} <span class="muted">· {{ game.winner }} won</span>{% endif %}</td>
       <td class="muted">{{ game.notes or '' }}</td>
       <td>
         <form class="inline" method="post" action="/games/{{ game.id }}/delete" data-confirm="Click again to remove" data-keep-scroll>
@@ -81,4 +160,43 @@
   <p class="muted">No games logged yet.</p>
   {% endif %}
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  // Click a name you played against before to add it to the players.
+  const opponents = document.getElementById("opponents");
+  for (const chip of document.querySelectorAll(".player-chips .chip")) {
+    chip.addEventListener("click", () => {
+      const names = opponents.value.split(",").map((name) => name.trim()).filter(Boolean);
+      if (!names.some((name) => name.toLowerCase() === chip.dataset.player.toLowerCase())) names.push(chip.dataset.player);
+      opponents.value = names.join(", ");
+      opponents.focus();
+    });
+  }
+</script>
+{% if overview.played %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script>
+  const months = {{ overview.months | map(attribute="label") | list | tojson }};
+  new Chart(document.getElementById("months-chart"), {
+    type: "bar",
+    data: {
+      labels: months,
+      datasets: [
+        { label: "Played", data: {{ overview.months | map(attribute="played") | list | tojson }}, backgroundColor: "#4c9aff" },
+        { label: "Won", data: {{ overview.months | map(attribute="wins") | list | tojson }}, backgroundColor: "#3ecf8e" },
+      ],
+    },
+    options: {
+      maintainAspectRatio: false,
+      scales: {
+        x: { ticks: { color: "#8b93a3" }, grid: { color: "#2c313c" } },
+        y: { beginAtZero: true, ticks: { color: "#8b93a3", precision: 0 }, grid: { color: "#2c313c" } },
+      },
+      plugins: { legend: { labels: { color: "#e6e8ec" } } },
+    },
+  });
+</script>
+{% endif %}
 {% endblock %}

@@ -23,7 +23,8 @@ def collection_csv(session: Session) -> str:
         writer.writerow([
             row.entry.quantity, 0, row.card.name, row.card.set_code, "Near Mint", "English",
             "foil" if row.entry.is_foil else "", "", row.entry.added_at.strftime("%Y-%m-%d %H:%M:%S"),
-            row.card.collector_number or "", "False", "False", "",
+            row.card.collector_number or "", "False", "False",
+            "" if row.entry.purchase_price is None else f"{row.entry.purchase_price:.2f}",
         ])
     return out.getvalue()
 

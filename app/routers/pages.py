@@ -10,16 +10,18 @@ from fastapi.responses import PlainTextResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 from sqlmodel import Session, select
 
-from app import jobs
+from app import backup, jobs
 from app.cardmarket import is_cardmarket_url
 from app.config import BASE_DIR, get_settings
 from app.csv_import import CsvFormatError, parse_collection_csv
 from app.database import get_session
-from app.deps import get_scryfall
+from app.deps import get_edhrec, get_scryfall, get_spellbook
+from app.edhrec import EdhrecClient, EdhrecError
 from app.models import Card, CollectionEntry, Deck, WishlistEntry
 from app.routers.api import load_deck
 from app.scryfall import CardRef, ScryfallClient, ScryfallError
-from app.services import collection, deck_insights, decks, games, stats, wishlist
+from app.services import collection, combos, deck_insights, decks, edhrec_compare, games, reprints, stats, suggestions, wishlist
+from app.spellbook import SpellbookClient, SpellbookError
 from app.services.exports import collection_csv, wishlist_csv
 
 logger = logging.getLogger(__name__)
@@ -68,7 +70,10 @@ def parse_money(text: str) -> float | None:
 
 @router.get("/")
 def dashboard_page(request: Request, session: Session = Depends(get_session)):
-    return render(request, "dashboard.html", settings=get_settings(), **stats.dashboard(session))
+    return render(request, "dashboard.html", settings=get_settings(), backups=backup.list_backups(),
+                  reprint_alerts=reprints.recent_reprint_alerts(session), today=dt.date.today(),
+                  backup_possible=backup.database_path(get_settings().database_url) is not None,
+                  **stats.dashboard(session))
 
 
 @router.get("/cards/{card_id}")
@@ -97,7 +102,7 @@ def collection_page(request: Request, session: Session = Depends(get_session)):
     shared = decks.collection_decks(session)
     return render(request, "collection.html", rows=rows, total=collection.collection_value(rows),
                   usage=shared.usage, wanted=shared.wanted, waiting=shared.waiting,
-                  basic_lands=decks.BASIC_LAND_NAMES)
+                  basic_lands=decks.BASIC_LAND_NAMES, purchases=collection.purchase_summary(rows))
 
 
 @router.post("/collection/add")
@@ -107,13 +112,17 @@ async def collection_add(
     collector_number: str = Form(""),
     quantity: int = Form(1),
     is_foil: bool = Form(False),
+    purchase_price: str = Form(""),
     session: Session = Depends(get_session),
     scryfall: ScryfallClient = Depends(get_scryfall),
 ):
+    paid = parse_money(purchase_price) if purchase_price.strip() else None
+    if purchase_price.strip() and paid is None:
+        return redirect("/collection", "Fill in what you paid as a price, like 2.50", error=True)
     try:
         entry = await collection.add_card_by_name(
             session, scryfall, name.strip(), set_code.strip() or None, max(1, quantity), is_foil,
-            collector_number.strip().lstrip("#") or None,
+            collector_number.strip().lstrip("#") or None, paid,
         )
     except ScryfallError as exc:
         return redirect("/collection", str(exc), error=True)
@@ -206,6 +215,18 @@ def collection_quantity(entry_id: int, quantity: int = Form(...), session: Sessi
     return redirect("/collection", "Quantity updated")
 
 
+@router.post("/collection/{entry_id}/paid")
+def collection_paid(entry_id: int, purchase_price: str = Form(""), session: Session = Depends(get_session)):
+    """Fallback for browsers without JavaScript; the page normally saves through the API."""
+    entry = session.get(CollectionEntry, entry_id)
+    paid = parse_money(purchase_price) if purchase_price.strip() else None
+    if entry is None or (purchase_price.strip() and paid is None):
+        return redirect("/collection", "Fill in what you paid as a price, like 2.50", error=True)
+    collection.set_purchase_price(session, entry, paid)
+    session.commit()
+    return redirect("/collection", "Purchase price saved")
+
+
 @router.post("/collection/{entry_id}/delete")
 def collection_delete(entry_id: int, session: Session = Depends(get_session)):
     entry = session.get(CollectionEntry, entry_id)
@@ -237,6 +258,8 @@ def games_page(request: Request, deck: int | None = None, session: Session = Dep
         not_played=sorted((d for d in saved if d.id not in plays), key=lambda d: d.name),
         deck_names={d.id: d.name for d in saved}, results=games.RESULTS,
         today=dt.date.today().isoformat(), selected_deck=deck,
+        overview=games.log_stats(session), players=games.known_players(session),
+        brackets=decks.BRACKETS,
     )
 
 
@@ -247,6 +270,8 @@ def games_log(
     played_on: str = Form(""),
     players: str = Form(""),
     notes: str = Form(""),
+    opponents: str = Form(""),
+    winner: str = Form(""),
     back: str = Form(""),
     session: Session = Depends(get_session),
 ):
@@ -257,7 +282,9 @@ def games_log(
         return redirect(target, "That deck does not exist anymore", error=True)
     try:
         day = dt.date.fromisoformat(played_on) if played_on.strip() else None
-        game = games.log_game(session, deck, result, day, int(players) if players.strip() else None, notes)
+        game = games.log_game(
+            session, deck, result, day, int(players) if players.strip() else None, notes, opponents, winner
+        )
     except ValueError as exc:
         message = str(exc) if isinstance(exc, games.GameError) else "That is not a valid date or number"
         return redirect(target, message, error=True)
@@ -278,10 +305,21 @@ def games_delete(game_id: int, session: Session = Depends(get_session)):
 @router.get("/wishlist")
 def wishlist_page(request: Request, session: Session = Depends(get_session)):
     rows = wishlist.wishlist_rows(session)
+    settings = get_settings()
+    drops = {}
+    if settings.price_drop_pct > 0:
+        drops = {
+            row.entry.id: drop
+            for row, drop in stats.find_price_drops(
+                session, settings.price_drop_days, settings.price_drop_pct, settings.price_drop_min_eur, rows
+            )
+        }
     return render(
         request,
         "wishlist.html",
         rows=rows,
+        drops=drops,
+        settings=settings,
         total=wishlist.wishlist_cost(rows),
         collection_value=collection.collection_value(collection.collection_rows(session)),
         alerts=wishlist.recent_alerts(session, 25),
@@ -386,12 +424,17 @@ def wishlist_target(entry_id: int, target_price: str = Form(...), session: Sessi
 
 
 @router.post("/wishlist/{entry_id}/purchase")
-def wishlist_purchase(entry_id: int, is_foil: bool = Form(False), session: Session = Depends(get_session)):
+def wishlist_purchase(
+    entry_id: int, is_foil: bool = Form(False), paid: str = Form(""), session: Session = Depends(get_session)
+):
     entry = _active_entry(session, entry_id)
     if entry is None:
         return redirect("/wishlist", "Wishlist entry not found", error=True)
+    price = parse_money(paid) if paid.strip() else None
+    if paid.strip() and price is None:
+        return redirect("/wishlist", "Fill in what you paid as a price, like 2.50", error=True)
     card = session.get(Card, entry.card_id)
-    wishlist.purchase(session, entry, 1, is_foil)
+    wishlist.purchase(session, entry, 1, is_foil, price)
     stats.record_daily_total(session)
     session.commit()
     return redirect("/collection", f"{card.name} moved from wishlist to collection")
@@ -439,8 +482,19 @@ async def deck_page(
     await _fill_deck_colors(session, scryfall)
     summaries = decks.deck_summaries(session)
     plays = games.deck_plays(session)
+    warnings = deck_insights.bracket_warnings(session, [s.deck for s in summaries], await _game_changers(scryfall))
     return render(request, "deck.html", rows=None, deck=None, summaries=summaries, brackets=decks.BRACKETS,
-                  deck_data=_deck_data(summaries, plays), card_names=decks.deck_card_names(session), plays=plays)
+                  deck_data=_deck_data(summaries, plays), card_names=decks.deck_card_names(session), plays=plays,
+                  bracket_warnings=warnings)
+
+
+async def _game_changers(scryfall: ScryfallClient) -> frozenset[str] | None:
+    """The Game Changers list; None when Scryfall cannot be reached (the check then says so)."""
+    try:
+        return await deck_insights.game_changers(scryfall)
+    except ScryfallError as exc:
+        logger.warning("Could not fetch the Game Changers list: %s", exc)
+        return None
 
 
 async def _fill_deck_colors(session: Session, scryfall: ScryfallClient) -> None:
@@ -548,7 +602,8 @@ async def deck_save(
 @router.get("/decks/{deck_id}")
 async def saved_deck_page(
     deck_id: int, request: Request, session: Session = Depends(get_session),
-    scryfall: ScryfallClient = Depends(get_scryfall),
+    scryfall: ScryfallClient = Depends(get_scryfall), spellbook: SpellbookClient = Depends(get_spellbook),
+    edhrec: EdhrecClient = Depends(get_edhrec),
 ):
     deck = session.get(Deck, deck_id)
     if deck is None:
@@ -559,12 +614,35 @@ async def saved_deck_page(
     except ScryfallError as exc:
         logger.warning("Could not look up the cards of %s: %s", deck.name, exc)
         session.rollback()
+    try:
+        deck_combos = await combos.check_deck_combos(session, deck, spellbook)
+        session.commit()
+    except SpellbookError as exc:
+        logger.warning("Could not check the combos of %s: %s", deck.name, exc)
+        deck_combos = combos.deck_combos(deck) if combos.is_current(session, deck) else combos.DeckCombos()
+    try:
+        deck_suggestions = await suggestions.suggest(session, scryfall, deck)
+    except ScryfallError as exc:
+        logger.warning("Could not look up cards for the suggestions: %s", exc)
+        session.rollback()
+        deck_suggestions = await suggestions.suggest(session, None, deck)
+    edhrec_error = None
+    try:
+        edhrec_comparison = await edhrec_compare.compare_deck(session, deck, edhrec)
+    except EdhrecError as exc:
+        logger.warning("EDHREC: %s", exc)
+        edhrec_comparison, edhrec_error = None, str(exc)
     summaries = decks.deck_summaries(session)
     summary = next(s for s in summaries if s.deck.id == deck.id)
     return render(request, "deck.html", rows=decks.saved_deck_rows(session, deck), deck=deck, uses_tokens=summary.uses_tokens,
                   value_history=decks.deck_value_history(session, deck),
                   deck_token_list=decks.deck_tokens(session, deck), deck_stats=deck_insights.deck_stats(session, deck),
+                  token_suggestions=await _token_suggestions(session, scryfall, deck),
+                  standard_tokens=get_settings().standard_tokens,
                   land_images=await _land_images(scryfall),
+                  bracket_check=deck_insights.bracket_check(session, deck, await _game_changers(scryfall), deck_combos),
+                  deck_combos=deck_combos, owned=combos.owned_missing(session, deck_combos), deck_suggestions=deck_suggestions,
+                  edhrec=edhrec_comparison, edhrec_error=edhrec_error,
                   deck_plays=games.deck_plays(session).get(deck.id), deck_games=games.recent_games(session, 5, deck.id),
                   results=games.RESULTS, today=dt.date.today().isoformat(),
                   summaries=summaries, left_out=decks.deck_left_out(session, deck),
@@ -697,6 +775,19 @@ def saved_deck_add_token(
     return redirect(f"/decks/{deck_id}", f"Added {quantity}× {token.name} to the tokens of this deck")
 
 
+@router.post("/decks/{deck_id}/tokens/suggested")
+def saved_deck_suggested_tokens(deck_id: int, scryfall_id: str = Form(""), session: Session = Depends(get_session)):
+    """Take over the suggested tokens: one (`scryfall_id`) or all of them."""
+    deck = session.get(Deck, deck_id)
+    if deck is None:
+        return redirect("/deck", "Deck not found", error=True)
+    changed = deck_insights.apply_token_suggestions(session, deck, scryfall_id.strip() or None)
+    session.commit()
+    if not changed:
+        return redirect(f"/decks/{deck_id}", "The token list already has these tokens")
+    return redirect(f"/decks/{deck_id}", f"Token list updated: {changed} token{'s' if changed != 1 else ''}")
+
+
 @router.post("/decks/{deck_id}/tokens/{token_id}/quantity")
 def saved_deck_token_quantity(
     deck_id: int, token_id: int, quantity: int = Form(...), session: Session = Depends(get_session)
@@ -740,6 +831,15 @@ async def saved_deck_token_version(
         return redirect(f"/decks/{deck_id}", f"Could not change the token: {exc}", error=True)
     session.commit()
     return redirect(f"/decks/{deck_id}", f"Changed the {token.name} token")
+
+
+async def _token_suggestions(session: Session, scryfall: ScryfallClient, deck: Deck) -> list:
+    found = deck_insights.token_suggestions(session, deck)
+    try:
+        await deck_insights.fill_token_images(scryfall, found)
+    except ScryfallError as exc:
+        logger.warning("Could not fetch the pictures of the suggested tokens: %s", exc)
+    return found
 
 
 async def _land_images(scryfall: ScryfallClient) -> dict[str, str]:
@@ -893,6 +993,17 @@ async def deck_to_wishlist(
 def job_update_prices(background: BackgroundTasks):
     background.add_task(jobs.run_collection_update)
     return redirect("/", "Price update started — refresh in a moment")
+
+
+@router.post("/jobs/backup")
+def job_backup():
+    try:
+        made = backup.make_backup()
+    except OSError as exc:
+        return redirect("/", f"Backup failed: {exc}", error=True)
+    if made is None:
+        return redirect("/", "Nothing to back up: backups are off (BACKUP_KEEP=0) or the database is not a file", error=True)
+    return redirect("/", f"Backup made: {made}")
 
 
 @router.post("/jobs/check-wishlist")

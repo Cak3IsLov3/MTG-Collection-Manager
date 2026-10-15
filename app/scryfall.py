@@ -3,7 +3,7 @@
 import asyncio
 import json
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from urllib.parse import quote
 
 import httpx
@@ -84,6 +84,8 @@ class ScryfallCard:
     type_line: str = ""  # e.g. "Legendary Creature — Robot"
     cmc: float | None = None  # mana value
     oracle_text: str = ""  # rules text; of both faces for a double-faced card
+    # The tokens (and emblems) the card makes: [(Scryfall id, name)].
+    token_parts: list[tuple[str, str]] = field(default_factory=list)
 
     @classmethod
     def from_json(cls, data: dict) -> "ScryfallCard":
@@ -108,6 +110,10 @@ class ScryfallCard:
             cmc=data.get("cmc"),
             oracle_text=data.get("oracle_text")
             or "\n".join(face.get("oracle_text") or "" for face in data.get("card_faces") or []),
+            token_parts=[
+                (part["id"], part["name"]) for part in data.get("all_parts") or []
+                if part.get("component") == "token" and part.get("id") and part.get("id") != data["id"]
+            ],
         )
 
 

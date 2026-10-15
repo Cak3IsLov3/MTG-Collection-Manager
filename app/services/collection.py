@@ -23,6 +23,19 @@ class CollectionRow:
     def total_price(self) -> float | None:
         return None if self.unit_price is None else round(self.unit_price * self.entry.quantity, 2)
 
+    @property
+    def paid_total(self) -> float | None:
+        """What you paid for all copies, when you filled in a purchase price."""
+        paid = self.entry.purchase_price
+        return None if paid is None else round(paid * self.entry.quantity, 2)
+
+    @property
+    def gain(self) -> float | None:
+        """What the copies are worth now minus what you paid for them."""
+        if self.paid_total is None or self.total_price is None:
+            return None
+        return round(self.total_price - self.paid_total, 2)
+
 
 @dataclass
 class ImportResult:
@@ -35,13 +48,29 @@ class ImportResult:
     new_copies: int = 0
 
 
-def add_to_collection(session: Session, card: Card, quantity: int = 1, is_foil: bool = False) -> CollectionEntry:
-    """Add copies of a card; the same printing + finish is merged into one entry."""
+def _add_paid(entry: CollectionEntry, quantity: int, price: float | None) -> None:
+    """New copies bought for `price` each: the entry keeps the average price paid. When the copies
+    you already had have no price, the average is not known, so it stays empty."""
+    if price is None:
+        return
+    if entry.quantity == 0:
+        entry.purchase_price = round(price, 2)
+    elif entry.purchase_price is not None:
+        total = entry.purchase_price * entry.quantity + price * quantity
+        entry.purchase_price = round(total / (entry.quantity + quantity), 2)
+
+
+def add_to_collection(
+    session: Session, card: Card, quantity: int = 1, is_foil: bool = False, price: float | None = None
+) -> CollectionEntry:
+    """Add copies of a card (bought for `price` each, if given); the same printing + finish is merged
+    into one entry."""
     entry = session.exec(
         select(CollectionEntry).where(CollectionEntry.card_id == card.id, CollectionEntry.is_foil == is_foil)
     ).first()
     if entry is None:
         entry = CollectionEntry(card_id=card.id, quantity=0, is_foil=is_foil)
+    _add_paid(entry, quantity, price)
     entry.quantity += quantity
     session.add(entry)
     session.flush()
@@ -57,6 +86,45 @@ def set_quantity(session: Session, entry: CollectionEntry, quantity: int) -> Col
     session.add(entry)
     session.flush()
     return entry
+
+
+def set_purchase_price(session: Session, entry: CollectionEntry, price: float | None) -> CollectionEntry:
+    """What you paid per copy; None clears it."""
+    if price is not None and price < 0:
+        raise ValueError("A purchase price cannot be negative")
+    entry.purchase_price = None if price is None else round(price, 2)
+    session.add(entry)
+    session.flush()
+    return entry
+
+
+@dataclass
+class PurchaseSummary:
+    """The cards you filled in a purchase price for: what you paid and what they are worth now."""
+
+    paid: float = 0.0
+    worth: float = 0.0
+    copies: int = 0
+
+    @property
+    def gain(self) -> float:
+        return round(self.worth - self.paid, 2)
+
+    @property
+    def gain_pct(self) -> float | None:
+        return round(self.gain / self.paid * 100, 1) if self.paid else None
+
+
+def purchase_summary(rows: list[CollectionRow]) -> PurchaseSummary:
+    summary = PurchaseSummary()
+    for row in rows:
+        if row.paid_total is None or row.total_price is None:
+            continue
+        summary.paid += row.paid_total
+        summary.worth += row.total_price
+        summary.copies += row.entry.quantity
+    summary.paid, summary.worth = round(summary.paid, 2), round(summary.worth, 2)
+    return summary
 
 
 def set_foil(session: Session, entry: CollectionEntry, is_foil: bool) -> CollectionEntry:
@@ -77,6 +145,11 @@ def set_foil(session: Session, entry: CollectionEntry, is_foil: bool) -> Collect
         session.add(entry)
         session.flush()
         return entry
+    # A known purchase price wins over none; two known prices are averaged.
+    if other.purchase_price is None:
+        other.purchase_price = entry.purchase_price
+    elif entry.purchase_price is not None:
+        _add_paid(other, entry.quantity, entry.purchase_price)
     other.quantity += entry.quantity
     other.unsorted += entry.unsorted
     session.add(other)
@@ -201,11 +274,12 @@ async def add_card_by_name(
     quantity: int = 1,
     is_foil: bool = False,
     collector_number: str | None = None,
+    price: float | None = None,
 ) -> CollectionEntry:
     """Add a card by name, or one exact printing by set code + collector number."""
     data = await find_card(scryfall, name, set_code, collector_number)
     await scryfall.fill_missing_prices([data], {data.scryfall_id} if is_foil else set())
-    return add_to_collection(session, store_scryfall_card(session, data), quantity, is_foil)
+    return add_to_collection(session, store_scryfall_card(session, data), quantity, is_foil, price)
 
 
 async def import_rows(
@@ -242,6 +316,8 @@ async def import_rows(
         if replace and entry.id is not None and entry.id not in seen:
             entry.quantity = 0  # the file says how many there are
             entry.imported = True
+        if row.purchase_price is not None:
+            _add_paid(entry, row.quantity, row.purchase_price)
         entry.quantity += row.quantity
         session.add(entry)
         session.flush()

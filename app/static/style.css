@@ -288,3 +288,40 @@ details.in-decks ul { margin: 4px 0 2px; padding: 6px 10px; list-style: none; ba
   main, .container { padding: 0; margin: 0; max-width: none; }
   .proxy { break-inside: avoid; border: 0.2mm solid #999; }
 }
+
+/* Bracket check */
+.bracket-check.bad { border-color: var(--down); }
+.bracket-lines { margin: 8px 0; padding-left: 18px; line-height: 1.9; }
+.badge.changer { border-color: var(--accent); color: var(--accent); }
+.badge.warn { border-color: var(--down); color: var(--down); text-decoration: none; }
+/* Purchase prices */
+input.paid { width: 72px; padding: 4px 6px; text-align: right; }
+input.paid.saved { border-color: var(--up); }
+input.paid.failed { border-color: var(--down); }
+.gain { margin-top: 2px; }
+.bought-form input.paid { width: 64px; }
+.purchases p { margin: 0; }
+.badge.drop { border-color: var(--up); color: var(--up); }
+/* Game statistics */
+.grid.three { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); margin-bottom: 16px; }
+.player-chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.chip { padding: 2px 10px; border-radius: 12px; font-size: 12px; background: transparent; border: 1px solid var(--border); color: var(--text); font-weight: 400; cursor: pointer; }
+.chip:hover, .chip:focus-visible { border-color: var(--accent); color: var(--accent); }
+
+/* Combos and suggestions */
+.combo-list { margin: 6px 0 10px; padding-left: 18px; line-height: 1.8; }
+.combos-panel h3, .suggestions-panel h3 { margin: 14px 0 8px; font-size: 14px; }
+.suggestion-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px; }
+.suggestion { display: flex; gap: 10px; align-items: flex-start; padding: 8px; border: 1px solid var(--border); border-radius: 6px; }
+.suggestion img { width: 54px; aspect-ratio: 5 / 7; border-radius: 4px; flex: none; }
+.suggestion form { display: block; margin-top: 6px; }
+
+/* Token suggestions */
+.token-card.suggested { padding: 6px; border: 1px solid var(--border); border-radius: 8px; width: 144px; }
+.token-card.suggested.missing { border-color: var(--down); }
+.token-card.suggested.short { border-color: var(--accent); }
+.token-need { font-size: 13px; }
+
+/* EDHREC */
+.inclusion { display: inline-block; width: 60px; height: 6px; margin-right: 6px; border-radius: 3px; background: var(--border); vertical-align: middle; }
+.inclusion > div { height: 100%; border-radius: 3px; background: var(--accent); }

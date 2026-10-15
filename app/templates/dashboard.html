@@ -28,6 +28,8 @@
     <div class="label">Collection value</div>
     <div class="value">{{ collection_value | eur }}</div>
     <div class="sub">{{ card_count }} cards · {{ unique_count }} unique{% if unpriced_count %} · {{ unpriced_count }} without price{% endif %}</div>
+    {% if purchases.copies %}<div class="sub">Paid {{ purchases.paid | eur }} for {{ purchases.copies }} of them, now
+      <span class="{{ 'up' if purchases.gain >= 0 else 'down' }}">{{ '+' if purchases.gain >= 0 else '−' }}{{ purchases.gain | abs | eur }}</span></div>{% endif %}
   </div>
   <div class="panel stat want">
     <div class="label">Wishlist cost</div>
@@ -103,6 +105,66 @@
   {% else %}
   <p class="muted">No price rises yet. After the daily price update you get a Discord message when a card you own goes up
     {{ settings.price_rise_pct | round | int }}% or more (and at least {{ settings.price_rise_min_eur | eur }}) in {{ settings.price_rise_days }} days.</p>
+  {% endif %}
+</div>
+
+<div class="panel">
+  <h2>Price drops on your wishlist</h2>
+  {% if drop_alerts %}
+  <table>
+    <tr><th>When (UTC)</th><th>Card</th><th class="num">Was</th><th class="num">Now</th><th class="num">Change</th><th class="num">Target</th><th></th></tr>
+    {% for alert, card, entry in drop_alerts %}
+    <tr>
+      <td class="muted">{{ alert.sent_at.strftime('%Y-%m-%d %H:%M') }}</td>
+      <td><a href="/cards/{{ card.id }}">{{ card.name }}</a></td>
+      <td class="num muted">{{ alert.old_price | eur }}</td>
+      <td class="num up">{{ alert.new_price | eur }}</td>
+      <td class="num up">−{{ '%.0f' | format((alert.old_price - alert.new_price) / alert.old_price * 100) }}% in {{ alert.days }} days</td>
+      <td class="num">{{ entry.target_price | eur }}</td>
+      <td class="muted">{{ 'sent to Discord' if alert.notified else 'not sent' }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}
+  <p class="muted">No price drops yet. After the daily price update you get a Discord message when a card on your wishlist gets
+    {{ settings.price_drop_pct | round | int }}% or more (and at least {{ settings.price_drop_min_eur | eur }}) cheaper in {{ settings.price_drop_days }} days.</p>
+  {% endif %}
+</div>
+
+<div class="panel">
+  <h2>Reprints of cards you own</h2>
+  {% if reprint_alerts %}
+  <table>
+    <tr><th>Found</th><th>Card</th><th>New printing</th><th>Release</th><th class="num">Yours worth</th><th class="num">You have</th><th></th></tr>
+    {% for alert, card in reprint_alerts %}
+    <tr>
+      <td class="muted">{{ alert.found_at.strftime('%Y-%m-%d') }}</td>
+      <td><a href="/cards/{{ card.id }}">{{ card.name }}</a></td>
+      <td>{{ alert.set_name }} ({{ alert.set_code | upper }})</td>
+      <td>{% if alert.released_at %}{% if alert.released_at > today %}<span class="badge warn">out {{ alert.released_at }}</span>{% else %}<span class="muted">{{ alert.released_at }}</span>{% endif %}{% endif %}</td>
+      <td class="num">{{ alert.price | eur }}</td>
+      <td class="num">{{ alert.copies }}</td>
+      <td class="muted">{{ 'sent to Discord' if alert.notified else 'not sent' }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}
+  <p class="muted">{% if settings.reprint_min_eur > 0 %}No reprints found yet. After the daily price update the app looks for new printings of cards you own worth {{ settings.reprint_min_eur | eur }} or more, also ones that are only announced, and tells you on Discord.{% else %}Reprint alerts are off (REPRINT_MIN_EUR=0).{% endif %}</p>
+  {% endif %}
+</div>
+
+<div class="panel backups">
+  <h2>Backups</h2>
+  {% if not backup_possible %}
+  <p class="muted">Backups are made of a SQLite database file; this database is not one.</p>
+  {% elif settings.backup_keep <= 0 %}
+  <p class="muted">Daily backups are off (BACKUP_KEEP=0).</p>
+  {% else %}
+  <p>{% if backups %}Last backup: <strong>{{ backups[0].made.strftime('%Y-%m-%d %H:%M') }}</strong> ({{ backups[0].name }}, {{ (backups[0].size / 1048576) | round(1) }} MB) ·
+    {{ backups | length }} kept in <code>{{ settings.backup_dir }}/</code>{% else %}No backup yet.{% endif %}</p>
+  <p class="muted small">Every day at {{ settings.backup_hour }}:00 (or when the app starts and there is none of today yet) the database is copied, and the newest {{ settings.backup_keep }} are kept.
+    To go back to one: stop the app and copy the backup over {{ settings.database_url.removeprefix('sqlite:///') }}.</p>
+  <form method="post" action="/jobs/backup"><button class="secondary small">Back up now</button></form>
   {% endif %}
 </div>
 

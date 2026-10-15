@@ -92,11 +92,16 @@
         {% if row.below_target %}<span class="badge hit">at target</span>
         {% elif row.current_price is none %}<span class="badge">no price</span>
         {% else %}<span class="badge">waiting</span>{% endif %}
+        {% set drop = drops.get(row.entry.id) %}
+        {% if drop %}<span class="badge drop" title="Was {{ drop.old_price | eur }} {{ settings.price_drop_days }} days ago">▼ {{ '%.0f' | format(-drop.change_pct) }}% cheaper</span>{% endif %}
       </td>
       <td>
         <div class="actions">
           {% if row.entry.cardmarket_url %}<a href="{{ row.entry.cardmarket_url }}" target="_blank" rel="noopener">Cardmarket ↗</a>{% endif %}
-          <form class="inline" method="post" action="/wishlist/{{ row.entry.id }}/purchase">
+          <form class="inline bought-form" method="post" action="/wishlist/{{ row.entry.id }}/purchase">
+            <input name="paid" class="paid" inputmode="decimal" placeholder="paid"
+                   value="{{ '%.2f' | format(row.current_price) if row.current_price is not none else '' }}"
+                   aria-label="What you paid for {{ row.card.name }}" title="What you paid; kept in your collection to see later what it gained">
             <button class="small" title="Move this card to your collection">Bought it</button>
           </form>
           <form class="inline" method="post" action="/wishlist/{{ row.entry.id }}/delete">
@@ -129,6 +134,9 @@
   </table>
   {% else %}
   <p class="muted">No alerts yet. You get one (at most once per 24 hours per card) when a price drops to your target.</p>
+  {% endif %}
+  {% if settings.price_drop_pct > 0 %}
+  <p class="muted small">Besides that, a card that gets {{ settings.price_drop_pct | round | int }}% or more (and at least {{ settings.price_drop_min_eur | eur }}) cheaper in {{ settings.price_drop_days }} days is marked "cheaper" here and sent to Discord once, even when it is not at your target yet.</p>
   {% endif %}
 </div>
 {% endblock %}
