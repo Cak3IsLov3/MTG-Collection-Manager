@@ -61,7 +61,9 @@ price.
 
 ![Logging a game from the deck page, and the value of the deck's copies over the last month](docs/deck-value.jpg)
 
-![The tokens of a deck with their pictures and a tick box per token for packing, and its mana curve and card types](docs/deck-tokens.jpg)
+![The tokens and emblems of a deck in alphabetical order, with their pictures and a tick box per token for packing, and its mana curve and card types](docs/deck-tokens.jpg)
+
+![Parts of a deck folded away by clicking their title: only what you need stays open](docs/deck-folded.jpg)
 
 ![Choosing which Angel token: every token with that name, by picture](docs/deck-token-versions.jpg)
 
