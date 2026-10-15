@@ -518,13 +518,16 @@
 
 {% if weakest is defined and weakest is not none %}
 <div class="panel weakest-panel">
-  <h2>Weakest cards <span class="muted">· the cards the fewest {{ edhrec.commander }} decks play</span></h2>
+  <div class="toolbar panel-head">
+    <h2>Weakest cards <span class="muted">· the cards the fewest {{ edhrec.commander }} decks play</span></h2>
+    {% if weakest %}<label class="check muted" title="Only the weak cards you have a better card for in your collection"><input type="checkbox" id="weakest-mine">&nbsp;Only cards I have free</label>{% endif %}
+  </div>
   {% if weakest %}
-  <table class="compact">
+  <table class="compact weakest-table">
     <thead><tr><th>Card</th><th>Kind</th><th class="num" title="How many of the decks with this commander play it">In decks</th><th>Swap for, from your collection</th></tr></thead>
     <tbody>
     {% for w in weakest %}
-    <tr>
+    <tr data-swap="{{ 1 if w.swap else 0 }}">
       <td>{{ w.name }}</td>
       <td class="muted">{{ w.kind or '' }}</td>
       <td class="num">{% if w.inclusion is none %}<span class="muted" title="Not among the cards EDHREC lists for this commander">under {{ edhrec_floor }}%</span>{% else %}{{ w.inclusion }}%{% endif %}</td>
@@ -534,6 +537,7 @@
     {% endfor %}
     </tbody>
   </table>
+  <p class="muted" id="weakest-none" hidden>None of these weak cards has a better card of the same kind in your collection.</p>
   <p class="muted small">From EDHREC: cards in fewer than 10% of the {{ '{:,}'.format(edhrec.decks) }} decks with this commander. That is not always bad, a pet card or a combo piece can be a good reason,
     but it is the first place to look when the deck needs room. The swap is a card of the same kind that more decks play and that you have a free copy of.</p>
   {% else %}
@@ -1113,6 +1117,24 @@
     });
     if (more) more.addEventListener("click", () => { all = true; more.hidden = true; showEdhrec(); });
     showEdhrec();
+  }
+
+  // Weakest cards: optionally only the ones you have a free card to swap in for.
+  const weakMine = document.getElementById("weakest-mine");
+  if (weakMine) {
+    const weakRows = [...document.querySelectorAll(".weakest-table tbody tr")];
+    const showWeak = () => {
+      for (const row of weakRows) row.hidden = weakMine.checked && row.dataset.swap !== "1";
+      const none = weakMine.checked && !weakRows.some((row) => row.dataset.swap === "1");
+      document.getElementById("weakest-none").hidden = !none;
+      document.querySelector(".weakest-table").hidden = none;
+    };
+    try { weakMine.checked = localStorage.getItem("weakest-mine") === "1"; } catch (error) {}
+    weakMine.addEventListener("change", () => {
+      try { localStorage.setItem("weakest-mine", weakMine.checked ? "1" : "0"); } catch (error) {}
+      showWeak();
+    });
+    showWeak();
   }
 </script>
 {% endblock %}

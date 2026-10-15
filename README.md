@@ -83,6 +83,8 @@ price.
 
 ![The weakest cards of a deck: the cards the fewest decks with its commander play, each with a more popular card of the same kind from your collection to swap in](docs/deck-weakest.jpg)
 
+![Weakest cards with "Only cards I have free": only the weak cards you have a better card for in your collection](docs/deck-weakest-free.jpg)
+
 ![Typing ahead: card names from Scryfall as you type, with a picture of the highlighted one](docs/autocomplete.jpg)
 
 ![Suggestions from your collection: free cards in the deck's colours, grouped by what the deck is short of](docs/deck-suggestions.jpg)
@@ -185,7 +187,7 @@ price.
 - Game log: log a game from the Games page or from a deck (date, players, who you played against and their commanders, who won, notes). Every deck shows how often it was played, its win rate and when it was last played
 - Live table for game night (made for an iPad on the table): life, poison and commander damage per player, whose turn it is and the round, undo, full screen, and the screen stays on. Players are out at 0 life, 10 poison or 21 commander damage; the top row can be turned upside down for the players across. At the end you pick the winner and the game goes into the log with everyone and their commanders. A game in progress survives a reload
 - The commanders of your opponents: fill them in when you log a game (the one a player used last time is filled in). The Games page shows the commanders each player plays and your results against every commander
-- Weakest cards per deck: the cards the fewest decks with its commander play on EDHREC (under 10%), each with a more popular card of the same kind from your collection to swap in
+- Weakest cards per deck: the cards the fewest decks with its commander play on EDHREC (under 10%), each with a more popular card of the same kind from your collection to swap in. "Only cards I have free" shows just the ones you can swap right away
 - Game statistics: your win rate, current streak and longest winning streak, games per month, win rates by table size (next to your fair share), deck colour and bracket, and per opponent, with the player who beats you most as your nemesis
 - Bracket check per deck: Game Changers (the official list, from Scryfall), mass land denial, extra turns and two-card infinite combos, against the bracket you set. A deck that does not fit gets a ⚠ in the list of decks
 - Combos per deck from Commander Spellbook: the combos in the deck and what they do, and the combos it is one card away from, marked when you own that card

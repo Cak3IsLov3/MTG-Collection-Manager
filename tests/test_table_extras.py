@@ -74,7 +74,8 @@ def test_weakest_cards(client):
     assert weak["Fire // Ice"]["swap"] == {"name": "Lim-Dûl's Vault", "inclusion": 30, "free": 1}
     assert weak["Time Warp"]["swap"] is None
     page = client.get(f"/decks/{deck['id']}").text
-    assert "Weakest cards" in page and "under 12%" in page
+    assert "Weakest cards" in page and "under 12%" in page and 'id="weakest-mine"' in page
+    assert '<tr data-swap="1">' in page and '<tr data-swap="0">' in page
 
 
 # --- the live table --------------------------------------------------------------------------------
