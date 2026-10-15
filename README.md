@@ -21,7 +21,7 @@ price.
 
 ![Wishlist targets set to 85% of the current price: the changed prices are highlighted until you save them all](docs/wishlist-targets.jpg)
 
-![The wishlist filtered on colour: the red and green cards, each with its colours](docs/wishlist-colors.jpg)
+![The wishlist filtered on colour with the mana symbols: the cards with red or green, each with its colours](docs/wishlist-colors.jpg)
 
 ![Wishlist cards that got 26% cheaper in a week are marked, also when they are not at the target yet; "Bought it" takes what you paid](docs/wishlist-drops.jpg)
 
@@ -43,7 +43,7 @@ price.
 
 ![Which decks a card is in: the label opened for two Sol Ring printings](docs/collection-decks.jpg)
 
-![Filtering on colour: the cards that fit a blue-black deck, each with its colour identity](docs/collection-colors.jpg)
+![Filtering on colour with the mana symbols: the cards that fit a blue-black deck, each with its colour identity](docs/collection-colors.jpg)
 
 ![Free copies a deck still needs: cards you own that are missing from a deck, with the decks that need them](docs/collection-needed.jpg)
 
@@ -69,7 +69,7 @@ price.
 
 ![Logging a game from the deck page, and the value of the deck's copies over the last month](docs/deck-value.jpg)
 
-![The tokens and emblems of a deck in alphabetical order, with their pictures and a tick box per token for packing, and its mana curve and card types](docs/deck-tokens.jpg)
+![The tokens of a deck in one panel: the token list with how many the deck needs of each (Soldier: 2, needs about 5), emblems included, and the tokens the deck makes that are not in the list yet](docs/deck-tokens.jpg)
 
 ![Parts of a deck folded away by clicking their title: only what you need stays open](docs/deck-folded.jpg)
 
@@ -91,7 +91,7 @@ price.
 
 ![Suggestions from your collection: free cards in the deck's colours, grouped by what the deck is short of](docs/deck-suggestions.jpg)
 
-![Token suggestions: the tokens the cards of a deck make and about how many you need, next to the token list](docs/deck-token-suggestions.jpg)
+![Adding a token: while you type, the app says how many the deck needs and fills that in](docs/deck-token-suggestions.jpg)
 
 ![Basic lands shown as land cards, and the token list with the number per token as text that turns into a field when clicked](docs/deck-lands.jpg)
 
@@ -149,7 +149,7 @@ price.
 - Instant search in the collection on card name, set or deck (accents and word order do not matter), with a foil-only filter
 - Versions of a card are grouped: one line per card with the number of versions, copies, price range and total value, which opens to show every version. Untick "Group versions" to see every version on its own line
 - Spare copies: the copies no deck uses or needs (basic lands left out), with what they are worth together, to trade or sell. Sort the collection by value to see the most valuable ones first
-- Filter the collection on colour (white, blue, black, red, green, colourless): cards with any of the chosen colours, cards that fit a deck of those colours, or cards with exactly those colours. Every card shows its colour identity
+- Filter the collection on colour (white, blue, black, red, green, colourless): cards with any of the chosen colours, cards that fit a deck of those colours, or cards with exactly those colours. Every card shows its colour identity as mana symbols
 - A printing without a price borrows the price of the cheapest printing with the same name, marked "≈ SET"
 - Daily price snapshots, total value over time, top 10 most valuable cards, weekly risers and fallers
 - Price history chart per card
@@ -196,7 +196,7 @@ price.
 - Combos per deck from Commander Spellbook: the combos in the deck and what they do, and the combos it is one card away from, marked when you own that card
 - EDHREC next to every deck with a commander: the cards other decks with that commander play most, how often and their synergy, with the ones you have a free copy of marked
 - Suggestions from your collection: free cards in the colours of a deck that are not in it yet, grouped by what the deck is short of (ramp, card draw, removal, board wipes), with an "Add to deck" button
-- Token suggestions: the tokens the cards of a deck make (from Scryfall) and about how many you need, next to the deck's token list, with buttons to add them or raise the number. Tokens you always bring (Clue and Copy by default) are left out
+- Token suggestions in the same panel as the token list: every token shows about how many the cards of the deck make (from Scryfall, emblems included), tokens the deck makes but the list misses come after it, with buttons to add them or raise the number. Typing a token name says how many the deck needs and fills that in. Tokens you always bring (Clue and Copy by default) are left out
 - A Discord message when the automatic sync finds changes in a deck on Archidekt: what was added, removed and changed, and which new cards you still need
 - Add cards to a saved deck the same way as to the collection: by name, or by set and card number for one exact version
 - Take a card out of a deck: "Remove" moves it from "In this deck" to "Still missing" and frees your copies for other decks; "Put back" undoes it

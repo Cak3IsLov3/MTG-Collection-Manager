@@ -56,9 +56,23 @@ def add_missing_columns(target=None) -> None:
                     connection.exec_driver_sql(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
 
 
+def run_data_migrations(target=None) -> None:
+    """One-time changes to the data, counted in SQLite's user_version."""
+    target = target or engine
+    if target.dialect.name != "sqlite":
+        return
+    with target.begin() as connection:
+        version = connection.exec_driver_sql("PRAGMA user_version").scalar() or 0
+        if version < 1:
+            # Emblems are now found too: look the planeswalkers of decks up again.
+            connection.exec_driver_sql("UPDATE deckentry SET token_parts = NULL WHERE type_line LIKE '%Planeswalker%'")
+            connection.exec_driver_sql("PRAGMA user_version = 1")
+
+
 def init_db() -> None:
     SQLModel.metadata.create_all(engine)
     add_missing_columns()
+    run_data_migrations()
 
 
 def get_session() -> Iterator[Session]:

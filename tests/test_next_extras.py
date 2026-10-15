@@ -158,6 +158,10 @@ async def test_deck_change_message(client, session):
 # --- token suggestions ----------------------------------------------------------------------
 
 
+def s_count(text, part):
+    return text.count(part)
+
+
 def test_tokens_needed_from_rules_text():
     from app.services.deck_insights import tokens_needed
 
@@ -185,7 +189,14 @@ def test_token_suggestions(client, session):
     found = {s["name"]: s for s in client.get(f"/api/decks/{deck['id']}/token-suggestions").json()}
     assert (found["Treasure"]["status"], found["Treasure"]["in_list"]) == ("short", 1)
     page = client.get(f"/decks/{deck['id']}").text
-    assert "Token suggestions" in page and "Take over all 2" in page and "Set to 3" in page and "Add 4" in page
+    # One panel: the token list with how many are needed, and the tokens that are not in it yet.
+    assert s_count(page, 'class="panel tokens-panel"') == 1 and "token-suggestions" not in page
+    assert "Take over all 2" in page and "Set to 3" in page and "Add 4" in page
+    assert "need about 3" in page and "not in your list" in page and 'id="token-hint"' in page
+
+    # Adding one by hand says how many the deck needs.
+    added = client.post(f"/decks/{deck['id']}/tokens", data={"name": "Soldier", "quantity": 1})
+    assert "The cards of this deck make about 4; you have 1 in the list." in added.text
 
     client.post(f"/decks/{deck['id']}/tokens/suggested", data={"scryfall_id": "id-soldier"})
     session.expire_all()
@@ -289,3 +300,33 @@ async def test_reprint_alerts(client, session, scryfall, fake_scryfall):
     page = client.get("/").text
     assert "data-tab=\"reprints\"" in page and "Set FDN (FDN)" in page and f"out {soon}" in page
     assert client.get("/api/reprints").json()[0]["card"] == "Lim-Dûl's Vault"
+
+
+def test_emblems_are_recognised(client):
+    deck = client.post("/api/decks", json={"name": "Elspeth", "decklist": "1 Elspeth, Sun's Champion"}).json()
+    client.get(f"/decks/{deck['id']}")
+    found = {t["name"]: t for t in client.get(f"/api/decks/{deck['id']}/token-suggestions").json()}
+    # The emblem once, the Soldiers she keeps making (three at a time, again and again).
+    assert found["Elspeth, Sun's Champion Emblem"]["needed"] == 1
+    assert found["Elspeth, Sun's Champion Emblem"]["made_by"] == ["Elspeth, Sun's Champion"]
+    assert found["Soldier"]["needed"] == 3
+
+
+def test_planeswalkers_are_looked_up_again_once(session):
+    from sqlalchemy import create_engine
+    from sqlalchemy.pool import StaticPool
+
+    from app.database import run_data_migrations
+
+    engine = create_engine("sqlite://", poolclass=StaticPool)
+    with engine.begin() as connection:
+        connection.exec_driver_sql("CREATE TABLE deckentry (name VARCHAR, type_line VARCHAR, token_parts VARCHAR)")
+        connection.exec_driver_sql("INSERT INTO deckentry VALUES ('Elspeth', 'Legendary Planeswalker — Elspeth', '[]'), ('Sol Ring', 'Artifact', '[]')")
+    run_data_migrations(engine)
+    with engine.begin() as connection:
+        rows = connection.exec_driver_sql("SELECT name, token_parts FROM deckentry ORDER BY name").all()
+        assert rows == [("Elspeth", None), ("Sol Ring", "[]")]
+        connection.exec_driver_sql("UPDATE deckentry SET token_parts = '[]'")
+    run_data_migrations(engine)  # only once
+    with engine.begin() as connection:
+        assert connection.exec_driver_sql("SELECT token_parts FROM deckentry WHERE name = 'Elspeth'").scalar() == "[]"

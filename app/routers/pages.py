@@ -20,7 +20,7 @@ from app.deps import get_edhrec, get_scryfall, get_spellbook
 from app.edhrec import EdhrecClient, EdhrecError
 from app.models import Card, CollectionEntry, Deck, WishlistEntry
 from app.routers.api import load_deck
-from app.scryfall import CardRef, ScryfallClient, ScryfallError
+from app.scryfall import CardRef, ScryfallClient, ScryfallError, name_key
 from app.services import collection, combos, deck_insights, decks, edhrec_compare, games, reprints, stats, suggestions, wishlist
 from app.spellbook import SpellbookClient, SpellbookError
 from app.services.exports import collection_csv, wishlist_csv
@@ -786,7 +786,11 @@ def saved_deck_add_token(
     except decks.DeckError as exc:
         return redirect(f"/decks/{deck_id}", str(exc), error=True)
     session.commit()
-    return redirect(f"/decks/{deck_id}", f"Added {quantity}× {token.name} to the tokens of this deck")
+    message = f"Added {quantity}× {token.name} to the tokens of this deck."
+    need = next((s for s in deck_insights.token_suggestions(session, deck) if name_key(s.name) == name_key(token.name)), None)
+    if need is not None:
+        message += f" The cards of this deck make about {need.needed}; you have {need.have.quantity if need.have else 0} in the list."
+    return redirect(f"/decks/{deck_id}", message)
 
 
 @router.post("/decks/{deck_id}/tokens/suggested")

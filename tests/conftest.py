@@ -49,6 +49,13 @@ CARDS = [
     scryfall_json("Treasure", "id-treasure", "tc21", eur=None, type_line="Token Artifact — Treasure", layout="token"),
     scryfall_json("Elspeth, Sun's Champion Emblem", "id-elspeth-emblem", "tths", eur=None,
                   type_line="Emblem — Elspeth", layout="emblem"),
+    scryfall_json("Elspeth, Sun's Champion", "id-elspeth", "ths", eur="4.00", color_identity=["W"],
+                  type_line="Legendary Planeswalker — Elspeth", cmc=6.0,
+                  oracle_text="+1: Create three 1/1 white Soldier creature tokens.\n−3: Destroy all creatures with power 4 or greater.\n"
+                              "−7: You get an emblem with \"Creatures you control get +2/+2 and have flying.\"",
+                  all_parts=[{"component": "combo_piece", "id": "id-elspeth", "name": "Elspeth, Sun's Champion", "type_line": "Legendary Planeswalker — Elspeth"},
+                             {"component": "combo_piece", "id": "id-elspeth-emblem", "name": "Elspeth, Sun's Champion Emblem", "type_line": "Emblem — Elspeth"},
+                             {"component": "token", "id": "id-soldier", "name": "Soldier", "type_line": "Token Creature — Soldier"}]),
     scryfall_json("Cat Beast", "id-cat-beast", "tc13", eur=None, type_line="Token Creature — Cat Beast", layout="token"),
     scryfall_json("Morph", "id-morph", "tktk", eur=None, type_line="Creature", layout="token", power="2", toughness="2"),
     scryfall_json("Angel", "id-angel-44", "tdmu", eur=None, type_line="Token Creature — Angel", layout="token",

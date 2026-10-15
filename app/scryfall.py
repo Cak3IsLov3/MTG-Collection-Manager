@@ -84,7 +84,8 @@ class ScryfallCard:
     type_line: str = ""  # e.g. "Legendary Creature — Robot"
     cmc: float | None = None  # mana value
     oracle_text: str = ""  # rules text; of both faces for a double-faced card
-    # The tokens (and emblems) the card makes: [(Scryfall id, name)].
+    # The tokens and emblems the card makes: [(Scryfall id, name)]. Scryfall lists an emblem as a
+    # "combo_piece" of its planeswalker, so it is told apart by its type.
     token_parts: list[tuple[str, str]] = field(default_factory=list)
 
     @classmethod
@@ -112,7 +113,8 @@ class ScryfallCard:
             or "\n".join(face.get("oracle_text") or "" for face in data.get("card_faces") or []),
             token_parts=[
                 (part["id"], part["name"]) for part in data.get("all_parts") or []
-                if part.get("component") == "token" and part.get("id") and part.get("id") != data["id"]
+                if (part.get("component") == "token" or (part.get("type_line") or "").startswith("Emblem"))
+                and part.get("id") and part.get("id") != data["id"]
             ],
         )
 

@@ -410,3 +410,20 @@ a.button-link:hover { border-color: var(--accent); color: var(--accent); text-de
 .mini-stat .value { font-size: 22px; font-weight: 700; margin: 2px 0 4px; }
 .mini-stat .sub { color: var(--muted); font-size: 12px; }
 .mini-stat .progress { margin: 4px 0 6px; }
+
+/* Tokens and how many are needed, in one panel */
+.token-card { padding: 6px; border: 1px solid transparent; border-radius: 8px; width: 144px; }
+.token-card.short { border-color: var(--accent); }
+.token-card.missing { border-color: var(--down); border-style: dashed; }
+.token-amounts { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.token-need { font-size: 12px; color: var(--muted); }
+.token-need.ok { color: var(--up); }
+.token-need.short { color: var(--accent); font-weight: 600; }
+.token-hint { align-self: center; }
+
+/* Mana symbols instead of coloured letters */
+.pip { background: none !important; border: 0; width: 16px; height: 16px; }
+.pip .mana { width: 100%; height: 100%; display: block; border-radius: 50%; }
+.pip .mana[alt]:not([src=""]) { font-size: 9px; color: var(--text); }
+button.pip { width: 28px; height: 28px; padding: 0; background: none; border: 0; border-radius: 50%; }
+button.pip[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--accent); }

@@ -82,7 +82,11 @@ def tokens_needed(oracle_text: str) -> int:
 
 def _token_parts(data: ScryfallCard) -> str:
     count = tokens_needed(data.oracle_text)
-    return json.dumps([{"id": token_id, "name": name, "count": count} for token_id, name in data.token_parts])
+    # One emblem is enough: a second one of the same does nothing new.
+    return json.dumps([
+        {"id": token_id, "name": name, "count": 1 if name.endswith(" Emblem") else count}
+        for token_id, name in data.token_parts
+    ])
 
 
 def _store(entry: DeckEntry, data: ScryfallCard | None) -> None:

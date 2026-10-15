@@ -1,3 +1,6 @@
+{# A mana symbol (W, U, B, R, G or C) as Scryfall draws it; the letter shows when the picture cannot load. #}
+{% macro mana(letter, label="") %}<img class="mana" src="https://svgs.scryfall.io/card-symbols/{{ letter }}.svg" alt="{{ letter }}" title="{{ label }}" draggable="false">{% endmacro %}
+
 {# Colour filter buttons (W U B R G and colourless) with a choice of how the colours must match.
    The page script reads the pressed buttons and calls colourMatch() from base.html. #}
 {% macro colour_filter(prefix, noun, modes=("any", "within", "exact")) %}
@@ -9,7 +12,7 @@
 <span class="muted">Colour</span>
 <span id="{{ prefix }}-colors" class="color-filter" role="group" aria-label="Filter on colour">
   {% for letter, label in [("W", "White"), ("U", "Blue"), ("B", "Black"), ("R", "Red"), ("G", "Green"), ("C", "Colourless")] %}
-  <button type="button" class="pip pip-{{ letter }}" data-color="{{ letter }}" aria-pressed="false" title="{{ label }}">{{ letter }}</button>
+  <button type="button" class="pip pip-{{ letter }}" data-color="{{ letter }}" aria-pressed="false" title="{{ label }}" aria-label="{{ label }}">{{ mana(letter, label) }}</button>
   {% endfor %}
 </span>
 <select id="{{ prefix }}-color-mode" aria-label="How the chosen colours must match">
@@ -19,4 +22,4 @@
 {% endmacro %}
 
 {# The colour identity of a card or deck as small pips; nothing when it is not known yet. #}
-{% macro pips(colors) %}{% if colors is not none %}<span class="pips" title="Colour identity">{% for letter in colors or "C" %}<span class="pip pip-{{ letter }}">{{ letter }}</span>{% endfor %}</span>{% endif %}{% endmacro %}
+{% macro pips(colors) %}{% if colors is not none %}<span class="pips" title="Colour identity">{% for letter in colors or "C" %}<span class="pip pip-{{ letter }}">{{ mana(letter) }}</span>{% endfor %}</span>{% endif %}{% endmacro %}

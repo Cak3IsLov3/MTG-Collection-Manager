@@ -396,19 +396,46 @@
   {% endif %}
 </div>
 
+{% set suggested = token_suggestions if token_suggestions is defined else [] %}
+{% set need_by_name = {} %}{% for t in suggested %}{% set _ = need_by_name.update({t.name | lower: t}) %}{% endfor %}
+{% set listed_names = deck_token_list | map(attribute="name") | map("lower") | list %}
+{% set to_do = suggested | rejectattr("status", "equalto", "ok") | list %}
+{% set not_listed = suggested | selectattr("status", "equalto", "missing") | list %}
 <div class="panel tokens-panel" data-tab-panel="lands" style="order: 2">
-  <h2>Tokens{% if deck_token_list %} <span class="muted">· {{ deck_token_list | sum(attribute='quantity') }} to bring</span>{% endif %}</h2>
-  {% if deck_token_list %}
+  <div class="toolbar panel-head">
+    <h2>Tokens{% if deck_token_list %} <span class="muted">· {{ deck_token_list | sum(attribute='quantity') }} to bring</span>{% endif %}{% if to_do %} <span class="muted">· {{ to_do | length }} not (enough) in your list</span>{% endif %}</h2>
+    {% if to_do %}
+    <form class="inline" method="post" action="/decks/{{ deck.id }}/tokens/suggested" data-keep-scroll>
+      <button class="small" title="Add the missing tokens and raise the ones you have too few of">Take over all {{ to_do | length }}</button>
+    </form>
+    {% endif %}
+  </div>
+
+  {% macro made_by(t) %}<div class="muted small" title="{{ t.made_by | join(', ') }}">made by {{ t.made_by[:3] | join(', ') }}{% if t.made_by | length > 3 %} and {{ t.made_by | length - 3 }} more{% endif %}</div>{% endmacro %}
+
+  {% if deck_token_list or not_listed %}
   <div class="token-grid">
     {% for token in deck_token_list %}
-    <div class="token-card">
+    {% set need = need_by_name.get(token.name | lower) %}
+    {% set state = 'short' if need and need.status == 'short' and need.have and need.have.id == token.id else '' %}
+    <div class="token-card {{ state }}">
       {% if token.image_url %}<img src="{{ token.image_url }}" alt="{{ token.name }}" loading="lazy">{% else %}<div class="token-blank">{{ token.name }}</div>{% endif %}
       <label class="check"><input type="checkbox" class="token-packed" data-token="{{ token.id }}">&nbsp;{{ token.name }}</label>
-      <form class="inline token-qty" method="post" action="/decks/{{ deck.id }}/tokens/{{ token.id }}/quantity" data-keep-scroll>
-        <button type="button" class="qty-text" title="Click to change how many">{{ token.quantity }}×</button>
-        <input class="qty" name="quantity" type="number" min="1" step="1" value="{{ token.quantity }}" required hidden
-               aria-label="How many {{ token.name }} tokens">
+      <div class="token-amounts">
+        <form class="inline token-qty" method="post" action="/decks/{{ deck.id }}/tokens/{{ token.id }}/quantity" data-keep-scroll>
+          <button type="button" class="qty-text" title="Click to change how many">{{ token.quantity }}×</button>
+          <input class="qty" name="quantity" type="number" min="1" step="1" value="{{ token.quantity }}" required hidden
+                 aria-label="How many {{ token.name }} tokens">
+        </form>
+        {% if need %}<span class="token-need {{ 'short' if state else 'ok' }}" title="About how many the cards of this deck make">{{ '✓ ' if not state }}need about {{ need.needed }}</span>{% endif %}
+      </div>
+      {% if need %}{{ made_by(need) }}{% else %}<div class="muted small">no card in this deck makes it</div>{% endif %}
+      {% if state %}
+      <form class="inline" method="post" action="/decks/{{ deck.id }}/tokens/suggested" data-keep-scroll>
+        <input type="hidden" name="scryfall_id" value="{{ need.scryfall_id }}">
+        <button class="small secondary">Set to {{ need.needed }}</button>
       </form>
+      {% endif %}
       <form class="token-version" method="post" action="/decks/{{ deck.id }}/tokens/{{ token.id }}/version" data-keep-scroll
             data-name="{{ token.name }}" data-current="{{ token.scryfall_id or '' }}">
         <button type="button" class="link small choose-token" title="There can be several tokens with this name: pick the right one">other version</button>
@@ -419,58 +446,38 @@
       </form>
     </div>
     {% endfor %}
-  </div>
-  <p class="muted small">Tick the tokens you packed for game night; the ticks stay in this browser. <button type="button" class="link" id="tokens-unpack">Clear the ticks</button></p>
-  {% elif tokens %}
-  <p class="muted">This deck has {{ tokens }} token{{ 's' if tokens != 1 }}, but not which ones. Their names come with the next Archidekt sync, or add them below.</p>
-  {% else %}
-  <p class="muted">No tokens. Add the ones this deck makes, so you know what to bring.</p>
-  {% endif %}
-  <form class="row" method="post" action="/decks/{{ deck.id }}/tokens" data-keep-scroll>
-    <label>Token<input name="name" placeholder="Treasure" required data-autocomplete="token"></label>
-    <label>Quantity<input name="quantity" class="qty" type="number" min="1" value="1"></label>
-    <button class="secondary">Add token</button>
-  </form>
-</div>
-
-{% if token_suggestions is defined %}
-{% set to_do = token_suggestions | rejectattr("status", "equalto", "ok") | list %}
-<div class="panel token-suggestions" data-tab-panel="lands" style="order: 3">
-  <div class="toolbar panel-head">
-    <h2>Token suggestions{% if token_suggestions %} <span class="muted">· {{ token_suggestions | length }} token{{ 's' if token_suggestions | length != 1 }} made by this deck, about {{ token_suggestions | sum(attribute='needed') }} needed{% if to_do %} · {{ to_do | length }} not (enough) in your list{% endif %}</span>{% endif %}</h2>
-    {% if to_do %}
-    <form class="inline" method="post" action="/decks/{{ deck.id }}/tokens/suggested" data-keep-scroll>
-      <button class="small" title="Add the missing tokens and raise the ones you have too few of">Take over all {{ to_do | length }}</button>
-    </form>
-    {% endif %}
-  </div>
-  {% if token_suggestions %}
-  <div class="token-grid">
-    {% for s in token_suggestions %}
-    <div class="token-card suggested {{ s.status }}">
-      {% if s.image_url %}<img src="{{ s.image_url }}" alt="{{ s.name }}" loading="lazy">{% else %}<div class="token-blank">{{ s.name }}</div>{% endif %}
-      <div><strong>{{ s.name }}</strong></div>
-      <div class="token-need">about <strong>{{ s.needed }}</strong> needed</div>
-      <div class="muted small" title="{{ s.made_by | join(', ') }}">made by {{ s.made_by[:3] | join(', ') }}{% if s.made_by | length > 3 %} and {{ s.made_by | length - 3 }} more{% endif %}</div>
-      {% if s.status == "ok" %}
-      <span class="badge hit">✓ {{ s.have.quantity }} in your list</span>
-      {% else %}
-      {% if s.status == "short" %}<span class="badge warn">{{ s.have.quantity }} in your list</span>{% else %}<span class="badge">not in your list</span>{% endif %}
+    {% for t in not_listed %}
+    <div class="token-card suggested missing">
+      {% if t.image_url %}<img src="{{ t.image_url }}" alt="{{ t.name }}" loading="lazy">{% else %}<div class="token-blank">{{ t.name }}</div>{% endif %}
+      <div><strong>{{ t.name }}</strong> <span class="badge">not in your list</span></div>
+      <div class="token-need short">need about {{ t.needed }}</div>
+      {{ made_by(t) }}
       <form class="inline" method="post" action="/decks/{{ deck.id }}/tokens/suggested" data-keep-scroll>
-        <input type="hidden" name="scryfall_id" value="{{ s.scryfall_id }}">
-        <button class="small secondary">{% if s.status == "short" %}Set to {{ s.needed }}{% else %}Add {{ s.needed }}{% endif %}</button>
+        <input type="hidden" name="scryfall_id" value="{{ t.scryfall_id }}">
+        <button class="small secondary">Add {{ t.needed }}</button>
       </form>
-      {% endif %}
     </div>
     {% endfor %}
   </div>
-  <p class="muted small">Which tokens a card makes comes from Scryfall. How many you need is a guess from the rules text: "create two" is 2, and a card that makes them again and again ("whenever", "at the beginning of", a tap ability) counts three times, at most 20 per token.{% if standard_tokens %}
-    Left out, because you always bring them: {{ standard_tokens | join(', ') }} (STANDARD_TOKENS).{% endif %}</p>
+  {% if deck_token_list %}<p class="muted small">Tick the tokens you packed for game night; the ticks stay in this browser. <button type="button" class="link" id="tokens-unpack">Clear the ticks</button></p>{% endif %}
+  {% elif tokens %}
+  <p class="muted">This deck has {{ tokens }} token{{ 's' if tokens != 1 }}, but not which ones. Their names come with the next Archidekt sync, or add them below.</p>
   {% else %}
-  <p class="muted">The cards of this deck make no tokens{% if rows | selectattr("name") | list %} (or Scryfall has not told yet; reload in a minute){% endif %}.</p>
+  <p class="muted">No tokens: the cards of this deck make none{% if rows | selectattr("name") | list %} (or Scryfall has not told yet; reload in a minute){% endif %}. Add one below if it needs some anyway.</p>
   {% endif %}
+
+  <form class="row token-add" method="post" action="/decks/{{ deck.id }}/tokens" data-keep-scroll>
+    <label>Token<input name="name" id="token-name" placeholder="Treasure" required data-autocomplete="token"></label>
+    <label>Quantity<input name="quantity" id="token-quantity" class="qty" type="number" min="1" value="1"></label>
+    <button class="secondary">Add token</button>
+    <span id="token-hint" class="muted small token-hint" aria-live="polite"></span>
+  </form>
+  <script type="application/json" id="token-needs">{{ suggested | map(attribute="name") | list | tojson }}</script>
+  <script type="application/json" id="token-needs-data">{{ suggested | map(attribute="needed") | list | tojson }}</script>
+  <script type="application/json" id="token-made-by">{{ suggested | map(attribute="made_by") | list | tojson }}</script>
+  <p class="muted small">Which tokens a card makes comes from Scryfall; how many you need is a guess from the rules text ("create two" is 2, a card that makes them again and again counts three times, at most 20 per token).{% if standard_tokens %}
+    Left out, because you always bring them: {{ standard_tokens | join(', ') }} (STANDARD_TOKENS).{% endif %}</p>
 </div>
-{% endif %}
 
 {% if bracket_check is defined and bracket_check %}
 {% set bc = bracket_check %}
@@ -842,6 +849,29 @@
       if (field.value && Number(field.value) >= 1 && field.value !== field.defaultValue) form.requestSubmit();
       else close();
     });
+  }
+
+  // Adding a token: say how many of it the cards of this deck make, and fill that in as the quantity
+  // (until you change the quantity yourself).
+  const tokenName = document.getElementById("token-name");
+  if (tokenName) {
+    const names = JSON.parse(document.getElementById("token-needs").textContent);
+    const needed = JSON.parse(document.getElementById("token-needs-data").textContent);
+    const makers = JSON.parse(document.getElementById("token-made-by").textContent);
+    const quantity = document.getElementById("token-quantity");
+    const hint = document.getElementById("token-hint");
+    quantity.addEventListener("input", () => { quantity.dataset.touched = "1"; });
+    const tell = () => {
+      const typed = tokenName.value.trim().replace(/\s+token$/i, "").toLowerCase();
+      const index = names.findIndex((name) => name.toLowerCase() === typed);
+      if (!typed) { hint.textContent = ""; return; }
+      if (index < 0) { hint.textContent = "No card in this deck makes this token."; return; }
+      const by = makers[index].slice(0, 3).join(", ") + (makers[index].length > 3 ? ` and ${makers[index].length - 3} more` : "");
+      hint.textContent = `This deck needs about ${needed[index]} (made by ${by}).`;
+      if (!quantity.dataset.touched) quantity.value = needed[index];
+    };
+    tokenName.addEventListener("input", tell);
+    tokenName.addEventListener("change", tell);
   }
 
   const unpack = document.getElementById("tokens-unpack");
