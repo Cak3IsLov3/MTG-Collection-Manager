@@ -45,7 +45,7 @@ def add_missing_columns(target=None) -> None:
             "bracket_flags": "VARCHAR",
             "token_parts": "VARCHAR",
         },
-        "game": {"opponents": "VARCHAR", "winner": "VARCHAR"},
+        "game": {"opponents": "VARCHAR", "winner": "VARCHAR", "opponent_commanders": "VARCHAR"},
         "pricesnapshot": {"eur_from_set": "VARCHAR", "eur_foil_from_set": "VARCHAR"},
     }
     with target.begin() as connection:

@@ -1,0 +1,296 @@
+{% extends "base.html" %}
+{% block title %}Table · MTG Collection Manager{% endblock %}
+
+{% block content %}
+<div id="table-app">
+  <section id="setup" class="panel table-setup" hidden>
+    <h2>New game</h2>
+    <form id="setup-form" class="setup-grid">
+      <label>Your deck
+        <select id="setup-deck" required>
+          {% for deck in decks | sort(attribute="name") %}
+          <option value="{{ deck.id }}" data-commander="{{ deck.commander or '' }}">{{ deck.name }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Your name<input id="setup-you" value="You" maxlength="20"></label>
+      <div class="setup-choice">
+        <span class="muted">Players</span>
+        <div class="segmented" id="setup-count">{% for n in range(2, 7) %}<button type="button" data-value="{{ n }}" class="{{ 'on' if n == 4 }}">{{ n }}</button>{% endfor %}</div>
+      </div>
+      <div class="setup-choice">
+        <span class="muted">Starting life</span>
+        <div class="segmented" id="setup-life">{% for n in (40, 30, 25, 20) %}<button type="button" data-value="{{ n }}" class="{{ 'on' if n == 40 }}">{{ n }}</button>{% endfor %}</div>
+      </div>
+      <div id="setup-opponents" class="setup-opponents"></div>
+      <label class="check"><input type="checkbox" id="setup-facing" checked>&nbsp;Players sit around the iPad: turn the top row upside down</label>
+      <button class="big">Start the game</button>
+    </form>
+    <datalist id="table-players">{% for name in players %}<option value="{{ name }}">{% endfor %}</datalist>
+    {% if not decks %}<p class="muted">Save a deck first; the game is logged with it.</p>{% endif %}
+  </section>
+
+  <section id="board" hidden>
+    <div class="table-bar">
+      <span id="turn-label" class="turn-label"></span>
+      <button type="button" id="next-turn">Next turn ▸</button>
+      <button type="button" class="secondary" id="undo" title="Undo the last change">↶ Undo</button>
+      <button type="button" class="secondary" id="fullscreen">⛶ Full screen</button>
+      <button type="button" class="secondary" id="end-game">End game</button>
+    </div>
+    <div id="tiles" class="tiles"></div>
+  </section>
+
+  <section id="finish" class="panel" hidden>
+    <h2>How did it end?</h2>
+    <form id="finish-form" class="row">
+      <label>Winner<select id="finish-winner"></select></label>
+      <label>Notes (optional)<input id="finish-notes" size="40"></label>
+      <button>Save to the game log</button>
+      <button type="button" class="secondary" id="finish-back">Back to the game</button>
+      <button type="button" class="secondary" id="finish-discard">Throw away</button>
+    </form>
+    <p id="finish-message" class="muted"></p>
+  </section>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const decks = {{ decks | map(attribute="id") | list | tojson }};
+  const lastCommanders = {{ last_commanders | tojson }};
+  const STORE = "live-table";
+  const $ = (id) => document.getElementById(id);
+  let game = null;
+  let history = [];
+  let wakeLock = null;
+  const openDamage = new Set();  // players whose commander damage is shown
+
+  const load = () => { try { return JSON.parse(localStorage.getItem(STORE) || "null"); } catch (error) { return null; } };
+  const save = () => { try { localStorage.setItem(STORE, JSON.stringify(game)); } catch (error) {} };
+  const choice = (id) => Number($(id).querySelector("button.on").dataset.value);
+  const esc = (text) => String(text).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+
+  // --- setup ---------------------------------------------------------------------------------
+  function renderOpponentFields() {
+    const box = $("setup-opponents");
+    const old = [...box.querySelectorAll(".opponent")].map((row) => [row.querySelector(".name").value, row.querySelector(".commander").value]);
+    box.innerHTML = "";
+    for (let i = 0; i < choice("setup-count") - 1; i += 1) {
+      const row = document.createElement("div");
+      row.className = "opponent row";
+      row.innerHTML = `<label>Player ${i + 2}<input class="name" list="table-players" maxlength="20" placeholder="Name"></label>
+        <label>Commander<input class="commander" data-autocomplete="commander" placeholder="optional"></label>`;
+      const [name, commander] = old[i] || ["", ""];
+      row.querySelector(".name").value = name;
+      row.querySelector(".commander").value = commander;
+      row.querySelector(".name").addEventListener("change", (event) => {
+        const field = row.querySelector(".commander");
+        const last = Object.entries(lastCommanders).find(([player]) => player.toLowerCase() === event.target.value.trim().toLowerCase());
+        if (!field.value && last) field.value = last[1];
+      });
+      box.append(row);
+      window.attachAutocomplete(row.querySelector(".commander"));
+    }
+  }
+  for (const group of document.querySelectorAll(".segmented")) {
+    group.addEventListener("click", (event) => {
+      const button = event.target.closest("button");
+      if (!button) return;
+      group.querySelectorAll("button").forEach((b) => b.classList.toggle("on", b === button));
+      if (group.id === "setup-count") renderOpponentFields();
+    });
+  }
+  $("setup-form").addEventListener("submit", (event) => {
+    event.preventDefault();
+    const life = choice("setup-life");
+    const deck = $("setup-deck").selectedOptions[0];
+    const players = [{ name: $("setup-you").value.trim() || "You", you: true, commander: deck ? deck.dataset.commander : "" }];
+    [...$("setup-opponents").querySelectorAll(".opponent")].forEach((row, i) => players.push({
+      name: row.querySelector(".name").value.trim() || `Player ${i + 2}`,
+      commander: row.querySelector(".commander").value.trim(),
+    }));
+    for (const player of players) Object.assign(player, { life, poison: 0, damage: {} });
+    game = { deckId: deck ? Number(deck.value) : null, players, turn: 0, round: 1, facing: $("setup-facing").checked,
+             started: new Date().toISOString().slice(0, 10) };
+    history = [];
+    save();
+    show();
+  });
+
+  // --- the board -------------------------------------------------------------------------------
+  function remember() {
+    history.push(JSON.stringify(game));
+    if (history.length > 100) history.shift();
+  }
+  function outReason(player) {
+    if (player.life <= 0) return "no life left";
+    if (player.poison >= 10) return "10 poison";
+    const lethal = Object.entries(player.damage).find(([, damage]) => damage >= 21);
+    return lethal ? `21 damage from ${game.players[lethal[0]].commander || game.players[lethal[0]].name}` : "";
+  }
+  function change(index, field, amount, from) {
+    remember();
+    const player = game.players[index];
+    if (field === "damage") {
+      player.damage[from] = Math.max(0, (player.damage[from] || 0) + amount);
+      player.life -= amount;  // commander damage is life loss as well
+    } else {
+      player[field] = Math.max(field === "poison" ? 0 : -999, player[field] + amount);
+    }
+    save();
+    renderTiles();
+  }
+
+  function renderTiles() {
+    const tiles = $("tiles");
+    const count = game.players.length;
+    const rows = Math.ceil(count / 2);
+    tiles.style.gridTemplateRows = `repeat(${rows}, 1fr)`;
+    tiles.innerHTML = "";
+    game.players.forEach((player, index) => {
+      const reason = outReason(player);
+      const tile = document.createElement("div");
+      const topRow = Math.floor(index / 2) < Math.floor(rows / 2);
+      tile.className = `tile${index === game.turn ? " active" : ""}${reason ? " out" : ""}${game.facing && topRow ? " flipped" : ""}${count % 2 && index === count - 1 ? " wide" : ""}`;
+      const damage = game.players.map((other, from) => from === index ? "" :
+        `<div class="cmd-row"><span>${esc(other.commander || other.name)}</span>
+          <button type="button" data-act="damage" data-from="${from}" data-amount="-1">−</button>
+          <strong>${player.damage[from] || 0}</strong>
+          <button type="button" data-act="damage" data-from="${from}" data-amount="1">+</button></div>`).join("");
+      tile.innerHTML = `
+        <div class="tile-head"><button type="button" class="link tile-name" data-act="turn">${esc(player.name)}${player.you ? " ★" : ""}</button>
+          <span class="muted">${esc(player.commander || "")}</span></div>
+        <div class="life-area">
+          <button type="button" class="life-zone minus" data-act="life" data-amount="-1" aria-label="${esc(player.name)} loses 1 life">−</button>
+          <div class="life">${player.life}</div>
+          <button type="button" class="life-zone plus" data-act="life" data-amount="1" aria-label="${esc(player.name)} gains 1 life">+</button>
+        </div>
+        <div class="tile-tools">
+          <button type="button" data-act="life" data-amount="-5">−5</button>
+          <button type="button" data-act="life" data-amount="5">+5</button>
+          <span class="poison">☠ <button type="button" data-act="poison" data-amount="-1">−</button> <strong>${player.poison}</strong> <button type="button" data-act="poison" data-amount="1">+</button></span>
+          <button type="button" data-act="cmd" class="${Object.values(player.damage).some((d) => d > 0) ? "on" : ""}">⚔ Commander damage</button>
+        </div>
+        <div class="cmd-panel" ${openDamage.has(index) ? "" : "hidden"}>${damage}</div>
+        ${reason ? `<div class="out-label">Out · ${esc(reason)}</div>` : ""}`;
+      tile.addEventListener("click", (event) => {
+        const button = event.target.closest("button[data-act]");
+        if (!button) return;
+        const act = button.dataset.act;
+        if (act === "turn") { remember(); game.turn = index; save(); renderTiles(); renderBar(); }
+        else if (act === "cmd") {
+          openDamage.has(index) ? openDamage.delete(index) : openDamage.add(index);
+          tile.querySelector(".cmd-panel").hidden = !openDamage.has(index);
+        }
+        else if (act === "damage") change(index, "damage", Number(button.dataset.amount), button.dataset.from);
+        else change(index, act, Number(button.dataset.amount));
+      });
+      tiles.append(tile);
+    });
+  }
+  function renderBar() {
+    const player = game.players[game.turn];
+    $("turn-label").textContent = `Round ${game.round} · ${player.name}'s turn`;
+    $("undo").disabled = history.length === 0;
+  }
+  $("next-turn").addEventListener("click", () => {
+    remember();
+    const alive = game.players.map((p, i) => [p, i]).filter(([p]) => !outReason(p));
+    if (alive.length) {
+      let next = game.turn;
+      do {
+        next = (next + 1) % game.players.length;
+        if (next === 0) game.round += 1;
+      } while (outReason(game.players[next]) && next !== game.turn);
+      game.turn = next;
+    }
+    save();
+    renderTiles();
+    renderBar();
+  });
+  $("undo").addEventListener("click", () => {
+    if (!history.length) return;
+    game = JSON.parse(history.pop());
+    save();
+    renderTiles();
+    renderBar();
+  });
+  $("fullscreen").addEventListener("click", () => {
+    const element = $("table-app");
+    (element.requestFullscreen || element.webkitRequestFullscreen || (() => {})).call(element);
+  });
+
+  // --- the end -------------------------------------------------------------------------------
+  $("end-game").addEventListener("click", () => {
+    const winner = $("finish-winner");
+    winner.innerHTML = game.players.map((p, i) => `<option value="${i}">${esc(p.name)}${p.commander ? ` (${esc(p.commander)})` : ""}</option>`).join("")
+      + '<option value="draw">Nobody: a draw</option>';
+    const alive = game.players.map((p, i) => i).filter((i) => !outReason(game.players[i]));
+    winner.value = alive.length === 1 ? String(alive[0]) : String(game.turn);
+    $("finish-notes").value = `Round ${game.round}`;
+    $("finish-message").textContent = "";
+    $("board").hidden = true;
+    $("finish").hidden = false;
+  });
+  $("finish-back").addEventListener("click", show);
+  $("finish-discard").addEventListener("click", () => {
+    if ($("finish-discard").dataset.armed) { reset(); return; }
+    $("finish-discard").dataset.armed = "1";
+    $("finish-discard").textContent = "Click again to throw the game away";
+    $("finish-discard").classList.add("danger");
+  });
+  $("finish-form").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const picked = $("finish-winner").value;
+    const winner = picked === "draw" ? null : game.players[Number(picked)];
+    const others = game.players.filter((p) => !p.you);
+    const payload = {
+      deck_id: game.deckId,
+      result: picked === "draw" ? "draw" : winner.you ? "win" : "loss",
+      played_on: game.started,
+      players: game.players.length,
+      opponents: others.map((p) => p.name),
+      winner: winner && !winner.you ? winner.name : null,
+      opponent_commanders: Object.fromEntries(others.filter((p) => p.commander).map((p) => [p.name, p.commander])),
+      notes: $("finish-notes").value.trim() || null,
+    };
+    const response = await fetch("/api/games", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+    if (!response.ok) {
+      const problem = await response.json().catch(() => ({}));
+      $("finish-message").textContent = `Not saved: ${problem.detail || response.status}`;
+      return;
+    }
+    reset();
+    location.href = "/games?msg=" + encodeURIComponent("Game saved to the log");
+  });
+
+  function reset() {
+    const discard = $("finish-discard");
+    delete discard.dataset.armed;
+    discard.textContent = "Throw away";
+    discard.classList.remove("danger");
+    game = null;
+    history = [];
+    try { localStorage.removeItem(STORE); } catch (error) {}
+    show();
+  }
+  async function keepAwake(on) {
+    try {
+      if (on && !wakeLock && navigator.wakeLock) wakeLock = await navigator.wakeLock.request("screen");
+      if (!on && wakeLock) { await wakeLock.release(); wakeLock = null; }
+    } catch (error) { wakeLock = null; }
+  }
+  function show() {
+    $("setup").hidden = Boolean(game);
+    $("board").hidden = !game;
+    $("finish").hidden = true;
+    document.body.classList.toggle("table-mode", Boolean(game));
+    keepAwake(Boolean(game));
+    if (game) { renderTiles(); renderBar(); } else { renderOpponentFields(); }
+  }
+  document.addEventListener("visibilitychange", () => { if (game && document.visibilityState === "visible") keepAwake(true); });
+  game = load();
+  show();
+</script>
+{% endblock %}

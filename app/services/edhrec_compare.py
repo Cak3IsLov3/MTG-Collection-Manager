@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from sqlmodel import Session, select
 
 from app.edhrec import EdhrecClient, commander_slug
+from app.scryfall import ScryfallClient, ScryfallError
 from app.models import Card, Deck, DeckEntry
 from app.services.collection import collection_rows
 from app.services.decks import BASIC_LANDS, _names, deck_usage
@@ -96,8 +97,62 @@ def compare(session: Session, deck: Deck, page: dict) -> EdhrecComparison:
     return result
 
 
-async def compare_deck(session: Session, deck: Deck, client: EdhrecClient) -> EdhrecComparison | None:
-    """None when the deck has no commander (EDHREC is about commanders)."""
+WEAK_BELOW = 10  # percent: a card fewer of the commander's decks play counts as a weak pick
+MAX_WEAK = 15
+
+
+@dataclass
+class WeakCard:
+    name: str
+    kind: str | None  # "Creature", "Instant", ...
+    inclusion: int | None  # percent; None: not among the cards EDHREC lists, so played even less
+    swap: EdhrecCard | None = None  # a popular card of the same kind you have a free copy of
+
+
+def weakest_cards(session: Session, deck: Deck, comparison: EdhrecComparison) -> list[WeakCard]:
+    """The cards of a deck that the fewest decks with its commander play, least played first, each
+    with a popular card of the same kind from your collection to swap it for, if there is one."""
+    from app.services.deck_insights import card_type
+
+    listed = {key: card for card in comparison.cards for key in _names(card.name)}
+    commander = _names(deck.commander or "")
+    weak = []
+    for entry in session.exec(select(DeckEntry).where(DeckEntry.deck_id == deck.id).order_by(DeckEntry.name)):
+        keys = _names(entry.name)
+        if keys & commander or entry.name.casefold() in BASIC_LANDS:
+            continue
+        hit = next((listed[key] for key in keys if key in listed), None)
+        if hit is None or hit.inclusion < WEAK_BELOW:
+            weak.append(WeakCard(entry.name, card_type(entry.type_line), hit.inclusion if hit else None))
+    weak.sort(key=lambda card: (-1 if card.inclusion is None else card.inclusion, card.name))
+    weak = weak[:MAX_WEAK]
+    swaps = [card for card in comparison.free_to_add if card.inclusion >= WEAK_BELOW]
+    for card in weak:
+        swap = next((s for s in swaps if card.kind and s.card and card_type(s.card.type_line) == card.kind), None)
+        if swap is not None:
+            card.swap = swap
+            swaps.remove(swap)
+    return weak
+
+
+def lowest_listed(comparison: EdhrecComparison) -> int:
+    """The inclusion of the least played card EDHREC lists: cards not listed are played less."""
+    return min((card.inclusion for card in comparison.cards), default=0)
+
+
+async def compare_deck(
+    session: Session, deck: Deck, client: EdhrecClient, scryfall: ScryfallClient | None = None
+) -> EdhrecComparison | None:
+    """None when the deck has no commander (EDHREC is about commanders). With `scryfall`, the cards
+    you own from EDHREC's list are looked up when their type is not known yet (for the swaps)."""
     if not deck.commander:
         return None
-    return compare(session, deck, await client.commander(deck.commander))
+    comparison = compare(session, deck, await client.commander(deck.commander))
+    if scryfall is not None:
+        from app.services.suggestions import fill_card_roles
+
+        try:
+            await fill_card_roles(session, scryfall, [card.card for card in comparison.free_to_add if card.card])
+        except ScryfallError:
+            pass  # the swaps then only use cards whose type is known
+    return comparison

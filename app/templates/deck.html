@@ -306,7 +306,7 @@
 <div class="panel">
   <h2>Add a card to this deck</h2>
   <form class="row" method="post" action="/decks/{{ deck.id }}/cards" data-keep-scroll>
-    <label>Card name<input name="name" placeholder="Lim-Dûl's Vault"></label>
+    <label>Card name<input name="name" placeholder="Lim-Dûl's Vault" data-autocomplete="card"></label>
     <label>Set (optional)<input name="set_code" class="narrow" placeholder="cmm"></label>
     <label>Card number (optional)<input name="collector_number" class="narrow" placeholder="410"></label>
     <label>Quantity<input name="quantity" type="number" min="1" value="1"></label>
@@ -372,7 +372,7 @@
   <p class="muted">No tokens. Add the ones this deck makes, so you know what to bring.</p>
   {% endif %}
   <form class="row" method="post" action="/decks/{{ deck.id }}/tokens" data-keep-scroll>
-    <label>Token<input name="name" placeholder="Treasure" required></label>
+    <label>Token<input name="name" placeholder="Treasure" required data-autocomplete="token"></label>
     <label>Quantity<input name="quantity" class="qty" type="number" min="1" value="1"></label>
     <button class="secondary">Add token</button>
   </form>
@@ -512,6 +512,32 @@
   {% else %}
   <h2>EDHREC</h2>
   <p class="muted">{{ edhrec_error }}.</p>
+  {% endif %}
+</div>
+{% endif %}
+
+{% if weakest is defined and weakest is not none %}
+<div class="panel weakest-panel">
+  <h2>Weakest cards <span class="muted">· the cards the fewest {{ edhrec.commander }} decks play</span></h2>
+  {% if weakest %}
+  <table class="compact">
+    <thead><tr><th>Card</th><th>Kind</th><th class="num" title="How many of the decks with this commander play it">In decks</th><th>Swap for, from your collection</th></tr></thead>
+    <tbody>
+    {% for w in weakest %}
+    <tr>
+      <td>{{ w.name }}</td>
+      <td class="muted">{{ w.kind or '' }}</td>
+      <td class="num">{% if w.inclusion is none %}<span class="muted" title="Not among the cards EDHREC lists for this commander">under {{ edhrec_floor }}%</span>{% else %}{{ w.inclusion }}%{% endif %}</td>
+      <td>{% if w.swap %}{% if w.swap.card %}<a href="/cards/{{ w.swap.card.id }}">{{ w.swap.name }}</a>{% else %}{{ w.swap.name }}{% endif %}
+        <span class="muted">· in {{ w.swap.inclusion }}% of the decks · {{ w.swap.free }} free{% if w.swap.price is not none %} · {{ w.swap.price | eur }}{% endif %}</span>{% else %}<span class="muted">–</span>{% endif %}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <p class="muted small">From EDHREC: cards in fewer than 10% of the {{ '{:,}'.format(edhrec.decks) }} decks with this commander. That is not always bad, a pet card or a combo piece can be a good reason,
+    but it is the first place to look when the deck needs room. The swap is a card of the same kind that more decks play and that you have a free copy of.</p>
+  {% else %}
+  <p class="muted">Every card in this deck is played by at least 10% of the decks with {{ edhrec.commander }}.</p>
   {% endif %}
 </div>
 {% endif %}

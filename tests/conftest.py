@@ -115,6 +115,11 @@ class FakeScryfall:
         if request.url.path == "/cards/search":
             import re
 
+            if "is:commander" in request.url.params["q"]:
+                wanted = re.search(r'name:"([^"]+)"', request.url.params["q"]).group(1).lower()
+                found = [card for card in self.cards if "Legendary Creature" in card.get("type_line", "")
+                         and wanted in card["name"].lower()]
+                return httpx.Response(200, json={"data": found, "has_more": False}) if found else not_found
             if "is:reprint" in request.url.params["q"]:
                 reprints = [card for card in self.cards if card.get("reprint")]
                 return httpx.Response(200, json={"data": reprints, "has_more": False}) if reprints else not_found
@@ -126,6 +131,12 @@ class FakeScryfall:
             if not prints:
                 return not_found
             return httpx.Response(200, json={"data": prints, "has_more": False})
+        if request.url.path == "/cards/autocomplete":
+            query = request.url.params["q"].lower()
+            extras = request.url.params.get("include_extras") == "true"
+            names = sorted({card["name"] for card in self.cards if query in card["name"].lower()
+                            and (extras or card.get("layout") not in ("token", "emblem"))})
+            return httpx.Response(200, json={"object": "catalog", "data": names})
         if request.url.path == "/cards/collection":
             data, missing = [], []
             for identifier in json.loads(request.content)["identifiers"]:

@@ -22,6 +22,8 @@
     <label>Players<input name="players" class="qty" type="number" min="1" max="12" value="4"></label>
     <label>Played against (optional)<input id="opponents" name="opponents" placeholder="Sam, Robin, Alex" autocomplete="off"></label>
     <label>Won by, if not you<input name="winner" list="known-players" placeholder="Sam" autocomplete="off"></label>
+    <div id="opponent-decks" class="row opponent-decks"></div>
+    <input type="hidden" name="opponent_commanders" id="opponent-commanders">
     <label>Notes (optional)<input name="notes" placeholder="Won with a big Treasure turn"></label>
     <datalist id="known-players">{% for name in players %}<option value="{{ name }}">{% endfor %}</datalist>
     <div class="result-buttons" role="group" aria-label="Result">
@@ -96,10 +98,11 @@
 <div class="panel table-wrap">
   <h2>Opponents</h2>
   <table>
-    <tr><th>Player</th><th class="num">Games together</th><th class="num">You won</th><th class="num">They won</th><th class="num">Your win rate</th></tr>
+    <tr><th>Player</th><th>Commanders</th><th class="num">Games together</th><th class="num">You won</th><th class="num">They won</th><th class="num">Your win rate</th></tr>
     {% for t in o.opponents %}
     <tr>
       <td>{{ t.label }}{% if o.nemesis and o.nemesis.label == t.label %} <span class="badge warn" title="Beat you most often">nemesis</span>{% endif %}</td>
+      <td class="muted">{{ t.decks | join(', ') }}</td>
       <td class="num">{{ t.played }}</td>
       <td class="num up">{{ t.wins }}</td>
       <td class="num down">{{ t.their_wins }}</td>
@@ -109,6 +112,25 @@
   </table>
 </div>
 {% endif %}
+{% endif %}
+
+{% if o is defined and o.commanders %}
+<div class="panel table-wrap">
+  <h2>Commanders you played against</h2>
+  <table>
+    <tr><th>Commander</th><th class="num">Games</th><th class="num">You won</th><th class="num">It won</th><th class="num">Your win rate</th></tr>
+    {% for t in o.commanders %}
+    <tr>
+      <td>{{ t.label }}</td>
+      <td class="num">{{ t.played }}</td>
+      <td class="num up">{{ t.wins }}</td>
+      <td class="num down">{{ t.their_wins }}</td>
+      <td class="num">{{ t.win_rate }}%</td>
+    </tr>
+    {% endfor %}
+  </table>
+  <p class="muted small">Fill in the commanders of the others when you log a game; this shows which decks you do well or badly against.</p>
+</div>
 {% endif %}
 
 {% if stats %}
@@ -146,7 +168,8 @@
       <td>{% if game.deck_id %}<a href="/decks/{{ game.deck_id }}">{{ deck_names.get(game.deck_id, game.deck_name) }}</a>{% else %}{{ game.deck_name }} <span class="muted">(deleted)</span>{% endif %}</td>
       <td><span class="badge result-{{ game.result }}">{{ results[game.result] }}</span></td>
       <td class="num">{{ game.players or '–' }}</td>
-      <td>{{ game.opponents or '' }}{% if game.winner %} <span class="muted">· {{ game.winner }} won</span>{% endif %}</td>
+      {% set played_with = game_commanders(game) %}
+      <td>{% for name in (game.opponents or '').split(', ') if name %}{{ name }}{% if played_with.get(name) %} <span class="muted">({{ played_with[name] }})</span>{% endif %}{{ ', ' if not loop.last }}{% endfor %}{% if game.winner %} <span class="muted">· {{ game.winner }} won</span>{% endif %}</td>
       <td class="muted">{{ game.notes or '' }}</td>
       <td>
         <form class="inline" method="post" action="/games/{{ game.id }}/delete" data-confirm="Click again to remove" data-keep-scroll>
@@ -164,6 +187,37 @@
 
 {% block scripts %}
 <script>
+  // Per opponent a field for the commander they play, filled in with the one they played last time.
+  const lastCommanders = {{ last_commanders | tojson }};
+  const opponentDecks = document.getElementById("opponent-decks");
+  const commandersField = document.getElementById("opponent-commanders");
+  function renderOpponentDecks() {
+    const names = opponents.value.split(",").map((name) => name.trim()).filter(Boolean);
+    const current = Object.fromEntries([...opponentDecks.querySelectorAll("input")].map((input) => [input.dataset.player, input.value]));
+    opponentDecks.innerHTML = "";
+    for (const name of names) {
+      const label = document.createElement("label");
+      label.textContent = `${name}'s commander`;
+      const input = document.createElement("input");
+      input.dataset.player = name;
+      input.dataset.autocomplete = "commander";
+      input.placeholder = "optional";
+      const last = Object.entries(lastCommanders).find(([player]) => player.toLowerCase() === name.toLowerCase());
+      input.value = current[name] ?? (last ? last[1] : "");
+      label.append(input);
+      opponentDecks.append(label);
+      window.attachAutocomplete(input);
+    }
+  }
+  if (opponentDecks) {
+    document.getElementById("opponents").addEventListener("input", () => setTimeout(renderOpponentDecks, 0));
+    opponentDecks.closest("form").addEventListener("submit", () => {
+      commandersField.value = JSON.stringify(Object.fromEntries(
+        [...opponentDecks.querySelectorAll("input")].filter((input) => input.value.trim()).map((input) => [input.dataset.player, input.value.trim()])
+      ));
+    });
+  }
+
   // Click a name you played against before to add it to the players.
   const opponents = document.getElementById("opponents");
   for (const chip of document.querySelectorAll(".player-chips .chip")) {
@@ -172,6 +226,7 @@
       if (!names.some((name) => name.toLowerCase() === chip.dataset.player.toLowerCase())) names.push(chip.dataset.player);
       opponents.value = names.join(", ");
       opponents.focus();
+      renderOpponentDecks();
     });
   }
 </script>

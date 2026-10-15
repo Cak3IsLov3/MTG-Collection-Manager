@@ -121,6 +121,8 @@ class Game(SQLModel, table=True):
     # Who else played ("Sam, Robin"), and who won when it was not you.
     opponents: str | None = None
     winner: str | None = None
+    # The commanders the others played, as JSON: {"Sam": "Atraxa, Praetors' Voice"}.
+    opponent_commanders: str | None = None
     created_at: dt.datetime = Field(default_factory=utcnow)
 
 

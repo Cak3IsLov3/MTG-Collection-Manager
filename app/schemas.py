@@ -222,6 +222,7 @@ class GameIn(BaseModel):
     notes: str | None = None
     opponents: list[str] = []  # who else played
     winner: str | None = None  # who won, when you lost
+    opponent_commanders: dict[str, str] = {}  # {"Sam": "Atraxa, Praetors' Voice"}
 
 
 class GameOut(BaseModel):
@@ -236,6 +237,7 @@ class GameOut(BaseModel):
     notes: str | None
     opponents: str | None = None  # "Sam, Robin"
     winner: str | None = None
+    opponent_commanders: str | None = None  # JSON: {"Sam": "Atraxa, Praetors' Voice"}
 
 
 class DeckPlaysOut(BaseModel):

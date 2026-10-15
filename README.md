@@ -81,6 +81,10 @@ price.
 
 ![EDHREC with "Only cards I have free": the popular cards you could put in the deck right away](docs/deck-edhrec-free.jpg)
 
+![The weakest cards of a deck: the cards the fewest decks with its commander play, each with a more popular card of the same kind from your collection to swap in](docs/deck-weakest.jpg)
+
+![Typing ahead: card names from Scryfall as you type, with a picture of the highlighted one](docs/autocomplete.jpg)
+
 ![Suggestions from your collection: free cards in the deck's colours, grouped by what the deck is short of](docs/deck-suggestions.jpg)
 
 ![Token suggestions: the tokens the cards of a deck make and about how many you need, next to the token list](docs/deck-token-suggestions.jpg)
@@ -91,9 +95,15 @@ price.
 
 ![This week on the dashboard: the same summary goes to Discord every Monday](docs/dashboard-week.jpg)
 
-![The game log: who you played against and who won, your win rate, current streak and nemesis, and games per month](docs/games.jpg)
+![The live table on an iPad: life, poison and commander damage per player, whose turn it is, and the top row upside down for the players across the table](docs/table.jpg)
+
+![Starting a game on the live table: your deck, the number of players, starting life, and the names and commanders of the others](docs/table-setup.jpg)
+
+![Logging a game: per opponent a field for their commander, filled in with the one they played last time](docs/games.jpg)
 
 ![Win rates by table size, deck colour and bracket, and per opponent; the player who beats you most is your nemesis](docs/games-stats.jpg)
+
+![The commanders each opponent plays, and your results against every commander](docs/games-commanders.jpg)
 
 ![The randomizer for three players, preferring decks that were not played for a while](docs/decks-random.jpg)
 
@@ -172,7 +182,10 @@ price.
 - Export a deck as a text list for Archidekt or Moxfield, with the commander first and its tokens at the end
 - Weekly summary on Discord (by default on Monday at 9:00): collection value and its change, new cards, risers and fallers, and the games you played. The dashboard shows the same under "This week"
 - Commander picture: every deck shows its commander, taken from the Commander category on Archidekt, recognised from the deck name (only when that card can be a commander), or chosen on the deck page
-- Game log: log a game from the Games page or from a deck (date, players, who you played against, who won, notes). Every deck shows how often it was played, its win rate and when it was last played
+- Game log: log a game from the Games page or from a deck (date, players, who you played against and their commanders, who won, notes). Every deck shows how often it was played, its win rate and when it was last played
+- Live table for game night (made for an iPad on the table): life, poison and commander damage per player, whose turn it is and the round, undo, full screen, and the screen stays on. Players are out at 0 life, 10 poison or 21 commander damage; the top row can be turned upside down for the players across. At the end you pick the winner and the game goes into the log with everyone and their commanders. A game in progress survives a reload
+- The commanders of your opponents: fill them in when you log a game (the one a player used last time is filled in). The Games page shows the commanders each player plays and your results against every commander
+- Weakest cards per deck: the cards the fewest decks with its commander play on EDHREC (under 10%), each with a more popular card of the same kind from your collection to swap in
 - Game statistics: your win rate, current streak and longest winning streak, games per month, win rates by table size (next to your fair share), deck colour and bracket, and per opponent, with the player who beats you most as your nemesis
 - Bracket check per deck: Game Changers (the official list, from Scryfall), mass land denial, extra turns and two-card infinite combos, against the bracket you set. A deck that does not fit gets a ⚠ in the list of decks
 - Combos per deck from Commander Spellbook: the combos in the deck and what they do, and the combos it is one card away from, marked when you own that card
@@ -183,6 +196,7 @@ price.
 - Add cards to a saved deck the same way as to the collection: by name, or by set and card number for one exact version
 - Take a card out of a deck: "Remove" moves it from "In this deck" to "Still missing" and frees your copies for other decks; "Put back" undoes it
 - Search inside a deck on card name or set
+- Typing ahead everywhere you enter a card name: names from Scryfall with a picture of the highlighted card; tokens in the token field, only commanders for the commanders of opponents
 - One "Save changes" button per deck: bracket, basic lands and chosen printings are edited freely and stored together, with a reminder while there are unsaved changes
 - Commander bracket per deck: taken from Archidekt when the deck has one, and changeable at any time
 - Filter the list of saved decks by bracket, or show only the decks that are complete
@@ -278,6 +292,8 @@ product page. Two things to know:
 | `PUT` | `/api/wishlist/targets` | Set several target prices at once |
 | `PUT` | `/api/wishlist/{id}/printing` | Watch another printing (set) of the same card |
 | `GET` | `/api/printings?name=` | Every printing of a card with its price |
+| `GET` | `/api/autocomplete?q=` | Card names for typing ahead (`kind=card\|token\|commander`) |
+| `GET` | `/api/decks/{id}/weakest` | The cards the fewest decks with the commander play, with a card to swap in |
 | `DELETE` | `/api/wishlist/{id}` | Stop watching a card |
 | `DELETE` | `/api/wishlist` | Stop watching every card |
 | `GET` | `/api/alerts` | Alert history |

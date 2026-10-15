@@ -1,6 +1,7 @@
 """Server-rendered pages (Jinja2) and the HTML forms behind them."""
 
 import datetime as dt
+import json
 import logging
 from pathlib import PurePath
 from urllib.parse import quote
@@ -259,8 +260,16 @@ def games_page(request: Request, deck: int | None = None, session: Session = Dep
         deck_names={d.id: d.name for d in saved}, results=games.RESULTS,
         today=dt.date.today().isoformat(), selected_deck=deck,
         overview=games.log_stats(session), players=games.known_players(session),
+        last_commanders=games.last_commanders(session), game_commanders=games.game_commanders,
         brackets=decks.BRACKETS,
     )
+
+
+@router.get("/table")
+def table_page(request: Request, session: Session = Depends(get_session)):
+    """The live table: life, poison, commander damage and turns on one screen; logged afterwards."""
+    return render(request, "table.html", decks=list(session.exec(select(Deck))), players=games.known_players(session),
+                  last_commanders=games.last_commanders(session))
 
 
 @router.post("/games")
@@ -272,6 +281,7 @@ def games_log(
     notes: str = Form(""),
     opponents: str = Form(""),
     winner: str = Form(""),
+    opponent_commanders: str = Form(""),
     back: str = Form(""),
     session: Session = Depends(get_session),
 ):
@@ -282,8 +292,10 @@ def games_log(
         return redirect(target, "That deck does not exist anymore", error=True)
     try:
         day = dt.date.fromisoformat(played_on) if played_on.strip() else None
+        commanders = json.loads(opponent_commanders) if opponent_commanders.strip() else {}
         game = games.log_game(
-            session, deck, result, day, int(players) if players.strip() else None, notes, opponents, winner
+            session, deck, result, day, int(players) if players.strip() else None, notes, opponents, winner,
+            commanders if isinstance(commanders, dict) else {},
         )
     except ValueError as exc:
         message = str(exc) if isinstance(exc, games.GameError) else "That is not a valid date or number"
@@ -628,7 +640,7 @@ async def saved_deck_page(
         deck_suggestions = await suggestions.suggest(session, None, deck)
     edhrec_error = None
     try:
-        edhrec_comparison = await edhrec_compare.compare_deck(session, deck, edhrec)
+        edhrec_comparison = await edhrec_compare.compare_deck(session, deck, edhrec, scryfall)
     except EdhrecError as exc:
         logger.warning("EDHREC: %s", exc)
         edhrec_comparison, edhrec_error = None, str(exc)
@@ -643,6 +655,8 @@ async def saved_deck_page(
                   bracket_check=deck_insights.bracket_check(session, deck, await _game_changers(scryfall), deck_combos),
                   deck_combos=deck_combos, owned=combos.owned_missing(session, deck_combos), deck_suggestions=deck_suggestions,
                   edhrec=edhrec_comparison, edhrec_error=edhrec_error,
+                  weakest=edhrec_compare.weakest_cards(session, deck, edhrec_comparison) if edhrec_comparison else None,
+                  edhrec_floor=edhrec_compare.lowest_listed(edhrec_comparison) if edhrec_comparison else 0,
                   deck_plays=games.deck_plays(session).get(deck.id), deck_games=games.recent_games(session, 5, deck.id),
                   results=games.RESULTS, today=dt.date.today().isoformat(),
                   summaries=summaries, left_out=decks.deck_left_out(session, deck),

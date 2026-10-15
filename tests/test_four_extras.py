@@ -119,7 +119,7 @@ def test_games_page_shows_statistics(client):
     assert "Games per month" in page and "By table size" in page and "Opponents" in page and "25% with 4 players" in page
     overview = client.get("/api/games/overview").json()
     assert overview["played"] == 1 and overview["streak"] == {"result": "win", "games": 1}
-    assert overview["opponents"] == [{"name": "Sam", "played": 1, "your_wins": 1, "their_wins": 0}]
+    assert overview["opponents"] == [{"name": "Sam", "played": 1, "your_wins": 1, "their_wins": 0, "commanders": []}]
 
 
 # --- purchase price ------------------------------------------------------------------------

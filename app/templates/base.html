@@ -16,6 +16,7 @@
       <a href="/wishlist" class="{{ 'active' if path.startswith('/wishlist') }}">Wishlist</a>
       <a href="/deck" class="{{ 'active' if path.startswith('/deck') }}">Decks</a>
       <a href="/games" class="{{ 'active' if path.startswith('/games') }}">Games</a>
+      <a href="/table" class="{{ 'active' if path.startswith('/table') }}">Table</a>
       <a href="/docs">API</a>
     </nav>
   </header>
@@ -143,6 +144,75 @@
         },
       };
     }
+  </script>
+  <script>
+    // Typing ahead: an input with data-autocomplete="card|token|commander" suggests card names from
+    // Scryfall, with a picture of the highlighted one. Arrow keys and Enter pick; Escape closes.
+    (() => {
+      const imageOf = (name) => `https://api.scryfall.com/cards/named?format=image&version=small&exact=${encodeURIComponent(name)}`;
+      function attach(input) {
+        if (input.dataset.acReady) return;
+        input.dataset.acReady = "1";
+        input.autocomplete = "off";
+        const box = document.createElement("div");
+        box.className = "ac-box";
+        box.hidden = true;
+        box.innerHTML = '<ul role="listbox"></ul><img alt="" hidden>';
+        input.insertAdjacentElement("afterend", box);
+        input.parentElement.classList.add("ac-anchor");
+        const list = box.querySelector("ul");
+        const picture = box.querySelector("img");
+        let names = [];
+        let active = -1;
+        let timer = null;
+        let asked = "";
+        const close = () => { box.hidden = true; active = -1; };
+        const highlight = (index) => {
+          active = index;
+          [...list.children].forEach((item, i) => item.classList.toggle("active", i === index));
+          picture.hidden = index < 0 || input.dataset.autocomplete === "token";
+          if (index >= 0) picture.src = imageOf(names[index]);
+        };
+        const pick = (index) => {
+          input.value = names[index];
+          close();
+          input.dispatchEvent(new Event("change", { bubbles: true }));
+        };
+        async function lookUp() {
+          const query = input.value.trim();
+          if (query.length < 2) { close(); return; }
+          asked = query;
+          try {
+            const response = await fetch(`/api/autocomplete?kind=${input.dataset.autocomplete}&q=${encodeURIComponent(query)}`);
+            const data = await response.json();
+            if (asked !== query || input.value.trim() !== query) return;  // typed on meanwhile
+            names = data.names || [];
+          } catch (error) { names = []; }
+          list.innerHTML = "";
+          for (const [index, name] of names.entries()) {
+            const item = document.createElement("li");
+            item.textContent = name;
+            item.setAttribute("role", "option");
+            item.addEventListener("mousedown", (event) => { event.preventDefault(); pick(index); });
+            item.addEventListener("mouseenter", () => highlight(index));
+            list.append(item);
+          }
+          box.hidden = names.length === 0 || document.activeElement !== input;
+          highlight(names.length ? 0 : -1);
+        }
+        input.addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(lookUp, 200); });
+        input.addEventListener("keydown", (event) => {
+          if (box.hidden) return;
+          if (event.key === "ArrowDown") { event.preventDefault(); highlight(Math.min(names.length - 1, active + 1)); }
+          else if (event.key === "ArrowUp") { event.preventDefault(); highlight(Math.max(0, active - 1)); }
+          else if (event.key === "Enter" && active >= 0) { event.preventDefault(); pick(active); }
+          else if (event.key === "Escape") { close(); }
+        });
+        input.addEventListener("blur", () => setTimeout(close, 100));
+      }
+      window.attachAutocomplete = attach;
+      document.querySelectorAll("input[data-autocomplete]").forEach(attach);
+    })();
   </script>
   {% block scripts %}{% endblock %}
 </body>

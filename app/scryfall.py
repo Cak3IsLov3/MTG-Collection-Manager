@@ -191,6 +191,21 @@ class ScryfallClient:
             return response.json()
         raise ScryfallError("Scryfall rate limit exceeded")  # pragma: no cover
 
+    async def autocomplete(self, query: str, kind: str = "card") -> list[str]:
+        """Card names that start with or contain `query`, for typing ahead (at most 20).
+
+        kind "token" also gives tokens and emblems; "commander" only cards that can be a commander."""
+        query = query.strip()
+        if len(query) < 2:
+            return []
+        if kind == "commander":
+            if '"' in query:
+                return []
+            results = await self.search(f'is:commander name:"{query}" game:paper', unique="cards", order="edhrec")
+            return [data["name"] for data in results[:20] if data.get("name")]
+        params = {"q": query, **({"include_extras": "true"} if kind == "token" else {})}
+        return list((await self._request("GET", "/cards/autocomplete", params=params)).get("data") or [])[:20]
+
     async def get_by_id(self, scryfall_id: str) -> ScryfallCard:
         return ScryfallCard.from_json(await self._request("GET", f"/cards/{scryfall_id}"))
 

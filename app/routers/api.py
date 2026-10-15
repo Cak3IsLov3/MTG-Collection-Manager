@@ -251,6 +251,25 @@ def clear_wishlist(session: Session = Depends(get_session)):
     return {"removed": removed}
 
 
+_autocomplete_cache: dict[tuple[str, str], list[str]] = {}
+
+
+@router.get("/autocomplete")
+async def autocomplete(q: str = "", kind: Literal["card", "token", "commander"] = "card",
+                       scryfall: ScryfallClient = Depends(get_scryfall)):
+    """Card names for typing ahead (`kind=token` includes tokens, `kind=commander` only commanders)."""
+    key = (kind, q.strip().casefold())
+    if key not in _autocomplete_cache:
+        try:
+            names = await scryfall.autocomplete(q, kind)
+        except ScryfallError:
+            return {"names": []}  # typing ahead is a nice-to-have; never an error
+        if len(_autocomplete_cache) > 2000:
+            _autocomplete_cache.clear()
+        _autocomplete_cache[key] = names
+    return {"names": _autocomplete_cache[key]}
+
+
 @router.get("/tokens")
 async def list_token_versions(name: str, scryfall: ScryfallClient = Depends(get_scryfall)):
     """The different tokens with a name ("Angel": 4/4 flying, 1/1 lifelink, ...), one print of each."""
@@ -554,7 +573,7 @@ def log_game(payload: GameIn, session: Session = Depends(get_session)):
     try:
         game = games.log_game(
             session, deck, payload.result, payload.played_on, payload.players, payload.notes,
-            payload.opponents, payload.winner,
+            payload.opponents, payload.winner, payload.opponent_commanders,
         )
     except games.GameError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -604,10 +623,14 @@ def games_overview(session: Session = Depends(get_session)):
         "colours": tallies(overview.colours, "colour"),
         "brackets": [{**item, "bracket": int(item["bracket"])} for item in tallies(overview.brackets, "bracket")],
         "opponents": [
-            {"name": t.label, "played": t.played, "your_wins": t.wins, "their_wins": t.their_wins}
+            {"name": t.label, "played": t.played, "your_wins": t.wins, "their_wins": t.their_wins, "commanders": t.decks}
             for t in overview.opponents
         ],
         "nemesis": nemesis.label if nemesis else None,
+        "commanders": [
+            {"commander": t.label, "played": t.played, "your_wins": t.wins, "their_wins": t.their_wins}
+            for t in overview.commanders
+        ],
     }
 
 
@@ -654,6 +677,34 @@ async def deck_edhrec(
             for c in found.cards
         ],
     }
+
+
+@router.get("/decks/{deck_id}/weakest")
+async def deck_weakest(
+    deck_id: int, session: Session = Depends(get_session), edhrec: EdhrecClient = Depends(get_edhrec),
+    scryfall: ScryfallClient = Depends(get_scryfall),
+):
+    """The cards of a deck the fewest decks with its commander play (EDHREC), with a card to swap in."""
+    from app.services import edhrec_compare
+
+    deck = _saved_deck(session, deck_id)
+    try:
+        from app.services.deck_insights import fill_card_info
+
+        await fill_card_info(session, scryfall, deck.id)  # the kind of every card
+    except ScryfallError as exc:
+        raise _scryfall_http_error(exc) from exc
+    try:
+        found = await edhrec_compare.compare_deck(session, deck, edhrec, scryfall)
+    except EdhrecError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    if found is None:
+        raise HTTPException(status_code=400, detail="This deck has no commander")
+    return [
+        {"name": c.name, "kind": c.kind, "inclusion": c.inclusion,
+         "swap": {"name": c.swap.name, "inclusion": c.swap.inclusion, "free": c.swap.free} if c.swap else None}
+        for c in edhrec_compare.weakest_cards(session, deck, found)
+    ]
 
 
 @router.get("/reprints")

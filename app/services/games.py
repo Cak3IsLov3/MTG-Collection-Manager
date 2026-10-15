@@ -1,6 +1,7 @@
 """The game log: which deck you played, when, and whether you won."""
 
 import datetime as dt
+import json
 from dataclasses import dataclass, field
 
 from sqlmodel import Session, select
@@ -53,6 +54,7 @@ def log_game(
     notes: str | None = None,
     opponents: str | list[str] | None = None,
     winner: str | None = None,
+    opponent_commanders: dict[str, str] | None = None,
 ) -> Game:
     if result not in RESULTS:
         raise GameError("A game is a win, a loss or a draw")
@@ -71,9 +73,17 @@ def log_game(
             names.append(winner)
     if players is not None and len(names) >= players:
         raise GameError(f"{len(names)} opponents do not fit at a table of {players}")
+    # The commander per opponent, under the name as it is in the list of opponents.
+    known = {name.casefold(): name for name in names}
+    commanders = {}
+    for name, commander in (opponent_commanders or {}).items():
+        name, commander = " ".join(name.split()), " ".join((commander or "").split())
+        if commander and name.casefold() in known:
+            commanders[known[name.casefold()]] = commander
     game = Game(
         played_on=played_on, deck_id=deck.id, deck_name=deck.name, result=result, players=players,
         notes=(notes or "").strip() or None, opponents=", ".join(names) or None, winner=winner or None,
+        opponent_commanders=json.dumps(commanders) if commanders else None,
     )
     session.add(game)
     session.flush()
@@ -105,6 +115,19 @@ def recent_games(session: Session, limit: int | None = None, deck_id: int | None
     return list(session.exec(statement))
 
 
+def game_commanders(game: Game) -> dict[str, str]:
+    """{opponent: commander} of a game."""
+    return json.loads(game.opponent_commanders) if game.opponent_commanders else {}
+
+
+def last_commanders(session: Session) -> dict[str, str]:
+    """The commander every player used the last time (to fill in for the next game)."""
+    last: dict[str, str] = {}
+    for game in session.exec(select(Game).where(Game.opponent_commanders != None).order_by(Game.played_on, Game.id)):  # noqa: E711
+        last.update(game_commanders(game))
+    return last
+
+
 def known_players(session: Session) -> list[str]:
     """Everyone you played against, most often first (for suggestions in the form)."""
     counts: dict[str, list] = {}
@@ -123,6 +146,7 @@ class Tally:
     played: int = 0
     wins: int = 0
     their_wins: int = 0  # for an opponent: games they won against you
+    decks: list[str] = field(default_factory=list)  # for an opponent: the commanders they played
 
     @property
     def win_rate(self) -> int | None:
@@ -142,6 +166,7 @@ class LogStats:
     colours: list[Tally] = field(default_factory=list)  # label "W": games with a deck that plays white
     brackets: list[Tally] = field(default_factory=list)  # label "3": games with a bracket 3 deck
     opponents: list[Tally] = field(default_factory=list)  # most games first
+    commanders: list[Tally] = field(default_factory=list)  # the commanders you played against, most games first
 
     @property
     def win_rate(self) -> int | None:
@@ -174,6 +199,7 @@ def log_stats(session: Session, today: dt.date | None = None) -> LogStats:
     colours: dict[str, Tally] = {}
     brackets: dict[str, Tally] = {}
     opponents: dict[str, Tally] = {}
+    commanders: dict[str, Tally] = {}
     run = 0
     for game in games:
         stats.played += 1
@@ -195,12 +221,22 @@ def log_stats(session: Session, today: dt.date | None = None) -> LogStats:
                 count(colours, letter, game)
             if deck.bracket:
                 count(brackets, str(deck.bracket), game)
+        played_with = {name.casefold(): commander for name, commander in game_commanders(game).items()}
         for name in split_names(game.opponents):
             key = name.casefold()
             tally = opponents.get(key) or opponents.setdefault(key, Tally(name))
             tally.played += 1
             tally.wins += game.result == "win"
-            tally.their_wins += (game.winner or "").casefold() == key
+            won = (game.winner or "").casefold() == key
+            tally.their_wins += won
+            commander = played_with.get(key)
+            if commander:
+                if commander not in tally.decks:
+                    tally.decks.append(commander)
+                against = commanders.get(commander.casefold()) or commanders.setdefault(commander.casefold(), Tally(commander))
+                against.played += 1
+                against.wins += game.result == "win"
+                against.their_wins += won
 
     # Every month from the first game on, also the ones without games; the last twelve.
     first = games[0].played_on.replace(day=1)
@@ -213,6 +249,7 @@ def log_stats(session: Session, today: dt.date | None = None) -> LogStats:
     stats.colours = [colours[letter] for letter in "WUBRGC" if letter in colours]
     stats.brackets = sorted(brackets.values(), key=lambda tally: int(tally.label))
     stats.opponents = sorted(opponents.values(), key=lambda tally: (-tally.played, tally.label.casefold()))
+    stats.commanders = sorted(commanders.values(), key=lambda tally: (-tally.played, -tally.their_wins, tally.label.casefold()))
     return stats
 
 
