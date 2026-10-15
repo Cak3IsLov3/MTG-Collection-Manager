@@ -31,14 +31,24 @@ def scryfall_json(name, scryfall_id, set_code="tst", eur="1.00", eur_foil=None, 
 
 
 CARDS = [
-    scryfall_json("Sol Ring", "id-sol", "cmm", eur="1.50", eur_foil="4.00", color_identity=[]),
+    scryfall_json("Sol Ring", "id-sol", "cmm", eur="1.50", eur_foil="4.00", color_identity=[],
+                  type_line="Artifact", cmc=1.0, oracle_text="{T}: Add {C}{C}."),
     scryfall_json("Sol Ring", "id-sol-lea", "lea", eur="900.00"),
     scryfall_json("Sol Ring", "id-sol-cmm-art", "cmm", eur="6.00", collector_number="410"),
-    scryfall_json("Lim-Dûl's Vault", "id-vault", "all", eur="12.34", color_identity=["B", "U"]),
-    scryfall_json("Fire // Ice", "id-fire", "mh2", eur="0.25", eur_foil="0.80", color_identity=["R", "U"]),
+    scryfall_json("Lim-Dûl's Vault", "id-vault", "all", eur="12.34", color_identity=["B", "U"],
+                  type_line="Instant", cmc=2.0, oracle_text="Look at the top five cards of your library."),
+    scryfall_json("Fire // Ice", "id-fire", "mh2", eur="0.25", eur_foil="0.80", color_identity=["R", "U"],
+                  type_line="Instant // Instant", cmc=4.0,
+                  card_faces=[{"oracle_text": "Fire deals 2 damage to any target."}, {"oracle_text": "Tap target permanent. Draw a card."}]),
     scryfall_json("Black Lotus", "id-lotus", "lea", eur=None),
     scryfall_json("Marwyn, the Nurturer", "id-marwyn", "dom", eur="2.00", color_identity=["G"],
-                  type_line="Legendary Creature — Elf Druid"),
+                  type_line="Legendary Creature — Elf Druid", cmc=3.0,
+                  oracle_text="Whenever an Elf enters, put a +1/+1 counter on Marwyn. {T}: Add {G}."),
+    scryfall_json("Treasure", "id-treasure", "tc21", eur=None, type_line="Token Artifact — Treasure", layout="token"),
+    scryfall_json("Angel", "id-angel-44", "tdmu", eur=None, type_line="Token Creature — Angel", layout="token",
+                  power="4", toughness="4", colors=["W"], oracle_text="Flying"),
+    scryfall_json("Angel", "id-angel-11", "tsnc", eur=None, type_line="Token Creature — Angel", layout="token",
+                  power="1", toughness="1", colors=["W"], oracle_text="Flying, lifelink"),
 ]
 
 

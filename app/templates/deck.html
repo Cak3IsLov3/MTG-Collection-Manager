@@ -77,6 +77,8 @@
       <input type="checkbox" name="uses_tokens" form="deck-form" {{ 'checked' if uses_tokens }}>Has tokens</label>
     <button form="deck-form" class="deck-save small">Save changes</button>
     <a href="/deck">← All decks</a>
+    <a class="small-link" href="/decks/{{ deck.id }}/export.txt" title="Download this deck as a text list for Archidekt or Moxfield">Export list</a>
+    <a class="small-link" href="/decks/{{ deck.id }}/proxies" title="A printable sheet of the cards you still miss, to play-test with">Proxies</a>
     <form class="inline" method="post" action="/decks/{{ deck.id }}/delete" data-confirm="Click again to delete">
       <button class="secondary small">Delete deck</button>
     </form>
@@ -269,6 +271,7 @@
     <input type="hidden" name="bracket" value="{{ bracket or '' }}">
     <input type="hidden" name="archidekt_id" value="{{ archidekt_id or '' }}">
     <input type="hidden" name="skipped_token" value="{{ tokens }}">
+    {% for token in (left_out.token_cards if left_out else []) %}<input type="hidden" name="token:{{ token.name }}" value="{{ token.quantity }}">{% endfor %}
     <label>Deck name<input name="name" required size="30" value="{{ deck_name or '' }}" placeholder="My Commander deck"></label>
     <button>Save deck &amp; set these cards aside</button>
   </form>
@@ -334,6 +337,57 @@
   </form>
   {% endif %}
 </div>
+
+<div class="panel tokens-panel">
+  <h2>Tokens{% if deck_token_list %} <span class="muted">· {{ deck_token_list | sum(attribute='quantity') }} to bring</span>{% endif %}</h2>
+  {% if deck_token_list %}
+  <div class="token-grid">
+    {% for token in deck_token_list %}
+    <div class="token-card">
+      {% if token.image_url %}<img src="{{ token.image_url }}" alt="{{ token.name }}" loading="lazy">{% else %}<div class="token-blank">{{ token.name }}</div>{% endif %}
+      <label class="check"><input type="checkbox" class="token-packed" data-token="{{ token.id }}">&nbsp;{{ token.quantity }}× {{ token.name }}</label>
+      <form class="token-version" method="post" action="/decks/{{ deck.id }}/tokens/{{ token.id }}/version" data-keep-scroll
+            data-name="{{ token.name }}" data-current="{{ token.scryfall_id or '' }}">
+        <button type="button" class="link small choose-token" title="There can be several tokens with this name: pick the right one">other version</button>
+        <div class="token-choices" hidden></div>
+      </form>
+      <form class="inline" method="post" action="/decks/{{ deck.id }}/tokens/{{ token.id }}/delete" data-keep-scroll>
+        <button class="link small" title="Remove this token from the list">remove</button>
+      </form>
+    </div>
+    {% endfor %}
+  </div>
+  <p class="muted small">Tick the tokens you packed for game night; the ticks stay in this browser. <button type="button" class="link" id="tokens-unpack">Clear the ticks</button></p>
+  {% elif tokens %}
+  <p class="muted">This deck has {{ tokens }} token{{ 's' if tokens != 1 }}, but not which ones. Their names come with the next Archidekt sync, or add them below.</p>
+  {% else %}
+  <p class="muted">No tokens. Add the ones this deck makes, so you know what to bring.</p>
+  {% endif %}
+  <form class="row" method="post" action="/decks/{{ deck.id }}/tokens" data-keep-scroll>
+    <label>Token<input name="name" placeholder="Treasure" required></label>
+    <label>Quantity<input name="quantity" class="qty" type="number" min="1" value="1"></label>
+    <button class="secondary">Add token</button>
+  </form>
+</div>
+
+{% if deck_stats and deck_stats.has_data %}
+<div class="panel">
+  <h2>Mana curve and card types{% if deck_stats.average_cmc is not none %} <span class="muted">· average mana value {{ deck_stats.average_cmc }}</span>{% endif %}</h2>
+  <div class="grid two deck-stats">
+    <div class="chart-box small"><canvas id="curve-chart"></canvas></div>
+    <div>
+      <table class="compact">
+        {% for kind, count in deck_stats.types.items() %}<tr><td>{{ kind }}</td><td class="num">{{ count }}</td></tr>{% endfor %}
+      </table>
+      {% if deck_stats.roles %}
+      <p class="roles">{% for role, count in deck_stats.roles.items() %}<span class="badge">{{ role }} {{ count }}</span> {% endfor %}</p>
+      <p class="muted small">Ramp, card draw, removal and board wipes are guessed from the rules text of the cards.</p>
+      {% endif %}
+      {% if deck_stats.unknown %}<p class="muted small">{{ deck_stats.unknown }} card{{ 's' if deck_stats.unknown != 1 }} not counted: Scryfall did not know {{ 'it' if deck_stats.unknown == 1 else 'them' }}.</p>{% endif %}
+    </div>
+  </div>
+</div>
+{% endif %}
 {% endif %}
 
 <div class="panel search-panel">
@@ -427,8 +481,88 @@
 {% endblock %}
 
 {% block scripts %}
-{% if deck and value_history and value_history["values"] | length > 1 %}
+{% set curve_chart = deck and deck_stats and deck_stats.has_data %}
+{% set value_chart = deck and value_history and value_history["values"] | length > 1 %}
+{% if curve_chart or value_chart %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+{% endif %}
+{% if curve_chart %}
+<script>
+  // Mana curve: cards per mana value, lands not counted.
+  const curve = {{ deck_stats.curve | tojson }};
+  new Chart(document.getElementById("curve-chart"), {
+    type: "bar",
+    data: { labels: Object.keys(curve), datasets: [{ label: "Cards", data: Object.values(curve), backgroundColor: "#4c9aff" }] },
+    options: {
+      maintainAspectRatio: false,
+      scales: {
+        x: { title: { display: true, text: "Mana value", color: "#8b93a3" }, ticks: { color: "#8b93a3" }, grid: { display: false } },
+        y: { beginAtZero: true, ticks: { color: "#8b93a3", precision: 0 }, grid: { color: "#2c313c" } },
+      },
+      plugins: { legend: { display: false } },
+    },
+  });
+</script>
+{% endif %}
+{% if deck %}
+<script>
+  // Packing the tokens: the ticks are kept per deck in this browser.
+  const packedKey = "tokens-packed-{{ deck.id }}";
+  const packed = new Set((() => { try { return JSON.parse(localStorage.getItem(packedKey) || "[]"); } catch (error) { return []; } })());
+  for (const box of document.querySelectorAll(".token-packed")) {
+    box.checked = packed.has(box.dataset.token);
+    box.addEventListener("change", () => {
+      box.checked ? packed.add(box.dataset.token) : packed.delete(box.dataset.token);
+      try { localStorage.setItem(packedKey, JSON.stringify([...packed])); } catch (error) {}
+    });
+  }
+  // "other version": load the tokens with this name and pick one by its picture.
+  document.addEventListener("click", async (event) => {
+    const opener = event.target.closest("button.choose-token");
+    if (!opener) return;
+    const form = opener.closest("form");
+    const box = form.querySelector(".token-choices");
+    opener.disabled = true;
+    opener.textContent = "loading…";
+    try {
+      const response = await fetch(`/api/tokens?name=${encodeURIComponent(form.dataset.name)}`);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const versions = await response.json();
+      if (!versions.length) throw new Error("none");
+      box.replaceChildren(...versions.map((version) => {
+        const choice = document.createElement("button");
+        choice.name = "scryfall_id";
+        choice.value = version.scryfall_id;
+        choice.className = "token-choice" + (version.scryfall_id === form.dataset.current ? " current" : "");
+        choice.title = version.description;
+        const picture = document.createElement("img");
+        picture.src = version.image_url || "";
+        picture.alt = version.name;
+        picture.loading = "lazy";
+        const text = document.createElement("span");
+        text.textContent = version.description;
+        choice.append(picture, text);
+        return choice;
+      }));
+      box.hidden = false;
+      opener.hidden = true;
+    } catch (error) {
+      opener.disabled = false;
+      opener.textContent = "could not load the versions, try again";
+    }
+  });
+
+  const unpack = document.getElementById("tokens-unpack");
+  if (unpack) {
+    unpack.addEventListener("click", () => {
+      packed.clear();
+      for (const box of document.querySelectorAll(".token-packed")) box.checked = false;
+      try { localStorage.removeItem(packedKey); } catch (error) {}
+    });
+  }
+</script>
+{% endif %}
+{% if value_chart %}
 <script>
   // The value of this deck's copies over time.
   const deckValue = {{ value_history | tojson }};

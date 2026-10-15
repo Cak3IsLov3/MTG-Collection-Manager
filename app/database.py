@@ -37,6 +37,10 @@ def add_missing_columns(target=None) -> None:
             "collector_number": "VARCHAR",
             "scryfall_id": "VARCHAR",
             "foil": "BOOLEAN",
+            "type_line": "VARCHAR",
+            "cmc": "FLOAT",
+            "roles": "VARCHAR",
+            "image_url": "VARCHAR",
         },
         "pricesnapshot": {"eur_from_set": "VARCHAR", "eur_foil_from_set": "VARCHAR"},
     }

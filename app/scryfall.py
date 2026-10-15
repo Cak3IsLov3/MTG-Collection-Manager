@@ -82,6 +82,8 @@ class ScryfallCard:
     # Colour identity as letters in WUBRG order; "" is colourless.
     colors: str | None = None
     type_line: str = ""  # e.g. "Legendary Creature — Robot"
+    cmc: float | None = None  # mana value
+    oracle_text: str = ""  # rules text; of both faces for a double-faced card
 
     @classmethod
     def from_json(cls, data: dict) -> "ScryfallCard":
@@ -103,6 +105,9 @@ class ScryfallCard:
             cardmarket_url=(data.get("purchase_uris") or {}).get("cardmarket"),
             colors=None if identity is None else "".join(c for c in "WUBRG" if c in identity),
             type_line=data.get("type_line") or "",
+            cmc=data.get("cmc"),
+            oracle_text=data.get("oracle_text")
+            or "\n".join(face.get("oracle_text") or "" for face in data.get("card_faces") or []),
         )
 
 

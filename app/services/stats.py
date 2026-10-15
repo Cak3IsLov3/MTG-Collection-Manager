@@ -5,7 +5,7 @@ from dataclasses import dataclass
 
 from sqlmodel import Session, select
 
-from app.models import Card, DailyTotal, PriceRiseAlert, PriceSnapshot
+from app.models import Card, CollectionEntry, DailyTotal, Deck, Game, PriceRiseAlert, PriceSnapshot, utcnow
 from app.services.collection import CollectionRow, collection_rows, collection_value
 from app.services.pricing import SCRYFALL, earliest_snapshots, latest_snapshots, price_for
 from app.services.wishlist import recent_alerts, wishlist_cost, wishlist_rows
@@ -83,6 +83,68 @@ def recent_price_rise_alerts(session: Session, limit: int = 10) -> list[tuple[Pr
     return list(session.exec(statement))
 
 
+def weekly_summary(session: Session, today: dt.date | None = None) -> dict:
+    """The week in short, for the dashboard and the weekly Discord message."""
+    today = today or dt.date.today()
+    week_ago = today - dt.timedelta(days=7)
+    rows = collection_rows(session)
+    value = collection_value(rows)
+    before = session.exec(
+        select(DailyTotal).where(DailyTotal.date <= week_ago).order_by(DailyTotal.date.desc())
+    ).first() or session.exec(select(DailyTotal).order_by(DailyTotal.date)).first()
+    risers, fallers = movers(session, rows, days=7, limit=3)
+    games = list(session.exec(select(Game).where(Game.played_on > week_ago)))
+    names = {deck.id: deck.name for deck in session.exec(select(Deck))}
+    per_deck: dict[str, list[int]] = {}
+    for game in games:
+        played = per_deck.setdefault(names.get(game.deck_id, game.deck_name), [0, 0])
+        played[0] += 1
+        played[1] += game.result == "win"
+    since = utcnow() - dt.timedelta(days=7)
+    new_copies = sum(
+        entry.quantity for entry in session.exec(select(CollectionEntry).where(CollectionEntry.added_at >= since))
+    )
+    wishlist = wishlist_rows(session)
+    return {
+        "from": week_ago.isoformat(),
+        "to": today.isoformat(),
+        "collection_value": value,
+        "value_before": before.collection_value if before and before.date < today else None,
+        "wishlist_cost": wishlist_cost(wishlist),
+        "wishlist_hits": sum(1 for row in wishlist if row.below_target),
+        "risers": risers,
+        "fallers": fallers,
+        "games": len(games),
+        "wins": sum(game.result == "win" for game in games),
+        "decks_played": sorted(per_deck.items(), key=lambda item: -item[1][0]),
+        "new_copies": new_copies,
+        "price_rises": len(session.exec(select(PriceRiseAlert).where(PriceRiseAlert.sent_at >= since)).all()),
+    }
+
+
+def weekly_lines(summary: dict) -> list[str]:
+    """The weekly summary as short lines (Discord markdown)."""
+    value, before = summary["collection_value"], summary["value_before"]
+    change = ""
+    if before:
+        diff = value - before
+        change = f" ({'+' if diff >= 0 else '−'}€{abs(diff):.2f}, {diff / before * 100:+.1f}% this week)"
+    lines = [f"**Collection** €{value:,.2f}{change}",
+             f"**Wishlist** €{summary['wishlist_cost']:,.2f} still to buy · {summary['wishlist_hits']} at or below target"]
+    if summary["new_copies"]:
+        lines.append(f"**New cards** {summary['new_copies']} added this week")
+    if summary["risers"]:
+        lines.append("**Risers** " + " · ".join(f"{m.card.name} +€{m.change:.2f}" for m in summary["risers"]))
+    if summary["fallers"]:
+        lines.append("**Fallers** " + " · ".join(f"{m.card.name} −€{abs(m.change):.2f}" for m in summary["fallers"]))
+    if summary["games"]:
+        decks = ", ".join(f"{name} {played}×" for name, (played, _) in summary["decks_played"][:3])
+        lines.append(f"**Games** {summary['games']} played, {summary['wins']} won · {decks}")
+    else:
+        lines.append("**Games** none logged this week")
+    return lines
+
+
 def dashboard(session: Session) -> dict:
     rows = collection_rows(session)
     wishlist = wishlist_rows(session)
@@ -102,6 +164,7 @@ def dashboard(session: Session) -> dict:
         "losers": losers,
         "alerts": recent_alerts(session),
         "rise_alerts": recent_price_rise_alerts(session),
+        "week": weekly_summary(session),
         "history": {
             "labels": [total.date.isoformat() for total in history],
             "collection": [total.collection_value for total in history],

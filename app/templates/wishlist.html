@@ -11,6 +11,7 @@
     <button form="wishlist-form" class="wishlist-save">Save all prices</button>
     <form class="inline" method="post" action="/jobs/check-wishlist"><button class="secondary">Check prices now</button></form>
     {% if rows %}
+    <form class="inline" method="get" action="/wishlist/export.csv"><button class="secondary" title="Download your wishlist with target and current prices">Export CSV</button></form>
     <form class="inline" method="post" action="/wishlist/clear"
           data-confirm="Click again to remove all {{ rows | length }} card{{ 's' if rows | length != 1 }}">
       <button class="secondary" title="Stop watching every card on your wishlist">Remove all</button>

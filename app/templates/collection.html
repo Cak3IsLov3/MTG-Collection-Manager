@@ -5,6 +5,11 @@
 {% block content %}
 <div class="toolbar">
   <h1>Collection <span class="muted">· <span id="collection-total" data-value="{{ total }}">{{ total | eur }}</span></span></h1>
+  {% if rows %}
+  <form method="get" action="/collection/export.csv">
+    <button class="secondary" title="Download your collection as a CSV that Moxfield, Archidekt and this app can import">Export CSV</button>
+  </form>
+  {% endif %}
 </div>
 
 <div class="grid two">

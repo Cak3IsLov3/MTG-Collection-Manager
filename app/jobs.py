@@ -14,7 +14,7 @@ from app.discord import DiscordNotifier
 from app.models import Alert, Card, CollectionEntry, PriceRiseAlert, WishlistEntry, utcnow
 from app.scryfall import ScryfallClient, ScryfallError
 from app.services.pricing import CARDMARKET, SCRYFALL, latest_snapshots, record_scryfall_price, record_snapshot
-from app.services.stats import find_price_rises, record_daily_total
+from app.services.stats import find_price_rises, record_daily_total, weekly_lines, weekly_summary
 from app.services.wishlist import recently_alerted
 
 logger = logging.getLogger(__name__)
@@ -108,6 +108,21 @@ async def check_price_rises(
         session.add(alert)
     session.commit()
     return alerts
+
+
+async def send_weekly_summary(session: Session, notifier: DiscordNotifier) -> bool:
+    """Post the week in short to Discord: collection value, risers and fallers, games played."""
+    summary = weekly_summary(session)
+    return await notifier.send_weekly_summary(weekly_lines(summary), f"{summary['from']} – {summary['to']}")
+
+
+async def run_weekly_summary() -> None:
+    try:
+        with Session(engine) as session:
+            sent = await send_weekly_summary(session, deps.get_notifier())
+        logger.info("Weekly summary %s", "sent" if sent else "not sent (no webhook or Discord refused)")
+    except Exception:
+        logger.exception("Weekly summary failed")
 
 
 async def fill_missing_colors(session: Session, scryfall: ScryfallClient) -> int:
@@ -215,6 +230,9 @@ async def run_fill_colors() -> None:
             filled = await fill_missing_colors(session, deps.get_scryfall())
             decks = await fill_deck_colors(session, deps.get_scryfall())
             await fill_deck_commanders(session, deps.get_scryfall())
+            from app.services.deck_insights import fill_card_info
+
+            await fill_card_info(session, deps.get_scryfall())  # types and mana values for the curve
         if filled or decks:
             logger.info("Colours filled in for %s cards and %s decks", filled, decks)
     except Exception:
@@ -255,6 +273,11 @@ def start_scheduler() -> AsyncIOScheduler:
     scheduler.add_job(run_wishlist_check, "interval", hours=settings.wishlist_check_hours, id="wishlist-check")
     if settings.deck_sync_hours > 0:
         scheduler.add_job(run_deck_sync, "interval", hours=settings.deck_sync_hours, id="deck-sync")
+    if settings.weekly_summary_day in {"mon", "tue", "wed", "thu", "fri", "sat", "sun"}:
+        scheduler.add_job(
+            run_weekly_summary, "cron", day_of_week=settings.weekly_summary_day,
+            hour=settings.weekly_summary_hour, id="weekly-summary",
+        )
     scheduler.add_job(run_fill_colors, "date", id="card-colors")  # once, right after starting
     scheduler.start()
     return scheduler

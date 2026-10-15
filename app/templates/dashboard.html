@@ -50,6 +50,18 @@
   {% endif %}
 </div>
 
+<div class="panel week">
+  <h2>This week <span class="muted">· {{ week["from"] }} – {{ week["to"] }}</span></h2>
+  <ul class="week-lines">
+    <li>Collection <strong>{{ week.collection_value | eur }}</strong>{% if week.value_before %}
+      {% set diff = week.collection_value - week.value_before %}<span class="{{ 'up' if diff >= 0 else 'down' }}">{{ '%+.2f' | format(diff) }} ({{ '%+.1f' | format(diff / week.value_before * 100) }}%)</span>{% endif %}</li>
+    {% if week.new_copies %}<li>{{ week.new_copies }} new card{{ 's' if week.new_copies != 1 }} added</li>{% endif %}
+    <li>{% if week.games %}{{ week.games }} game{{ 's' if week.games != 1 }} played, {{ week.wins }} won · {% for name, played in week.decks_played[:3] %}{{ name }} {{ played[0] }}×{{ ', ' if not loop.last }}{% endfor %}{% else %}No games logged this week · <a href="/games">log one</a>{% endif %}</li>
+    {% if week.price_rises %}<li>{{ week.price_rises }} price rise alert{{ 's' if week.price_rises != 1 }}</li>{% endif %}
+  </ul>
+  <p class="muted small">{% if settings.weekly_summary_day %}This summary goes to Discord every {{ settings.weekly_summary_day | capitalize }} at {{ settings.weekly_summary_hour }}:00.{% else %}The weekly Discord summary is off (WEEKLY_SUMMARY_DAY).{% endif %}</p>
+</div>
+
 <div class="panel">
   <h2>Top 10 most valuable cards</h2>
   {% if top_cards %}

@@ -59,6 +59,19 @@ def _scryfall_http_error(exc: ScryfallError) -> HTTPException:
     return HTTPException(status_code=502, detail=str(exc))
 
 
+@router.get("/summary/weekly")
+def weekly(session: Session = Depends(get_session)):
+    """The week in short, as sent to Discord: collection value and change, risers and fallers, games."""
+    summary = stats.weekly_summary(session)
+    for key in ("risers", "fallers"):
+        summary[key] = [
+            {"name": m.card.name, "card_id": m.card.id, "foil": m.is_foil, "old_price": m.old_price, "new_price": m.new_price}
+            for m in summary[key]
+        ]
+    summary["lines"] = stats.weekly_lines(stats.weekly_summary(session))
+    return summary
+
+
 @router.get("/summary", response_model=SummaryOut)
 def summary(session: Session = Depends(get_session)):
     return stats.dashboard(session)
@@ -232,6 +245,18 @@ def clear_wishlist(session: Session = Depends(get_session)):
     stats.record_daily_total(session)
     session.commit()
     return {"removed": removed}
+
+
+@router.get("/tokens")
+async def list_token_versions(name: str, scryfall: ScryfallClient = Depends(get_scryfall)):
+    """The different tokens with a name ("Angel": 4/4 flying, 1/1 lifelink, ...), one print of each."""
+    from app.services.deck_insights import token_versions
+
+    try:
+        versions = await token_versions(scryfall, name)
+    except ScryfallError as exc:
+        raise _scryfall_http_error(exc) from exc
+    return [version.__dict__ for version in versions]
 
 
 @router.get("/printings", response_model=list[PrintingOut])

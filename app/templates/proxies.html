@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Proxies · {{ deck.name }} · MTG Collection Manager{% endblock %}
+
+{% block content %}
+<div class="toolbar no-print">
+  <h1>Proxies <span class="muted">· {{ deck.name }}</span></h1>
+  <div class="actions">
+    {% if everything %}
+    <a href="/decks/{{ deck.id }}/proxies">Only the missing cards</a>
+    {% else %}
+    <a href="/decks/{{ deck.id }}/proxies?all=1">The whole deck</a>
+    {% endif %}
+    <a href="/decks/{{ deck.id }}">← Back to the deck</a>
+    {% if sheet %}<button type="button" onclick="window.print()">Print</button>{% endif %}
+  </div>
+</div>
+<p class="muted no-print">
+  {% if sheet %}{{ sheet | length }} card{{ 's' if sheet | length != 1 }} at real card size (63 × 88 mm), nine to an A4 page.
+  Proxies are for play-testing at home; they are not real cards.{% else %}You have every card for this deck: nothing to print.{% endif %}
+</p>
+<div class="proxy-sheet">
+  {% for name, image in sheet %}
+  <div class="proxy">{% if image %}<img src="{{ image }}" alt="{{ name }}">{% else %}<span>{{ name }}</span>{% endif %}</div>
+  {% endfor %}
+</div>
+{% endblock %}

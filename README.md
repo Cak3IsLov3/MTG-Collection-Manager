@@ -61,6 +61,16 @@ price.
 
 ![Logging a game from the deck page, and the value of the deck's copies over the last month](docs/deck-value.jpg)
 
+![The tokens of a deck with their pictures and a tick box per token for packing, and its mana curve and card types](docs/deck-tokens.jpg)
+
+![Choosing which Angel token: every token with that name, by picture](docs/deck-token-versions.jpg)
+
+![Mana curve and card types of a 100-card deck, with ramp, card draw, removal and board wipes](docs/deck-curve.jpg)
+
+![Proxies: the cards a deck still misses at real card size, ready to print](docs/proxies.jpg)
+
+![This week on the dashboard: the same summary goes to Discord every Monday](docs/dashboard-week.jpg)
+
 ![The game log: per deck how often it was played, its win rate and when it was last played](docs/games.jpg)
 
 ![The randomizer for three players, preferring decks that were not played for a while](docs/decks-random.jpg)
@@ -104,6 +114,7 @@ price.
 - A printing without a price borrows the price of the cheapest printing with the same name, marked "≈ SET"
 - Daily price snapshots, total value over time, top 10 most valuable cards, weekly risers and fallers
 - Price history chart per card
+- Export the collection as a CSV in Moxfield's format (Moxfield, Archidekt and this app import it), and the wishlist with target and current prices
 - A Discord message after the daily price update when cards you own went up in price (by default 25% and at least €1 in 7 days), with how many you have and how many are spare; the dashboard lists them too
 
 **Wishlist (WANT)**
@@ -126,6 +137,11 @@ price.
 - Deck size: basic lands count towards the cards of a deck, so you can see at a glance whether a Commander deck has exactly 100 cards, or how many it is short or over
 - Basic lands per deck: fill in how many of each basic land a deck runs, whatever the printing. Imported decks start with the numbers from the list, and older decks can move their lands over in one click
 - Deck randomizer: can't decide what to play? Pick a random deck, or a different one for every player at the table, optionally only from one bracket or only decks you can build right now, and with a bigger chance for the decks you have not played for a while
+- Tokens per deck: which tokens a deck makes and how many (from the deck list, or added by hand), with their pictures and tick boxes for packing them for game night. There are often several tokens with one name (many Angels): "other version" shows them all to pick from
+- Mana curve and card types per deck: cards per mana value, the average mana value, how many creatures, instants, lands and so on, and how many cards ramp, draw, remove or wipe the board (guessed from the rules text)
+- Proxies: a printable sheet of the cards a deck still misses (or the whole deck) at real card size, nine to an A4 page, for play-testing
+- Export a deck as a text list for Archidekt or Moxfield, with the commander first and its tokens at the end
+- Weekly summary on Discord (by default on Monday at 9:00): collection value and its change, new cards, risers and fallers, and the games you played. The dashboard shows the same under "This week"
 - Commander picture: every deck shows its commander, taken from the Commander category on Archidekt, recognised from the deck name (only when that card can be a commander), or chosen on the deck page
 - Game log: log a game from the Games page or from a deck (date, players, notes, won, lost or draw). Every deck shows how often it was played, its win rate and when it was last played
 - Add cards to a saved deck the same way as to the collection: by name, or by set and card number for one exact version
@@ -178,6 +194,8 @@ All settings are environment variables (see [.env.example](.env.example)).
 | `PRICE_RISE_PCT` | `25` | Discord message when a card you own rose at least this many percent (`0` turns it off) |
 | `PRICE_RISE_MIN_EUR` | `1` | ...and at least this many euros |
 | `PRICE_RISE_DAYS` | `7` | ...compared with its price this many days ago; a card is mentioned once per period |
+| `WEEKLY_SUMMARY_DAY` | `mon` | Day of the weekly Discord summary (`mon` … `sun`; empty turns it off) |
+| `WEEKLY_SUMMARY_HOUR` | `9` | Hour of the weekly summary |
 | `SCRYFALL_MIN_INTERVAL` | `0.1` | Seconds between Scryfall requests (their limit is 10/s) |
 | `SCRYFALL_SLOW_INTERVAL` | `0.6` | Seconds between Scryfall name lookups and bulk requests, which have a much lower limit |
 | `CARDMARKET_MIN_INTERVAL` | `5` | Seconds between Cardmarket requests (plus random jitter) |
@@ -219,6 +237,8 @@ product page. Two things to know:
 | `GET` | `/api/alerts` | Alert history |
 | `GET` | `/api/cards/{id}/prices` | Price history of one card |
 | `GET` | `/api/summary` | Collection value vs. wishlist cost |
+| `GET` | `/api/summary/weekly` | The week in short, as sent to Discord |
+| `GET` | `/api/tokens?name=` | The different tokens with a name, to choose from |
 | `POST` | `/api/decks/check` | Have/missing overview for a decklist or Archidekt URL |
 | `GET` / `POST` | `/api/decks` | List saved decks (`?q=` deck name or card, `?bracket=`, `?colors=WG&color_match=exact\|any\|within`) / save a deck and set its cards aside |
 | `GET` | `/api/decks/random` | Pick random decks (`count`, `bracket`, `complete_only`) |

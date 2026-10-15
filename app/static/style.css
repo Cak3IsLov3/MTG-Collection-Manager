@@ -68,6 +68,23 @@ img.thumb { width: 36px; aspect-ratio: 5 / 7; background: var(--bg); border-radi
 .deck-title { display: flex; align-items: center; gap: 14px; }
 .chart-box.small { height: 200px; }
 h3.value-title { margin: 14px 0 6px; font-size: 15px; }
+.week-lines { margin: 0 0 6px; padding-left: 18px; line-height: 1.8; }
+.small-link { font-size: 13px; }
+.token-grid { display: flex; flex-wrap: wrap; gap: 14px; margin-bottom: 8px; }
+.token-card { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; width: 130px; }
+.token-card img, .token-blank { width: 130px; aspect-ratio: 5 / 7; border-radius: 6px; }
+.token-blank { display: flex; align-items: center; justify-content: center; text-align: center; padding: 8px;
+  border: 1px dashed var(--border); color: var(--muted); }
+.deck-stats { align-items: start; }
+table.compact td { padding: 4px 8px; }
+.roles .badge { margin: 2px 4px 2px 0; }
+.token-version { margin: 0; }
+.token-choices { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; margin: 6px 0;
+  width: min(640px, 80vw); position: relative; z-index: 2; padding: 8px; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; }
+.token-choice { all: unset; cursor: pointer; display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: var(--muted); }
+.token-choice img { width: 100%; aspect-ratio: 5 / 7; border-radius: 5px; }
+.token-choice:hover img, .token-choice:focus-visible img { outline: 2px solid var(--accent); }
+.token-choice.current img { outline: 2px solid var(--up); }
 .result-buttons { display: inline-flex; gap: 6px; align-self: flex-end; padding-bottom: 2px; }
 .badge.result-win { border-color: var(--up); color: var(--up); }
 .badge.result-loss { border-color: var(--down); color: var(--down); }
@@ -242,3 +259,15 @@ details.in-decks ul { margin: 4px 0 2px; padding: 6px 10px; list-style: none; ba
 
 /* Decks that follow an Archidekt link */
 .badge.linked { border-color: var(--up); color: var(--up); }
+
+/* Proxy sheet: real card size, nine to an A4 page when printed. */
+.proxy-sheet { display: flex; flex-wrap: wrap; gap: 2mm; }
+.proxy { width: 63mm; height: 88mm; border-radius: 3mm; overflow: hidden; background: #fff; color: #111;
+  display: flex; align-items: center; justify-content: center; text-align: center; border: 1px solid var(--border); }
+.proxy img { width: 100%; height: 100%; object-fit: cover; }
+@media print {
+  body { background: #fff; }
+  .nav, .no-print, .flash { display: none !important; }
+  main, .container { padding: 0; margin: 0; max-width: none; }
+  .proxy { break-inside: avoid; border: 0.2mm solid #999; }
+}

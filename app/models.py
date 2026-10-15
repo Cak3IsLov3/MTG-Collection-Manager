@@ -131,6 +131,22 @@ class DeckEntry(SQLModel, table=True):
     collector_number: str | None = None
     scryfall_id: str | None = None
     foil: bool | None = None
+    # Looked up on Scryfall for the mana curve, card types and proxies; type_line None: not yet.
+    type_line: str | None = None
+    cmc: float | None = None
+    roles: str | None = None  # "ramp,draw,removal,wipe": what the card does, guessed from its rules text
+    image_url: str | None = None
+
+
+class DeckToken(SQLModel, table=True):
+    """A token a deck makes ("3 Treasure"): a checklist for game night. Not tracked against the collection."""
+
+    id: int | None = Field(default=None, primary_key=True)
+    deck_id: int = Field(foreign_key="deck.id", index=True)
+    name: str
+    quantity: int = 1
+    scryfall_id: str | None = None
+    image_url: str | None = None  # None: not looked up yet; "": none found
 
 
 class DeckBasicLand(SQLModel, table=True):

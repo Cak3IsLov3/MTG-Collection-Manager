@@ -21,6 +21,7 @@ from app.models import (
     DeckEntry,
     DeckPick,
     DeckSkipped,
+    DeckToken,
     PriceSnapshot,
     WishlistEntry,
 )
@@ -85,6 +86,7 @@ class LeftOut:
 
     basics: dict[str, int] = field(default_factory=dict)  # "Plains" -> copies
     tokens: int = 0
+    token_cards: list[DeckCard] = field(default_factory=list)  # which tokens, when the list names them
 
     @property
     def basic_total(self) -> int:
@@ -281,6 +283,7 @@ def select_tracked(
             left_out.basics[land] = left_out.basics.get(land, 0) + card.quantity
         else:
             left_out.tokens += card.quantity
+            left_out.token_cards.append(card)
     left_out.basics = {land: left_out.basics[land] for land in BASIC_LAND_NAMES if land in left_out.basics}
     return tracked, left_out
 
@@ -694,12 +697,75 @@ def _one_line_per_card(cards: list[DeckCard]) -> dict[str, DeckCard]:
     return merged
 
 
-def _set_tokens(session: Session, deck: Deck, tokens: int) -> None:
+def token_name(name: str) -> str:
+    """"Treasure Token" -> "Treasure": the name a token is shown by."""
+    name = name.strip()
+    return name[: -len(" token")].strip() if name.casefold().endswith(" token") else name
+
+
+def _merged_tokens(cards: list[DeckCard]) -> dict[str, DeckCard]:
+    merged: dict[str, DeckCard] = {}
+    for card in cards:
+        name = token_name(card.name)
+        if name in merged:
+            merged[name].quantity += card.quantity
+        else:
+            merged[name] = DeckCard(name, card.quantity, scryfall_id=card.scryfall_id, kind=TOKEN)
+    return merged
+
+
+def _set_tokens(session: Session, deck: Deck, tokens: int, token_cards: list[DeckCard] | None = None) -> None:
+    """Store how many tokens a deck has and, when the list names them, which ones."""
     for row in session.exec(select(DeckSkipped).where(DeckSkipped.deck_id == deck.id, DeckSkipped.kind == TOKEN)).all():
         session.delete(row)
+    if token_cards is not None:
+        for row in session.exec(select(DeckToken).where(DeckToken.deck_id == deck.id)).all():
+            session.delete(row)
     session.flush()
     if tokens > 0:
         session.add(DeckSkipped(deck_id=deck.id, kind=TOKEN, quantity=tokens))
+    for card in _merged_tokens(token_cards or []).values():
+        session.add(DeckToken(deck_id=deck.id, name=card.name, quantity=card.quantity, scryfall_id=card.scryfall_id))
+    session.flush()
+
+
+def deck_tokens(session: Session, deck: Deck) -> list[DeckToken]:
+    return list(session.exec(select(DeckToken).where(DeckToken.deck_id == deck.id).order_by(DeckToken.name)))
+
+
+def _count_named_tokens(session: Session, deck: Deck) -> None:
+    """After editing the token list by hand, the token count follows the list."""
+    _set_tokens(session, deck, sum(token.quantity for token in deck_tokens(session, deck)))
+
+
+def add_token(session: Session, deck: Deck, name: str, quantity: int = 1) -> DeckToken:
+    name = token_name(name)
+    if not name:
+        raise DeckError("Fill in the name of the token, e.g. Treasure")
+    if quantity < 1:
+        raise DeckError("Add at least one token")
+    token = next(
+        (t for t in deck_tokens(session, deck) if name_key(t.name) == name_key(name) and not t.scryfall_id), None
+    )
+    if token is None:
+        token = DeckToken(deck_id=deck.id, name=name, quantity=0)
+    token.quantity += quantity
+    session.add(token)
+    session.flush()
+    _count_named_tokens(session, deck)
+    if deck.uses_tokens is False:
+        deck.uses_tokens = None  # it has tokens now
+        session.add(deck)
+    return token
+
+
+def remove_token(session: Session, deck: Deck, token_id: int) -> None:
+    token = session.get(DeckToken, token_id)
+    if token is None or token.deck_id != deck.id:
+        raise DeckError("That token is not in this deck")
+    session.delete(token)
+    session.flush()
+    _count_named_tokens(session, deck)
 
 
 def save_deck(
@@ -724,7 +790,7 @@ def save_deck(
     session.flush()
     if left_out is not None:
         set_basic_lands(session, deck, left_out.basics)
-        _set_tokens(session, deck, left_out.tokens)
+        _set_tokens(session, deck, left_out.tokens, left_out.token_cards)
     merged = _one_line_per_card(cards)
     for card in merged.values():
         session.add(
@@ -820,8 +886,10 @@ def apply_archidekt(session: Session, deck: Deck, data: dict) -> SyncResult:
     if current.basics != left_out.basics:
         set_basic_lands(session, deck, left_out.basics)
         result.other.append(f"basic lands now {left_out.basic_total}")
-    if current.tokens != left_out.tokens:
-        _set_tokens(session, deck, left_out.tokens)
+    named = {token.name: token.quantity for token in deck_tokens(session, deck)}
+    wanted_tokens = {name: card.quantity for name, card in _merged_tokens(left_out.token_cards).items()}
+    if current.tokens != left_out.tokens or named != wanted_tokens:
+        _set_tokens(session, deck, left_out.tokens, left_out.token_cards)
         result.other.append(f"tokens now {left_out.tokens}")
     bracket = archidekt_bracket(data)
     if bracket and bracket != deck.bracket:
@@ -945,7 +1013,7 @@ def delete_deck(session: Session, deck: Deck) -> None:
         for pick in session.exec(select(DeckPick).where(DeckPick.deck_entry_id == entry.id)).all():
             session.delete(pick)
         session.delete(entry)
-    for model in (DeckSkipped, DeckBasicLand):
+    for model in (DeckSkipped, DeckBasicLand, DeckToken):
         for row in session.exec(select(model).where(model.deck_id == deck.id)).all():
             session.delete(row)
     forget_deck(session, deck.id)  # its games stay in the log

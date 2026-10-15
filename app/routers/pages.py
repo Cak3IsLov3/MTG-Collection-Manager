@@ -6,7 +6,7 @@ from pathlib import PurePath
 from urllib.parse import quote
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import RedirectResponse
+from fastapi.responses import PlainTextResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 from sqlmodel import Session, select
 
@@ -19,7 +19,8 @@ from app.deps import get_scryfall
 from app.models import Card, CollectionEntry, Deck, WishlistEntry
 from app.routers.api import load_deck
 from app.scryfall import CardRef, ScryfallClient, ScryfallError
-from app.services import collection, decks, games, stats, wishlist
+from app.services import collection, deck_insights, decks, games, stats, wishlist
+from app.services.exports import collection_csv, wishlist_csv
 
 logger = logging.getLogger(__name__)
 router = APIRouter(include_in_schema=False)
@@ -178,6 +179,19 @@ def collection_let_app_sort_all(session: Session = Depends(get_session)):
     released = decks.let_app_sort(session)
     session.commit()
     return redirect("/collection", f"The app now shares out {released} new cop{'y' if released == 1 else 'ies'} over your decks")
+
+
+@router.get("/collection/export.csv")
+def collection_export(session: Session = Depends(get_session)):
+    """The collection as a CSV in Moxfield's format: Moxfield, Archidekt and this app can import it."""
+    return Response(collection_csv(session), media_type="text/csv",
+                    headers={"Content-Disposition": 'attachment; filename="collection.csv"'})
+
+
+@router.get("/wishlist/export.csv")
+def wishlist_export(session: Session = Depends(get_session)):
+    return Response(wishlist_csv(session), media_type="text/csv",
+                    headers={"Content-Disposition": 'attachment; filename="wishlist.csv"'})
 
 
 @router.post("/collection/{entry_id}/quantity")
@@ -514,7 +528,13 @@ async def deck_save(
     if not cards:
         return redirect("/deck", "No cards found in that deck", error=True)
     try:
-        left_out = decks.LeftOut(_basic_lands_from(await request.form()), max(0, skipped_token))
+        form = await request.form()
+        token_cards = [
+            decks.DeckCard(key.removeprefix("token:"), int(value), kind=decks.TOKEN)
+            for key, value in form.items()
+            if key.startswith("token:") and str(value).isdigit() and int(value) > 0
+        ]
+        left_out = decks.LeftOut(_basic_lands_from(form), max(0, skipped_token), token_cards)
     except decks.DeckError as exc:
         return redirect("/deck", str(exc), error=True)
     deck = decks.save_deck(
@@ -534,10 +554,16 @@ async def saved_deck_page(
     if deck is None:
         raise HTTPException(status_code=404, detail="Deck not found")
     await _fill_deck_colors(session, scryfall)  # also the commander picture, e.g. after choosing one
+    try:
+        await deck_insights.fill_card_info(session, scryfall, deck.id)  # types, mana values, pictures
+    except ScryfallError as exc:
+        logger.warning("Could not look up the cards of %s: %s", deck.name, exc)
+        session.rollback()
     summaries = decks.deck_summaries(session)
     summary = next(s for s in summaries if s.deck.id == deck.id)
     return render(request, "deck.html", rows=decks.saved_deck_rows(session, deck), deck=deck, uses_tokens=summary.uses_tokens,
                   value_history=decks.deck_value_history(session, deck),
+                  deck_token_list=decks.deck_tokens(session, deck), deck_stats=deck_insights.deck_stats(session, deck),
                   deck_plays=games.deck_plays(session).get(deck.id), deck_games=games.recent_games(session, 5, deck.id),
                   results=games.RESULTS, today=dt.date.today().isoformat(),
                   summaries=summaries, left_out=decks.deck_left_out(session, deck),
@@ -653,6 +679,84 @@ def saved_deck_new_copy(deck_id: int, entry_id: int, session: Session = Depends(
         return redirect(f"/decks/{deck_id}", str(exc), error=True)
     session.commit()
     return redirect(f"/decks/{deck_id}", message)
+
+
+@router.post("/decks/{deck_id}/tokens")
+def saved_deck_add_token(
+    deck_id: int, name: str = Form(""), quantity: int = Form(1), session: Session = Depends(get_session)
+):
+    deck = session.get(Deck, deck_id)
+    if deck is None:
+        return redirect("/deck", "Deck not found", error=True)
+    try:
+        token = decks.add_token(session, deck, name, quantity)
+    except decks.DeckError as exc:
+        return redirect(f"/decks/{deck_id}", str(exc), error=True)
+    session.commit()
+    return redirect(f"/decks/{deck_id}", f"Added {quantity}× {token.name} to the tokens of this deck")
+
+
+@router.post("/decks/{deck_id}/tokens/{token_id}/delete")
+def saved_deck_remove_token(deck_id: int, token_id: int, session: Session = Depends(get_session)):
+    deck = session.get(Deck, deck_id)
+    if deck is None:
+        return redirect("/deck", "Deck not found", error=True)
+    try:
+        decks.remove_token(session, deck, token_id)
+    except decks.DeckError as exc:
+        return redirect(f"/decks/{deck_id}", str(exc), error=True)
+    session.commit()
+    return redirect(f"/decks/{deck_id}", "Token removed")
+
+
+@router.post("/decks/{deck_id}/tokens/{token_id}/version")
+async def saved_deck_token_version(
+    deck_id: int, token_id: int, scryfall_id: str = Form(...), session: Session = Depends(get_session),
+    scryfall: ScryfallClient = Depends(get_scryfall),
+):
+    """Choose which of the tokens with that name the deck uses (there are many Angels)."""
+    deck = session.get(Deck, deck_id)
+    if deck is None:
+        return redirect("/deck", "Deck not found", error=True)
+    try:
+        token = await deck_insights.choose_token_version(session, scryfall, deck, token_id, scryfall_id)
+    except (ValueError, ScryfallError) as exc:
+        return redirect(f"/decks/{deck_id}", f"Could not change the token: {exc}", error=True)
+    session.commit()
+    return redirect(f"/decks/{deck_id}", f"Changed the {token.name} token")
+
+
+def _download_name(name: str) -> str:
+    return "".join(ch if ch.isalnum() or ch in " -_" else "_" for ch in name).strip() or "deck"
+
+
+@router.get("/decks/{deck_id}/export.txt")
+def saved_deck_export(deck_id: int, session: Session = Depends(get_session)):
+    """The deck as a text list for Archidekt or Moxfield."""
+    deck = session.get(Deck, deck_id)
+    if deck is None:
+        raise HTTPException(status_code=404, detail="Deck not found")
+    text = deck_insights.export_text(session, deck, decks.saved_deck_rows(session, deck))
+    filename = quote(f"{_download_name(deck.name)}.txt")
+    return PlainTextResponse(text, headers={"Content-Disposition": f"attachment; filename*=UTF-8''{filename}"})
+
+
+@router.get("/decks/{deck_id}/proxies")
+async def saved_deck_proxies(
+    deck_id: int, request: Request, all: bool = False, session: Session = Depends(get_session),
+    scryfall: ScryfallClient = Depends(get_scryfall),
+):
+    """A printable sheet of the missing cards (or the whole deck), to play-test with."""
+    deck = session.get(Deck, deck_id)
+    if deck is None:
+        raise HTTPException(status_code=404, detail="Deck not found")
+    try:
+        await deck_insights.fill_card_info(session, scryfall, deck.id)
+    except ScryfallError:
+        session.rollback()
+    rows = decks.saved_deck_rows(session, deck)
+    return render(request, "proxies.html", deck=deck, sheet=deck_insights.proxies(session, rows, everything=all),
+                  everything=all)
 
 
 @router.post("/deck/sync")
