@@ -348,10 +348,7 @@ def apply_token_suggestions(session: Session, deck: Deck, scryfall_id: str | Non
         changed += 1
     if changed:
         session.flush()
-        _count_named_tokens(session, deck)
-        if deck.uses_tokens is False:
-            deck.uses_tokens = None  # it has tokens now
-            session.add(deck)
+        _count_named_tokens(session, deck)  # "Tokens owned" stays as you set it
         session.flush()
     return changed
 

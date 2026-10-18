@@ -756,10 +756,7 @@ def add_token(session: Session, deck: Deck, name: str, quantity: int = 1) -> Dec
     token.quantity += quantity
     session.add(token)
     session.flush()
-    _count_named_tokens(session, deck)
-    if deck.uses_tokens is False:
-        deck.uses_tokens = None  # it has tokens now
-        session.add(deck)
+    _count_named_tokens(session, deck)  # "Tokens owned" stays as you set it: listing a token is not owning it
     return token
 
 

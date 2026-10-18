@@ -76,8 +76,8 @@
       </select>
     </label>
     <input type="hidden" name="tokens_shown" value="1" form="deck-form">
-    <label class="token-toggle {{ 'on' if uses_tokens }}" title="Tick when this deck has tokens, so you know to bring them">
-      <input type="checkbox" name="uses_tokens" form="deck-form" {{ 'checked' if uses_tokens }}>Has tokens</label>
+    <label class="token-toggle {{ 'on' if uses_tokens }}" title="Tick when you have the tokens this deck needs">
+      <input type="checkbox" name="uses_tokens" form="deck-form" {{ 'checked' if uses_tokens }}>Tokens owned</label>
     <button form="deck-form" class="deck-save small">Save changes</button>
   </div>
   <div class="actions deck-tools">
@@ -119,7 +119,7 @@
       {% if summaries | selectattr('deck.bracket', 'none') | list %}<option value="none">No bracket</option>{% endif %}
     </select>
     <label class="check muted"><input id="deck-complete-filter" type="checkbox">&nbsp;Only complete decks</label>
-    <label class="check muted"><input id="deck-tokens-filter" type="checkbox">&nbsp;Only decks with tokens</label>
+    <label class="check muted"><input id="deck-tokens-filter" type="checkbox">&nbsp;Only decks whose tokens I own</label>
     <span id="deck-filter-count" class="muted"></span>
   </div>
   <div class="toolbar search-bar color-bar">
@@ -151,7 +151,7 @@
         <div><a href="/decks/{{ s.deck.id }}">{{ s.deck.name }}</a>
         {{ pips(s.deck.colors) }}
         <div class="muted small deck-hit" hidden></div>{% if s.deck.archidekt_id %} <span class="badge linked" title="Follows its deck on Archidekt">↻ Archidekt</span>{% endif %}
-        {% if s.uses_tokens %}<span class="badge tokens" title="This deck has tokens{% if s.tokens %}: {{ s.tokens }} in its deck list{% endif %}">● tokens</span>{% endif %}</div></td>
+        {% if s.uses_tokens %}<span class="badge tokens" title="You have the tokens of this deck{% if s.tokens %} ({{ s.tokens }} on its list){% endif %}">✓ tokens owned</span>{% endif %}</div></td>
       {% set warning = (bracket_warnings | default({})).get(s.deck.id) %}
       <td>{% if s.bracket_name %}<span class="badge bracket">{{ s.deck.bracket }} · {{ s.bracket_name }}</span>{% else %}<span class="muted">–</span>{% endif %}
         {% if warning %}<a class="badge warn" href="/decks/{{ s.deck.id }}" title="Does not fit bracket {{ s.deck.bracket }}: {{ warning | join('; ') }}">⚠</a>{% endif %}</td>

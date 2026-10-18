@@ -66,7 +66,7 @@ Press **▶ Play** on a deck and the stream screen opens with every token that d
 
 ![Searching the saved decks for a card: every deck that runs Sol Ring, with the matching card under its name](docs/decks-search.jpg)
 
-![Only the decks with tokens: the decks marked "tokens", so you know which ones need tokens at the table](docs/decks-tokens.jpg)
+![Only the decks whose tokens you own: the decks marked "tokens owned", ready to play](docs/decks-tokens.jpg)
 
 ![The saved decks filtered on bracket 3: two of the six decks are left](docs/decks-filter.jpg)
 
@@ -74,7 +74,7 @@ Press **▶ Play** on a deck and the stream screen opens with every token that d
 
 ![The saved decks sorted on missing cards: the decks closest to done first](docs/decks-sorted.jpg)
 
-![A saved deck: its commander, bracket and "Has tokens", an overview of cards, value, deck size and games, and tabs for its cards, analysis, improvements, lands and tokens, games and value, and Archidekt](docs/deck.jpg)
+![A saved deck: its commander, bracket and "Tokens owned", an overview of cards, value, deck size and games, and tabs for its cards, analysis, improvements, lands and tokens, games and value, and Archidekt](docs/deck.jpg)
 
 ![The Analysis tab of a deck: mana curve and card types, then the bracket check and the combos](docs/deck-analysis.jpg)
 
@@ -217,7 +217,7 @@ Press **▶ Play** on a deck and the stream screen opens with every token that d
 - One "Save changes" button per deck: bracket, basic lands and chosen printings are edited freely and stored together, with a reminder while there are unsaved changes
 - Commander bracket per deck: taken from Archidekt when the deck has one, and changeable at any time
 - Filter the list of saved decks by bracket, or show only the decks that are complete
-- "Has tokens" on a deck: a deck whose list has tokens is marked by itself, and you can tick or untick it on the deck page. The saved decks show a "tokens" badge and can be filtered on it, so you know which decks need tokens at the table
+- "Tokens owned" on a deck: tick it when you have the tokens the deck needs. Until you set it, a deck whose list has tokens counts as ticked; adding tokens to its list never ticks it for you. The saved decks show a "tokens owned" badge and can be filtered on it, so you know which decks are ready to play
 - Search the saved decks on deck name or on a card: "arcane signet" lists every deck that runs it, with the matching cards under the deck name
 - Filter the saved decks on colour: every deck shows the colour identity of its cards, and you pick decks with exactly, any of, or within the chosen colours
 - Sort the saved decks by how many cards they still miss, or by name, bracket, size, progress or value
@@ -328,7 +328,7 @@ product page. Two things to know:
 | `POST` | `/api/decks/{id}/cards/{entry_id}/new-copy` | Put a new copy from an import, that waits to be sorted, in this deck |
 | `POST` | `/api/collection/let-app-sort` | Let the app share out the new copies from imports over the decks (`?entry_id=` for one card) |
 | `PUT` | `/api/decks/{id}/basic-lands` | Set how many of each basic land a deck runs |
-| `PUT` | `/api/decks/{id}/tokens` | Mark a deck as one that has tokens, or not (`null` follows the deck list) |
+| `PUT` | `/api/decks/{id}/tokens` | Mark that you own the tokens of a deck, or not (`null` follows the deck list) |
 | `PUT` | `/api/decks/{id}/commander` | Choose the commander of a deck (a card in it), or `null` for none |
 | `GET` | `/api/decks/{id}/value-history` | What the copies in a deck were worth on every day with prices |
 | `GET` / `POST` | `/api/games` | The game log (`?deck_id=` for one deck) / log a game |

@@ -544,7 +544,7 @@ def test_mark_a_deck_as_using_tokens(client):
     client.put(f"/api/decks/{with_tokens['id']}/tokens", json={"uses_tokens": None})
     assert tokens()["Rabbits"] == (True, 3)
 
-    # The "Has tokens" box on the deck page is saved with the other changes.
+    # The "Tokens owned" box on the deck page is saved with the other changes.
     client.post(f"/decks/{plain['id']}/save", data={"tokens_shown": "1"})  # unticked
     assert tokens()["Plain"] == (False, 0)
     client.post(f"/decks/{plain['id']}/save", data={"tokens_shown": "1", "uses_tokens": "on"})
@@ -553,4 +553,10 @@ def test_mark_a_deck_as_using_tokens(client):
     assert 'name="uses_tokens" form="deck-form" checked' in page
 
     overview = client.get("/deck").text
-    assert overview.count("● tokens</span>") == 2 and 'id="deck-tokens-filter"' in overview
+    assert overview.count("✓ tokens owned</span>") == 2 and 'id="deck-tokens-filter"' in overview
+    assert "Tokens owned</label>" in page and "Only decks whose tokens I own" in overview
+
+    # Putting a token on the list does not tick the box: listing a token is not owning it.
+    client.post(f"/decks/{plain['id']}/save", data={"tokens_shown": "1"})
+    client.post(f"/decks/{plain['id']}/tokens", data={"name": "Treasure", "quantity": 2})
+    assert tokens()["Plain"] == (False, 2)
