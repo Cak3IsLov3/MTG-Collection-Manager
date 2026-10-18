@@ -681,9 +681,12 @@ async def saved_deck_page(
     except EdhrecError as exc:
         logger.warning("EDHREC: %s", exc)
         edhrec_comparison, edhrec_error = None, str(exc)
+    deck_rows = decks.saved_deck_rows(session, deck)
+    if decks.update_commander_image(session, deck, deck_rows):  # the printing you have, not just any
+        session.commit()
     summaries = decks.deck_summaries(session)
     summary = next(s for s in summaries if s.deck.id == deck.id)
-    return render(request, "deck.html", rows=decks.saved_deck_rows(session, deck), deck=deck, uses_tokens=summary.uses_tokens,
+    return render(request, "deck.html", rows=deck_rows, deck=deck, uses_tokens=summary.uses_tokens,
                   value_history=decks.deck_value_history(session, deck),
                   deck_token_list=decks.deck_tokens(session, deck), deck_stats=deck_insights.deck_stats(session, deck),
                   token_suggestions=await _token_suggestions(session, scryfall, deck),

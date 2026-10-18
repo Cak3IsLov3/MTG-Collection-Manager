@@ -152,3 +152,13 @@ def test_rarity_and_bracket_colours(client):
     assert 'class="set-mark rarity-uncommon"' in page and '<span class="rarity-uncommon">CMM</span>' in page
     client.post("/api/decks", json={"name": "Ramp", "decklist": "1 Sol Ring", "bracket": 4})
     assert 'class="badge bracket bracket-4"' in client.get("/deck").text
+
+
+def test_commander_picture_follows_the_printing(client):
+    # You own Sol Ring in two printings; the deck list names the CMM #410 one, and that is its picture.
+    client.post("/api/collection", json={"name": "Sol Ring", "set_code": "cmm"})
+    client.post("/api/collection", json={"set_code": "cmm", "collector_number": "410"})
+    deck = client.post("/api/decks", json={"name": "Ring", "decklist": "1 Sol Ring (cmm) 410"}).json()
+    client.put(f"/api/decks/{deck['id']}/commander", json={"commander": "Sol Ring"})
+    page = client.get(f"/decks/{deck['id']}").text
+    assert 'class="commander-art" src="https://img.example/id-sol-cmm-art.jpg"' in page

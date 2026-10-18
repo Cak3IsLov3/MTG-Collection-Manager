@@ -4,7 +4,6 @@ __pycache__/
 .pytest_cache/
 .env
 *.db
-.claude/
 *.bak
 backups/
 # The token overlay's board, presets and deck (and their temporary files)

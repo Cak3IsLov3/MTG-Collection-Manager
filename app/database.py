@@ -64,10 +64,18 @@ def run_data_migrations(target=None) -> None:
         return
     with target.begin() as connection:
         version = connection.exec_driver_sql("PRAGMA user_version").scalar() or 0
+        tables = {row[0] for row in connection.exec_driver_sql("SELECT name FROM sqlite_master WHERE type = 'table'")}
         if version < 1:
             # Emblems are now found too: look the planeswalkers of decks up again.
-            connection.exec_driver_sql("UPDATE deckentry SET token_parts = NULL WHERE type_line LIKE '%Planeswalker%'")
+            if "deckentry" in tables:
+                connection.exec_driver_sql("UPDATE deckentry SET token_parts = NULL WHERE type_line LIKE '%Planeswalker%'")
             connection.exec_driver_sql("PRAGMA user_version = 1")
+            version = 1
+        if version < 2:
+            # Commander pictures now follow the printing of the deck: look them up again.
+            if "deck" in tables:
+                connection.exec_driver_sql("UPDATE deck SET commander_image = NULL WHERE commander IS NOT NULL AND commander != ''")
+            connection.exec_driver_sql("PRAGMA user_version = 2")
 
 
 def init_db() -> None:

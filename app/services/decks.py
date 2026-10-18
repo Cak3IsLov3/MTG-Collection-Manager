@@ -1208,6 +1208,37 @@ def _can_command(type_line: str) -> bool:
     return "Legendary" in type_line and ("Creature" in type_line or "Planeswalker" in type_line)
 
 
+def deck_list_commander_image(session: Session, deck: Deck) -> str | None:
+    """The picture of the commander in the printing the deck list names, if it names one."""
+    for entry in session.exec(select(DeckEntry).where(DeckEntry.deck_id == deck.id)).all():
+        if not _names(entry.name) & _names(deck.commander or ""):
+            continue
+        if entry.scryfall_id:
+            card = session.exec(select(Card).where(Card.scryfall_id == entry.scryfall_id)).first()
+            if card is not None and card.image_url:
+                return card.image_url
+        return entry.image_url or None
+    return None
+
+
+def update_commander_image(session: Session, deck: Deck, rows: list[DeckRow]) -> bool:
+    """Show the commander in the printing this deck uses (the copy set aside for it), else the one
+    the deck list names. Returns whether the picture changed."""
+    if not deck.commander:
+        return False
+    row = next((r for r in rows if _names(r.name) & _names(deck.commander)), None)
+    image = None
+    if row is not None and row.picks:
+        image = row.picks[0][0].card.image_url
+    image = image or deck_list_commander_image(session, deck)
+    if not image or image == deck.commander_image:
+        return False
+    deck.commander_image = image
+    session.add(deck)
+    session.flush()
+    return True
+
+
 async def fill_deck_commanders(session: Session, scryfall: ScryfallClient) -> int:
     """Work out the commander of decks that have none yet, and fetch the picture of every commander
     that has none. Returns the number of pictures found.
@@ -1251,7 +1282,9 @@ async def fill_deck_commanders(session: Session, scryfall: ScryfallClient) -> in
     pending = [deck for deck in pending if deck.commander]
     filled = 0
     for deck in pending:
-        image = next((images[key] for key in _names(deck.commander) if key in images), None)
+        # The printing the deck list names comes first: you may own the card in several versions.
+        image = deck_list_commander_image(session, deck)
+        image = image or next((images[key] for key in _names(deck.commander) if key in images), None)
         deck.commander_image = image or ""  # "": looked for, nothing found
         session.add(deck)
         filled += 1 if image else 0
