@@ -23,6 +23,8 @@ def upsert_card(session: Session, data: ScryfallCard) -> Card:
     card.image_url = data.image_url
     if data.colors is not None:
         card.colors = data.colors
+    if data.rarity:
+        card.rarity = data.rarity
     session.add(card)
     session.flush()
     return card

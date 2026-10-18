@@ -253,6 +253,76 @@ def log_stats(session: Session, today: dt.date | None = None) -> LogStats:
     return stats
 
 
+@dataclass
+class GameNight:
+    """All the games of one day."""
+
+    night: dt.date
+    games: list[Game] = field(default_factory=list)
+    winners: dict[str, int] = field(default_factory=dict)  # "You", "Sam" -> games won
+    decks: dict[str, int] = field(default_factory=dict)  # your decks played -> games
+    commanders: dict[str, int] = field(default_factory=dict)  # commanders you played against -> games
+    players: list[str] = field(default_factory=list)  # who else was there
+    sent: bool = False  # the recap went to Discord
+
+    @property
+    def wins(self) -> int:
+        return sum(game.result == "win" for game in self.games)
+
+    def lines(self, deck_names: dict[int, str] | None = None) -> list[str]:
+        """The night in short, for Discord."""
+        played = len(self.games)
+        lines = [f"**{played} game{'s' if played != 1 else ''}**, you won {self.wins}"]
+        if self.players:
+            lines.append(f"**At the table** {', '.join(self.players)}")
+        if self.winners:
+            lines.append("**Wins** " + " · ".join(f"{name} {count}×" for name, count in self.winners.items()))
+        if self.decks:
+            lines.append("**Your decks** " + " · ".join(f"{name} {count}×" for name, count in self.decks.items()))
+        if self.commanders:
+            lines.append("**Against** " + " · ".join(f"{name} {count}×" for name, count in self.commanders.items()))
+        notes = [game.notes for game in self.games if game.notes]
+        if notes:
+            lines.append("**Notes** " + " · ".join(notes[:5]))
+        return lines
+
+
+def game_nights(session: Session, limit: int | None = None) -> list[GameNight]:
+    """The game nights (days with games), newest first, with who won and what was played."""
+    from app.models import GameNightRecap
+
+    sent = set(session.exec(select(GameNightRecap.night)).all())
+    names = {deck.id: deck.name for deck in session.exec(select(Deck))}
+    nights: dict[dt.date, GameNight] = {}
+    for game in session.exec(select(Game).order_by(Game.played_on.desc(), Game.id)):
+        night = nights.get(game.played_on) or nights.setdefault(game.played_on, GameNight(game.played_on, sent=game.played_on in sent))
+        night.games.append(game)
+        winner = "You" if game.result == "win" else game.winner
+        if winner:
+            night.winners[winner] = night.winners.get(winner, 0) + 1
+        deck_name = names.get(game.deck_id, game.deck_name)
+        night.decks[deck_name] = night.decks.get(deck_name, 0) + 1
+        for name in split_names(game.opponents):
+            if name.casefold() not in {p.casefold() for p in night.players}:
+                night.players.append(name)
+        for commander in game_commanders(game).values():
+            night.commanders[commander] = night.commanders.get(commander, 0) + 1
+    result = list(nights.values())
+    for night in result:
+        night.winners = dict(sorted(night.winners.items(), key=lambda item: -item[1]))
+        night.decks = dict(sorted(night.decks.items(), key=lambda item: -item[1]))
+        night.commanders = dict(sorted(night.commanders.items(), key=lambda item: -item[1]))
+    return result[:limit] if limit else result
+
+
+def mark_recap_sent(session: Session, night: dt.date) -> None:
+    from app.models import GameNightRecap
+
+    if session.exec(select(GameNightRecap).where(GameNightRecap.night == night)).first() is None:
+        session.add(GameNightRecap(night=night))
+        session.flush()
+
+
 def deck_plays(session: Session) -> dict[int, DeckPlays]:
     """Per saved deck: games played, wins, losses, draws and the last time it was played."""
     plays: dict[int, DeckPlays] = {}

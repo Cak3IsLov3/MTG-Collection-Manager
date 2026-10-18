@@ -37,7 +37,7 @@ def scryfall_json(name, scryfall_id, set_code="tst", eur="1.00", eur_foil=None, 
 
 
 CARDS = [
-    scryfall_json("Sol Ring", "id-sol", "cmm", eur="1.50", eur_foil="4.00", color_identity=[],
+    scryfall_json("Sol Ring", "id-sol", "cmm", eur="1.50", eur_foil="4.00", color_identity=[], rarity="uncommon",
                   type_line="Artifact", cmc=1.0, oracle_text="{T}: Add {C}{C}."),
     scryfall_json("Sol Ring", "id-sol-lea", "lea", eur="900.00"),
     scryfall_json("Sol Ring", "id-sol-cmm-art", "cmm", eur="6.00", collector_number="410"),

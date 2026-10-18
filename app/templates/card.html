@@ -9,7 +9,7 @@
   <div>
     <h1>{{ card.name }}</h1>
     <p class="muted">
-      {{ card.set_name }} ({{ card.set_code | upper }}{% if card.collector_number %} #{{ card.collector_number }}{% endif %})
+      <span class="set-mark rarity-{{ card.rarity or 'unknown' }}"></span>{{ card.set_name }} (<span class="rarity-{{ card.rarity or 'unknown' }}">{{ card.set_code | upper }}</span>{% if card.collector_number %} #{{ card.collector_number }}{% endif %}){% if card.rarity %} · <span class="rarity-{{ card.rarity }}">{{ card.rarity | capitalize }}</span>{% endif %}
       · <a href="https://scryfall.com/card/{{ card.scryfall_id }}" target="_blank" rel="noopener">Scryfall ↗</a>
     </p>
 

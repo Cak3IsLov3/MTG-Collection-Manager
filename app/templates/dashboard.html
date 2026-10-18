@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_empty.html" import empty %}
 {% block title %}Dashboard · MTG Collection Manager{% endblock %}
 
 {% macro mover_table(movers, direction) %}
@@ -85,7 +86,7 @@
     {% endfor %}
   </div>
   {% else %}
-  <p class="muted">Your collection is empty. <a href="/collection">Add cards or import a CSV</a>.</p>
+  {{ empty("W", "Your collection is empty", "Add cards or import a CSV, and what they are worth shows up here every day.", "/collection#add", "Go to your collection") }}
   {% endif %}
 </div>
 

@@ -92,9 +92,10 @@ def _token_parts(data: ScryfallCard) -> str:
 def _store(entry: DeckEntry, data: ScryfallCard | None) -> None:
     if data is None:
         entry.type_line, entry.roles, entry.bracket_flags = "", "", ""  # looked up, not found: not again
-        entry.token_parts = "[]"
+        entry.token_parts, entry.colors = "[]", ""
         return
     entry.token_parts = _token_parts(data)
+    entry.colors = data.colors or ""
     entry.type_line = data.type_line
     entry.cmc = data.cmc
     entry.roles = card_roles(data.type_line, data.oracle_text)
@@ -107,6 +108,7 @@ async def fill_card_info(session: Session, scryfall: ScryfallClient, deck_id: in
     (of one deck, or of all), and the pictures of their tokens. Returns the number of cards filled in."""
     statement = select(DeckEntry).where(or_(
         DeckEntry.type_line == None, DeckEntry.bracket_flags == None, DeckEntry.token_parts == None,  # noqa: E711
+        DeckEntry.colors == None,  # noqa: E711
     ))
     if deck_id is not None:
         statement = statement.where(DeckEntry.deck_id == deck_id)
@@ -412,6 +414,8 @@ class DeckStats:
     """Mana curve, card types and roles of a deck, counted per copy."""
 
     curve: dict[str, int] = field(default_factory=dict)  # "0" .. "6", "7+" -> cards (lands not counted)
+    # The same per colour: "W" .. "G", "M" (more than one colour), "C" (colourless) -> cards per mana value.
+    curve_colors: dict[str, list[int]] = field(default_factory=dict)
     types: dict[str, int] = field(default_factory=dict)  # "Creature" -> cards, basic lands included
     roles: dict[str, int] = field(default_factory=dict)  # "Ramp" -> cards
     average_cmc: float | None = None
@@ -435,7 +439,12 @@ def deck_stats(session: Session, deck: Deck) -> DeckStats:
             stats.roles[ROLES[role]] = stats.roles.get(ROLES[role], 0) + entry.quantity
         if kind != "Land":
             cmc = int(entry.cmc or 0)
-            stats.curve["7+" if cmc >= 7 else str(cmc)] += entry.quantity
+            bucket = "7+" if cmc >= 7 else str(cmc)
+            stats.curve[bucket] += entry.quantity
+            colors = entry.colors or ""
+            colour = colors if len(colors) == 1 else "M" if colors else "C"
+            per_value = stats.curve_colors.setdefault(colour, [0] * len(stats.curve))
+            per_value[list(stats.curve).index(bucket)] += entry.quantity
             spells += entry.quantity
             total_cmc += (entry.cmc or 0) * entry.quantity
     lands = sum(row.quantity for row in session.exec(select(DeckBasicLand).where(DeckBasicLand.deck_id == deck.id)))
@@ -444,6 +453,7 @@ def deck_stats(session: Session, deck: Deck) -> DeckStats:
     stats.types = {kind: stats.types[kind] for kind in TYPES if stats.types.get(kind)}
     stats.roles = {label: stats.roles[label] for label in ROLES.values() if stats.roles.get(label)}
     stats.average_cmc = round(total_cmc / spells, 2) if spells else None
+    stats.curve_colors = {c: stats.curve_colors[c] for c in "WUBRGMC" if c in stats.curve_colors}
     return stats
 
 

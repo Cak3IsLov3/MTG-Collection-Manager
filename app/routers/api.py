@@ -1,5 +1,6 @@
 """JSON API."""
 
+import datetime as dt
 from dataclasses import dataclass
 from typing import Literal
 
@@ -792,6 +793,34 @@ def make_backup():
     if made is None:
         raise HTTPException(status_code=400, detail="Backups are off (BACKUP_KEEP=0) or the database is not a file")
     return {"file": str(made), "backups": [b.name for b in backup.list_backups()]}
+
+
+@router.get("/games/nights")
+def list_game_nights(session: Session = Depends(get_session)):
+    """The game nights (days with games), newest first."""
+    return [
+        {"night": n.night, "games": len(n.games), "wins": n.wins, "winners": n.winners, "decks": n.decks,
+         "commanders": n.commanders, "players": n.players, "sent": n.sent}
+        for n in games.game_nights(session)
+    ]
+
+
+@router.post("/games/nights/{night}/discord")
+async def send_game_night(night: dt.date, session: Session = Depends(get_session)):
+    """Post the recap of a game night to Discord."""
+    from app.deps import get_notifier
+
+    if not await jobs.send_game_night(session, get_notifier(), night):
+        raise HTTPException(status_code=400, detail="No games that day, no webhook, or Discord refused it")
+    return {"sent": True}
+
+
+@router.get("/search")
+def search_everything(q: str = "", session: Session = Depends(get_session)):
+    """One search over your cards, decks and wishlist."""
+    from app.services.search import search
+
+    return search(session, q)
 
 
 @router.get("/decks/{deck_id}/bracket-check")

@@ -200,7 +200,7 @@ def test_add_exact_printing_by_set_and_collector_number(client):
     assert client.post("/api/collection", json={"set_code": "cmm", "collector_number": "999"}).status_code == 404
 
     form = client.post("/collection/add", data={"set_code": "cmm", "collector_number": "#410", "quantity": "1"})
-    assert "Added Sol Ring (CMM #410)" in form.text and "(CMM #410)" in client.get("/collection").text
+    assert "Added Sol Ring (CMM #410)" in form.text and "CMM</span> #410)" in client.get("/collection").text
     assert "Fill in the set" in client.post("/collection/add", data={"name": "Sol Ring", "collector_number": "410"}).text
 
 
@@ -298,7 +298,7 @@ def test_remove_all_from_the_wishlist(client):
     assert 'action="/wishlist/clear"' in page and 'data-confirm="Click again to remove all 3 cards"' in page
 
     cleared = client.post("/wishlist/clear")
-    assert "Removed all 3 cards from your wishlist" in cleared.text and "Nothing on your wishlist yet." in cleared.text
+    assert "Removed all 3 cards from your wishlist" in cleared.text and "Nothing on your wishlist yet" in cleared.text
     assert client.get("/api/wishlist").json() == {"total_cost": 0.0, "items": []}
     summary = client.get("/api/summary").json()
     assert (summary["wishlist_count"], summary["wishlist_cost"], summary["card_count"]) == (0, 0.0, 1)  # collection untouched
@@ -443,7 +443,8 @@ async def test_colours_are_filled_in_for_cards_stored_earlier(session, scryfall,
     session.add(Card(name="Fire // Ice", set_code="mh2", set_name="Set MH2", scryfall_id="id-fire"))
     session.add(Card(name="Sol Ring", set_code="cmm", set_name="Set CMM", scryfall_id="id-sol", colors=""))
     session.commit()
-    assert await fill_missing_colors(session, scryfall) == 1
+    # Fire // Ice gets its colours, and both get their rarity (kept since later).
+    assert await fill_missing_colors(session, scryfall) == 2
     assert session.exec(select(Card).where(Card.scryfall_id == "id-fire")).one().colors == "UR"
     assert await fill_missing_colors(session, scryfall) == 0
 

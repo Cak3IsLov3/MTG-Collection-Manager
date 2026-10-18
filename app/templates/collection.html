@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from "_colour_filter.html" import colour_filter, pips %}
+{% from "_empty.html" import empty %}
 {% block title %}Collection · MTG Collection Manager{% endblock %}
 
 {% block content %}
@@ -189,7 +190,7 @@
         </details>
         {% endif %}
       </td>
-      <td class="muted">{{ row.card.set_name }} ({{ row.card.set_code | upper }}{% if row.card.collector_number %} #{{ row.card.collector_number }}{% endif %})</td>
+      <td class="muted"><span class="set-mark rarity-{{ row.card.rarity or 'unknown' }}" title="{{ (row.card.rarity or '') | capitalize }}"></span>{{ row.card.set_name }} (<span class="rarity-{{ row.card.rarity or 'unknown' }}">{{ row.card.set_code | upper }}</span>{% if row.card.collector_number %} #{{ row.card.collector_number }}{% endif %})</td>
       <td class="num">
         <form class="inline qty-form" method="post" action="/collection/{{ row.entry.id }}/quantity">
           <input class="qty" name="quantity" type="number" min="1" step="1" value="{{ row.entry.quantity }}"
@@ -220,7 +221,7 @@
     {% endfor %}
   </table>
   {% else %}
-  <p class="muted">No cards yet. Add one above or import a CSV export.</p>
+  {{ empty("G", "Your collection is empty", "Add a card by name, or import the CSV export of Archidekt or Moxfield. Their value shows up on the dashboard every day.", "#add", "Add or import cards") }}
   {% endif %}
 </div>
 </div>

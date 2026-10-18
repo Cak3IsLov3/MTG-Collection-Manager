@@ -1,0 +1,9 @@
+{# A friendly empty screen: a mana symbol, what is missing and a button to get started. #}
+{% macro empty(symbol, title, text, href=None, label=None) %}
+<div class="empty-state">
+  <img class="empty-symbol" src="https://svgs.scryfall.io/card-symbols/{{ symbol }}.svg" alt="" draggable="false">
+  <h3>{{ title }}</h3>
+  <p class="muted">{{ text }}</p>
+  {% if href %}<a class="button-link empty-action" href="{{ href }}">{{ label }}</a>{% endif %}
+</div>
+{% endmacro %}

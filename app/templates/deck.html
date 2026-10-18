@@ -45,8 +45,11 @@
   {% if source and source.card.image_url %}<img class="thumb" src="{{ source.card.image_url }}" alt="" loading="lazy">{% endif %}
 {% endmacro %}
 
+{% macro combo_cards(combo) %}{% for name in combo.cards %}<span data-card-name="{{ name }}">{{ name }}</span>{{ ' + ' if not loop.last }}{% endfor %}{% endmacro %}
+
 {% block content %}
 {% if deck %}
+<div class="deck-hero{{ ' with-art' if deck.commander_image }}"{% if deck.commander_image %} style="--hero: url('{{ deck.commander_image | replace('/normal/', '/art_crop/') }}')"{% endif %}>
 <div class="toolbar">
   <div class="deck-title">
     {% if deck.commander_image %}<img class="commander-art" src="{{ deck.commander_image }}" alt="{{ deck.commander }}">{% endif %}
@@ -92,6 +95,7 @@
     </form>
   </div>
   </div>
+</div>
 </div>
 {% else %}
 <h1>Decks <span class="muted">· {{ summaries | length }} saved</span></h1>
@@ -153,7 +157,7 @@
         <div class="muted small deck-hit" hidden></div>{% if s.deck.archidekt_id %} <span class="badge linked" title="Follows its deck on Archidekt">↻ Archidekt</span>{% endif %}
         {% if s.uses_tokens %}<span class="badge tokens" title="You have the tokens of this deck{% if s.tokens %} ({{ s.tokens }} on its list){% endif %}">✓ tokens owned</span>{% endif %}</div></td>
       {% set warning = (bracket_warnings | default({})).get(s.deck.id) %}
-      <td>{% if s.bracket_name %}<span class="badge bracket">{{ s.deck.bracket }} · {{ s.bracket_name }}</span>{% else %}<span class="muted">–</span>{% endif %}
+      <td>{% if s.bracket_name %}<span class="badge bracket bracket-{{ s.deck.bracket }}">{{ s.deck.bracket }} · {{ s.bracket_name }}</span>{% else %}<span class="muted">–</span>{% endif %}
         {% if warning %}<a class="badge warn" href="/decks/{{ s.deck.id }}" title="Does not fit bracket {{ s.deck.bracket }}: {{ warning | join('; ') }}">⚠</a>{% endif %}</td>
       <td class="num" title="Cards you have / cards in the deck, basic lands included">{{ s.total_owned }} / {{ s.total_cards }}</td>
       <td style="width: 35%"><div class="progress slim"><div style="width: {{ s.percent }}%"></div></div></td>
@@ -519,7 +523,7 @@
   {% if deck_combos.included %}
   <ul class="combo-list">
     {% for combo in deck_combos.included %}
-    <li><strong>{{ combo.label() }}</strong>{% if combo.two_card %} <span class="badge warn" title="A two-card infinite combo: not in bracket 1–2">two cards</span>{% endif %}
+    <li><strong>{{ combo_cards(combo) }}</strong>{% if combo.two_card %} <span class="badge warn" title="A two-card infinite combo: not in bracket 1–2">two cards</span>{% endif %}
       <span class="muted">→ {{ combo.produces[:3] | join(', ') }}</span>
       {% if combo.url %}<a class="small-link" href="{{ combo.url }}" target="_blank" rel="noopener">how ↗</a>{% endif %}</li>
     {% endfor %}
@@ -532,8 +536,8 @@
   <ul class="combo-list">
     {% for combo in deck_combos.almost %}
     {% set missing = combo.missing[0] %}
-    <li>add <strong>{{ missing }}</strong>{% if missing in owned %} <span class="badge hit" title="You have this card">you have it</span>{% endif %}
-      <span class="muted">· {{ combo.label() }} → {{ combo.produces[:3] | join(', ') }}</span>
+    <li>add <strong data-card-name="{{ missing }}">{{ missing }}</strong>{% if missing in owned %} <span class="badge hit" title="You have this card">you have it</span>{% endif %}
+      <span class="muted">· {{ combo_cards(combo) }} → {{ combo.produces[:3] | join(', ') }}</span>
       {% if combo.url %}<a class="small-link" href="{{ combo.url }}" target="_blank" rel="noopener">how ↗</a>{% endif %}</li>
     {% endfor %}
   </ul>
@@ -559,7 +563,7 @@
     <tbody>
     {% for c in e.missing %}
     <tr data-free="{{ 1 if c.free else 0 }}" {% if loop.index > 25 %}class="more" hidden{% endif %}>
-      <td>{% if c.card %}<a href="/cards/{{ c.card.id }}">{{ c.name }}</a>{% else %}{{ c.name }}{% endif %}</td>
+      <td data-card-name="{{ c.name }}">{% if c.card %}<a href="/cards/{{ c.card.id }}">{{ c.name }}</a>{% else %}{{ c.name }}{% endif %}</td>
       <td class="muted">{{ c.category }}</td>
       <td class="num"><div class="inclusion"><div style="width: {{ c.inclusion }}%"></div></div>{{ c.inclusion }}%</td>
       <td class="num {{ 'up' if c.synergy > 0 }}">{{ '%+d' | format(c.synergy) }}%</td>
@@ -594,10 +598,10 @@
     <tbody>
     {% for w in weakest %}
     <tr data-swap="{{ 1 if w.swap else 0 }}">
-      <td>{{ w.name }}</td>
+      <td data-card-name="{{ w.name }}">{{ w.name }}</td>
       <td class="muted">{{ w.kind or '' }}</td>
       <td class="num">{% if w.inclusion is none %}<span class="muted" title="Not among the cards EDHREC lists for this commander">under {{ edhrec_floor }}%</span>{% else %}{{ w.inclusion }}%{% endif %}</td>
-      <td>{% if w.swap %}{% if w.swap.card %}<a href="/cards/{{ w.swap.card.id }}">{{ w.swap.name }}</a>{% else %}{{ w.swap.name }}{% endif %}
+      <td>{% if w.swap %}<span data-card-name="{{ w.swap.name }}">{% if w.swap.card %}<a href="/cards/{{ w.swap.card.id }}">{{ w.swap.name }}</a>{% else %}{{ w.swap.name }}{% endif %}</span>
         <span class="muted">· in {{ w.swap.inclusion }}% of the decks · {{ w.swap.free }} free{% if w.swap.price is not none %} · {{ w.swap.price | eur }}{% endif %}</span>{% else %}<span class="muted">–</span>{% endif %}</td>
     </tr>
     {% endfor %}
@@ -689,7 +693,7 @@
     {% for row in have %}
     <tr data-deck-row="{{ row.name }} {% for p, n in row.picks %}{{ p.card.set_name }} {{ p.card.set_code }} {% endfor %}">
       <td>{{ thumb(row) }}</td>
-      <td>{{ row.name }}{{ wanted(row) }}</td>
+      <td data-card-name="{{ row.name }}">{{ row.name }}{{ wanted(row) }}</td>
       <td class="num">{{ row.needed }}</td>
       <td class="num">{{ row.owned }}</td>
       <td class="num">{{ row.available }}</td>
@@ -730,7 +734,7 @@
     {% for row in need %}
     <tr data-deck-row="{{ row.name }} {% for p, n in row.picks %}{{ p.card.set_name }} {{ p.card.set_code }} {% endfor %}">
       <td>{{ thumb(row) }}</td>
-      <td>{{ row.name }}{{ wanted(row) }}{{ using(row) }}</td>
+      <td data-card-name="{{ row.name }}">{{ row.name }}{{ wanted(row) }}{{ using(row) }}</td>
       <td class="num">{{ row.needed }}</td>
       <td class="num">{{ row.owned }}</td>
       <td class="num">{{ row.available }}</td>
@@ -770,18 +774,26 @@
 {% endif %}
 {% if curve_chart %}
 <script>
-  // Mana curve: cards per mana value, lands not counted.
+  // Mana curve: cards per mana value, lands not counted, stacked in the colours of the cards.
   const curve = {{ deck_stats.curve | tojson }};
+  const perColour = {{ deck_stats.curve_colors | tojson }};
+  const colourLook = {
+    W: ["White", "#f2e8c4"], U: ["Blue", "#3d8be0"], B: ["Black", "#8a7d93"], R: ["Red", "#e2483a"],
+    G: ["Green", "#3fa45a"], M: ["Multicolour", "#e7b343"], C: ["Colourless", "#a3a8b4"],
+  };
+  const curveSets = Object.keys(perColour).length
+    ? [..."WUBRGMC"].filter((c) => perColour[c]).map((c) => ({ label: colourLook[c][0], data: perColour[c], backgroundColor: colourLook[c][1], borderRadius: 3 }))
+    : [{ label: "Cards", data: Object.values(curve), backgroundColor: "#5aa2ff", borderRadius: 3 }];
   new Chart(document.getElementById("curve-chart"), {
     type: "bar",
-    data: { labels: Object.keys(curve), datasets: [{ label: "Cards", data: Object.values(curve), backgroundColor: "#5aa2ff" }] },
+    data: { labels: Object.keys(curve), datasets: curveSets },
     options: {
       maintainAspectRatio: false,
       scales: {
-        x: { title: { display: true, text: "Mana value", color: "#9599a8" }, ticks: { color: "#9599a8" }, grid: { display: false } },
-        y: { beginAtZero: true, ticks: { color: "#9599a8", precision: 0 }, grid: { color: "#2b2f39" } },
+        x: { stacked: true, title: { display: true, text: "Mana value", color: "#9599a8" }, ticks: { color: "#9599a8" }, grid: { display: false } },
+        y: { stacked: true, beginAtZero: true, ticks: { color: "#9599a8", precision: 0 }, grid: { color: "#2b2f39" } },
       },
-      plugins: { legend: { display: false } },
+      plugins: { legend: { display: curveSets.length > 1, position: "bottom", labels: { color: "#eceef3", boxWidth: 12 } } },
     },
   });
 </script>

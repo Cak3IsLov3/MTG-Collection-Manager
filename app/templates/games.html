@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from "_colour_filter.html" import pips %}
+{% from "_empty.html" import empty %}
 {% block title %}Games · MTG Collection Manager{% endblock %}
 
 {% block content %}
@@ -48,6 +49,7 @@
     <button type="button" data-tab="overview" role="tab">Overview</button>
     <button type="button" data-tab="opponents" role="tab">Opponents</button>
     <button type="button" data-tab="decks" role="tab">Per deck</button>
+    <button type="button" data-tab="nights" role="tab">Game nights{% if nights %} <span class="tab-count">{{ nights | length }}</span>{% endif %}</button>
     <button type="button" data-tab="log" role="tab">Log <span class="tab-count">{{ games | length }}</span></button>
   </nav>
 
@@ -141,6 +143,32 @@
 </div>
 {% endif %}
 
+{% if nights %}
+<div class="panel" data-tab-panel="nights">
+  <h2>Game nights</h2>
+  <div class="nights">
+    {% for n in nights %}
+    <div class="night">
+      <div class="night-head">
+        <div><strong>{{ n.night.strftime('%A %d %B %Y') }}</strong>
+          <span class="muted">· {{ n.games | length }} game{{ 's' if n.games | length != 1 }}, you won {{ n.wins }}</span></div>
+        <form class="inline" method="post" action="/games/nights/{{ n.night }}/discord">
+          <button class="small secondary" {{ 'disabled' if not webhook }} title="{{ 'Send this recap to Discord' if webhook else 'Set DISCORD_WEBHOOK_URL to send recaps' }}">{{ '✓ Sent to Discord' if n.sent else 'Send to Discord' }}</button>
+        </form>
+      </div>
+      {% if n.winners %}<div class="night-winners">{% for name, count in n.winners.items() %}<span class="winner {{ 'you' if name == 'You' }}">🏆 {{ name }} <strong>{{ count }}×</strong></span>{% endfor %}</div>{% endif %}
+      <div class="night-facts muted small">
+        <span>Your decks: {% for name, count in n.decks.items() %}{{ name }} {{ count }}×{{ ', ' if not loop.last }}{% endfor %}</span>
+        {% if n.players %}<span>At the table: {{ n.players | join(', ') }}</span>{% endif %}
+        {% if n.commanders %}<span>Against: {% for name, count in n.commanders.items() %}{{ name }}{{ ' ' ~ count ~ '×' if count > 1 }}{{ ', ' if not loop.last }}{% endfor %}</span>{% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  <p class="muted small">A game night is all the games of one day. The recap of yesterday goes to Discord by itself in the morning (GAME_NIGHT_RECAP); you can also send one yourself.</p>
+</div>
+{% endif %}
+
 {% if stats %}
 <div class="panel table-wrap" data-tab-panel="decks">
   <h2>Per deck</h2>
@@ -188,7 +216,7 @@
     {% endfor %}
   </table>
   {% else %}
-  <p class="muted">No games logged yet.</p>
+  {{ empty("R", "No games logged yet", "Log a game above, or play one on the live table and save it at the end. Win rates, streaks and your nemesis show up here.", "/table", "Open the live table") }}
   {% endif %}
 </div>
 </div>

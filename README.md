@@ -20,6 +20,12 @@ price.
 | --- | --- |
 | ![The collection: your cards, with adding and importing in their own tab](docs/collection.jpg) | ![Saved decks with their commander, colours, bracket, progress, value and how often they were played](docs/decks.jpg) |
 
+| Search everything (press `/`): cards, decks and wishlist | Point at a card name to see the card |
+| --- | --- |
+| ![Searching "sol": Sol Ring in your collection and every deck that runs it](docs/search.jpg) | ![The card picture next to the mouse when you point at a card name](docs/card-preview.jpg) |
+
+![Game nights: per day the games, who won, your decks, who was at the table and their commanders, with a recap for Discord](docs/games-nights.jpg)
+
 ### Stream overlay for OBS
 
 Press **▶ Play** on a deck and the stream screen opens with every token that deck makes ready to put on the board. See [docs/stream.md](docs/stream.md).
@@ -183,6 +189,9 @@ Press **▶ Play** on a deck and the stream screen opens with every token that d
 
 **Both**
 - Tabs on every page: what you always need stays on top, the rest is in tabs (with counts such as "80 missing" or "⚠ bracket"). The tab bar stays in view while you scroll, the tab you chose is remembered, and a link like `/decks/3#improve` opens that tab
+- Search everything from the menu (press `/`): your cards, decks (by name or a card in them) and wishlist as you type
+- Point at a card name anywhere to see the card; the deck page has the commander's art as a banner and a mana curve in the colours of the cards; sets are coloured by rarity and brackets by level
+- Game nights: the games of a day together (who won, your decks, the table and their commanders), with a recap to Discord the morning after (GAME_NIGHT_RECAP)
 - Fold away what you do not need: click the title of a part (say "Basic lands" or "Add a card") to fold it, click again to open it. It is remembered, and on deck pages it counts for every deck
 - Collection value next to wishlist cost
 - "Bought it" moves a card from WANT to HAVE

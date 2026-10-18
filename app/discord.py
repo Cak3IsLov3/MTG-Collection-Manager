@@ -44,6 +44,13 @@ class DiscordNotifier:
         }
         return await self._post({"embeds": [embed]})
 
+    async def send_game_night(self, lines: list[str], night: str) -> bool:
+        """Post the recap of a game night; False (never raises) when delivery fails."""
+        if not self.webhook_url or not lines:
+            return False
+        embed = {"title": f"Game night · {night}", "description": "\n".join(lines), "color": 0xE7B343}
+        return await self._post({"embeds": [embed]})
+
     async def send_reprints(self, lines: list[str]) -> bool:
         """One message listing reprints of valuable cards you own; False (never raises) when delivery fails."""
         if not self.webhook_url or not lines:

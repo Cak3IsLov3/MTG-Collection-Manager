@@ -497,3 +497,117 @@ tbody tr:hover > td { background: rgba(255, 255, 255, .018); }
 .mini-stat { background: var(--panel-2); border-color: var(--border); border-radius: 10px; }
 .badge { border-radius: 999px; }
 .token-card img, .top-cards img, .suggestion img { box-shadow: 0 4px 14px rgba(0, 0, 0, .35); }
+
+/* ===== Pop-up messages ===== */
+.toast { position: fixed; right: 20px; bottom: 20px; z-index: 60; display: flex; align-items: center; gap: 10px; max-width: min(460px, calc(100vw - 40px));
+  padding: 12px 14px; border-radius: 12px; background: var(--panel-2); border: 1px solid rgba(63, 185, 80, .55);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, .5); animation: toast-in .25s ease-out; }
+.toast.error { border-color: rgba(224, 67, 75, .7); }
+.toast.leaving { opacity: 0; transform: translateY(8px); transition: opacity .25s, transform .25s; }
+.toast-icon { flex: none; display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; font-weight: 800; font-size: 13px;
+  background: var(--up); color: #0e0f13; }
+.toast.error .toast-icon { background: var(--down); color: #fff; }
+.toast-text { flex: 1; font-size: 14px; }
+.toast-close { all: unset; cursor: pointer; color: var(--muted); font-size: 20px; line-height: 1; padding: 0 4px; }
+.toast-close:hover { color: var(--text); }
+@keyframes toast-in { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+
+/* ===== Search everything ===== */
+header.nav { gap: 18px; }
+.global-search { position: relative; margin-left: auto; }
+.global-search input { width: 240px; padding: 6px 30px 6px 12px; font-size: 13px; background: var(--panel-2); transition: width .2s; }
+.global-search input:focus { width: 240px; }
+header.nav { flex-wrap: nowrap; }
+header.nav .brand { white-space: nowrap; }
+header.nav nav { flex-wrap: nowrap; gap: 6px; overflow-x: auto; scrollbar-width: none; }
+.search-key { position: absolute; right: 9px; top: 50%; transform: translateY(-50%); font: 11px/1 "Inter", sans-serif; color: var(--muted);
+  border: 1px solid var(--line-2); border-radius: 4px; padding: 2px 5px; pointer-events: none; }
+.global-search input:focus + .search-key { display: none; }
+.global-results { position: absolute; right: 0; top: calc(100% + 8px); width: 380px; max-height: 70vh; overflow-y: auto; z-index: 50;
+  padding: 6px; background: var(--panel); border: 1px solid var(--line-2); border-radius: 12px; box-shadow: 0 16px 40px rgba(0, 0, 0, .55); }
+.result-group { padding: 8px 10px 4px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+a.result { display: flex; align-items: center; gap: 10px; padding: 6px 10px; border-radius: 8px; color: var(--text); text-decoration: none; }
+a.result img, .result-blank { width: 30px; aspect-ratio: 5 / 7; border-radius: 3px; flex: none; background: var(--panel-3); object-fit: cover; }
+a.result span { display: flex; flex-direction: column; min-width: 0; }
+a.result strong { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+a.result small { color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+a.result.active, a.result:hover { background: var(--panel-3); }
+a.result.more { color: var(--have); font-size: 12px; }
+.result-none { padding: 14px; color: var(--muted); font-size: 13px; }
+@media (max-width: 900px) { .global-search input, .global-search input:focus { width: 160px; } .global-results { width: min(380px, 92vw); } }
+
+/* ===== A card picture when you point at a card ===== */
+.card-preview { position: fixed; left: 0; top: 0; z-index: 70; width: 250px; aspect-ratio: 5 / 7; border-radius: 12px; pointer-events: none;
+  box-shadow: 0 18px 44px rgba(0, 0, 0, .6); opacity: 0; transition: opacity .12s; background: var(--panel-3); }
+.card-preview.shown { opacity: 1; }
+[data-card-name], a[href^="/cards/"] { cursor: default; }
+a[href^="/cards/"] { cursor: pointer; }
+
+/* ===== Commander banner ===== */
+.deck-hero { position: relative; margin: -8px 0 16px; padding: 18px 20px; border-radius: 16px; overflow: hidden; border: 1px solid var(--border);
+  background: var(--panel); box-shadow: var(--shadow); }
+.deck-hero.with-art::before { content: ""; position: absolute; inset: 0; background: var(--hero) center 30% / cover no-repeat; opacity: .55; }
+.deck-hero.with-art::after { content: ""; position: absolute; inset: 0;
+  background: linear-gradient(90deg, rgba(14, 15, 19, .97) 0%, rgba(14, 15, 19, .88) 40%, rgba(14, 15, 19, .35) 100%); }
+.deck-hero > .toolbar { position: relative; z-index: 1; margin-bottom: 0; }
+.deck-hero h1 { font-size: 30px; text-shadow: 0 2px 12px rgba(0, 0, 0, .6); }
+.deck-hero img.commander-art { width: 104px; box-shadow: 0 8px 24px rgba(0, 0, 0, .6); }
+
+/* ===== Friendly empty screens ===== */
+.empty-state { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 6px; padding: 34px 16px; }
+.empty-symbol { width: 54px; height: 54px; opacity: .9; filter: drop-shadow(0 6px 14px rgba(0, 0, 0, .45)); margin-bottom: 6px; }
+.empty-state h3 { margin: 0; font-size: 18px; }
+.empty-state p { margin: 0; max-width: 460px; }
+a.empty-action { margin-top: 10px; padding: 8px 16px; font-size: 14px; font-weight: 600; color: #1a1406; border-color: #c9952a;
+  background: linear-gradient(180deg, var(--accent-2), var(--accent)); }
+a.empty-action:hover { color: #1a1406; }
+
+/* ===== Table headers stay in view ===== */
+body { --sticky-top: 58px; }
+.sticky-tabs { --sticky-top: 101px; }
+@media (min-width: 900px) {
+  .table-wrap { overflow-x: visible; }
+  table th { position: sticky; top: var(--sticky-top); z-index: 3; background: var(--panel); box-shadow: 0 1px 0 var(--border); }
+}
+
+/* ===== Game nights ===== */
+.nights { display: grid; gap: 12px; }
+.night { padding: 14px 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--panel-2); }
+.night-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.night-winners { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 8px; }
+.winner { padding: 3px 10px; border-radius: 999px; background: var(--panel-3); border: 1px solid var(--line-2); font-size: 13px; }
+.winner.you { border-color: rgba(231, 179, 67, .7); background: rgba(231, 179, 67, .12); }
+.night-facts { display: flex; flex-direction: column; gap: 2px; }
+
+/* ===== Type: Cinzel for the big titles (like the name line of a card), Inter for the rest ===== */
+:root { --title-font: "Cinzel", "Georgia", serif; }
+h1, .deck-hero h1, .card-detail h1, .empty-state h3 { font-family: var(--title-font); font-weight: 700; letter-spacing: .01em; }
+h1 .muted { font-family: "Inter", "Segoe UI", system-ui, sans-serif; font-weight: 600; letter-spacing: 0; }
+h1 { font-size: 26px; }
+.deck-hero h1 { font-size: 32px; }
+/* Numbers line up in columns and tiles. */
+td.num, .stat .value, .mini-stat .value, .tab-count, .badge, input.qty, input.paid, .value { font-variant-numeric: tabular-nums; }
+/* Three levels of text: main, secondary and quiet. */
+:root { --text-2: #c3c7d1; --text-3: #7d8292; }
+p.small, span.small, div.small, .muted.small { color: var(--text-3); }
+
+/* ===== Rarity, as on the cards: common black-grey, uncommon silver, rare gold, mythic orange ===== */
+.rarity-common { color: #c3c7d1; }
+.rarity-uncommon { color: #b9d0de; }
+.rarity-rare { color: #e7c25a; }
+.rarity-mythic { color: #f0743a; }
+.rarity-special, .rarity-bonus { color: #c48cff; }
+.set-mark { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: middle; background: currentColor; }
+.set-mark.rarity-common { background: #5c6070; box-shadow: 0 0 0 1px #8a8f9e inset; }
+.set-mark.rarity-uncommon { background: linear-gradient(135deg, #e8f1f7, #8aa4b4); }
+.set-mark.rarity-rare { background: linear-gradient(135deg, #f8e19a, #c99a2e); }
+.set-mark.rarity-mythic { background: linear-gradient(135deg, #ffb070, #d9461c); }
+.set-mark.rarity-special, .set-mark.rarity-bonus { background: linear-gradient(135deg, #e3c6ff, #8a55d6); }
+.set-mark.rarity-unknown { display: none; }
+.rarity-unknown { color: inherit; }
+
+/* ===== Brackets in colour: 1-2 green, 3 gold, 4 orange, 5 red ===== */
+.badge.bracket-1, .badge.bracket-2 { border-color: rgba(63, 185, 80, .6); color: #6fd17f; background: rgba(63, 185, 80, .08); }
+.badge.bracket-3 { border-color: rgba(231, 179, 67, .6); color: var(--accent-2); background: rgba(231, 179, 67, .08); }
+.badge.bracket-4 { border-color: rgba(240, 116, 58, .65); color: #f59a6a; background: rgba(240, 116, 58, .08); }
+.badge.bracket-5 { border-color: rgba(224, 67, 75, .7); color: #f07a80; background: rgba(224, 67, 75, .1); }

@@ -261,6 +261,7 @@ def games_page(request: Request, deck: int | None = None, session: Session = Dep
         today=dt.date.today().isoformat(), selected_deck=deck,
         overview=games.log_stats(session), players=games.known_players(session),
         last_commanders=games.last_commanders(session), game_commanders=games.game_commanders,
+        nights=games.game_nights(session, 30), webhook=bool(get_settings().discord_webhook_url),
         brackets=decks.BRACKETS,
     )
 
@@ -325,6 +326,19 @@ def games_log(
         return redirect(target, message, error=True)
     session.commit()
     return redirect(target, f"Logged: {games.RESULTS[game.result].lower()} with {deck.name} on {game.played_on}")
+
+
+@router.post("/games/nights/{night}/discord")
+async def game_night_discord(night: str, session: Session = Depends(get_session)):
+    from app.deps import get_notifier
+
+    try:
+        day = dt.date.fromisoformat(night)
+    except ValueError:
+        return redirect("/games", "That is not a date", error=True)
+    if await jobs.send_game_night(session, get_notifier(), day):
+        return redirect("/games", f"The recap of {day} went to Discord")
+    return redirect("/games", "Not sent: no games that day, no Discord webhook, or Discord refused it", error=True)
 
 
 @router.post("/games/{game_id}/delete")

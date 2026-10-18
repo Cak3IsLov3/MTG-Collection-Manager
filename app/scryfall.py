@@ -84,6 +84,7 @@ class ScryfallCard:
     type_line: str = ""  # e.g. "Legendary Creature — Robot"
     cmc: float | None = None  # mana value
     oracle_text: str = ""  # rules text; of both faces for a double-faced card
+    rarity: str = ""  # "common", "uncommon", "rare", "mythic", "special", "bonus"
     # The tokens and emblems the card makes: [(Scryfall id, name)]. Scryfall lists an emblem as a
     # "combo_piece" of its planeswalker, so it is told apart by its type.
     token_parts: list[tuple[str, str]] = field(default_factory=list)
@@ -107,6 +108,7 @@ class ScryfallCard:
             price_eur_foil=_to_float(prices.get("eur_foil")),
             cardmarket_url=(data.get("purchase_uris") or {}).get("cardmarket"),
             colors=None if identity is None else "".join(c for c in "WUBRG" if c in identity),
+            rarity=data.get("rarity") or "",
             type_line=data.get("type_line") or "",
             cmc=data.get("cmc"),
             oracle_text=data.get("oracle_text")

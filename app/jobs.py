@@ -47,6 +47,8 @@ async def update_collection_prices(session: Session, scryfall: ScryfallClient) -
         record_scryfall_price(session, card.id, data)
         if data.colors is not None:
             card.colors = data.colors
+        if data.rarity:
+            card.rarity = data.rarity
         updated += 1
     record_daily_total(session)
     session.commit()
@@ -228,7 +230,8 @@ async def run_weekly_summary() -> None:
 
 async def fill_missing_colors(session: Session, scryfall: ScryfallClient) -> int:
     """Fetch the colours of cards that were stored before colours were kept. Returns how many were filled in."""
-    cards = list(session.exec(select(Card).where(Card.colors == None)))  # noqa: E711
+    # Also the rarity, which is kept since later still.
+    cards = list(session.exec(select(Card).where((Card.colors == None) | (Card.rarity == None))))  # noqa: E711
     if not cards:
         return 0
     found, _ = await scryfall.get_collection([{"id": card.scryfall_id} for card in cards])
@@ -236,10 +239,15 @@ async def fill_missing_colors(session: Session, scryfall: ScryfallClient) -> int
     filled = 0
     for card in cards:
         data = by_id.get(card.scryfall_id)
-        if data is not None and data.colors is not None:
-            card.colors = data.colors
+        if data is None:
+            card.rarity = card.rarity or ""  # not looked up again
             session.add(card)
-            filled += 1
+            continue
+        if data.colors is not None:
+            card.colors = data.colors
+        card.rarity = data.rarity or ""
+        session.add(card)
+        filled += 1
     session.commit()
     return filled
 
@@ -390,6 +398,34 @@ async def run_combo_checks() -> None:
         logger.exception("Combo check failed")
 
 
+async def send_game_night(session: Session, notifier: DiscordNotifier, night: dt.date) -> bool:
+    """Post the recap of one game night and remember that it went out."""
+    from app.services.games import game_nights, mark_recap_sent
+
+    found = next((n for n in game_nights(session) if n.night == night), None)
+    if found is None or not notifier.configured:
+        return False
+    if not await notifier.send_game_night(found.lines(), night.isoformat()):
+        return False
+    mark_recap_sent(session, night)
+    session.commit()
+    return True
+
+
+async def run_game_night_recap() -> None:
+    """In the morning: the recap of yesterday's games, if there were any and it was not sent yet."""
+    from app.services.games import game_nights
+
+    try:
+        yesterday = dt.date.today() - dt.timedelta(days=1)
+        with Session(engine) as session:
+            night = next((n for n in game_nights(session) if n.night == yesterday), None)
+            if night is not None and not night.sent:
+                await send_game_night(session, deps.get_notifier(), yesterday)
+    except Exception:
+        logger.exception("Game night recap failed")
+
+
 def run_backup() -> None:
     from app.backup import make_backup
 
@@ -413,6 +449,8 @@ def start_scheduler() -> AsyncIOScheduler:
         )
     scheduler.add_job(run_fill_colors, "date", id="card-colors")  # once, right after starting
     scheduler.add_job(run_combo_checks, "date", run_date=dt.datetime.now() + dt.timedelta(minutes=2), id="combos")
+    if settings.game_night_recap:
+        scheduler.add_job(run_game_night_recap, "cron", hour=settings.backup_hour, minute=30, id="game-night")
     if settings.backup_keep > 0:
         from app.backup import has_backup_today
 

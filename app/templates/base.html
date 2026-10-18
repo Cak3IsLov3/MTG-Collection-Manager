@@ -4,8 +4,9 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}MTG Collection Manager{% endblock %}</title>
+  <link rel="icon" href="https://svgs.scryfall.io/card-symbols/G.svg" type="image/svg+xml">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/style.css?v={{ asset_version() }}">
 </head>
 <body>
@@ -22,9 +23,17 @@
       <a href="/stream/control" title="The token overlay for OBS: control panel">Stream</a>
       <a href="/docs">API</a>
     </nav>
+    <div class="global-search" role="search">
+      <input id="global-search" type="search" placeholder="Search everything…" autocomplete="off"
+             aria-label="Search your cards, decks and wishlist" title="Search your cards, decks and wishlist (press / to start)">
+      <kbd class="search-key" aria-hidden="true">/</kbd>
+      <div id="global-results" class="global-results" hidden></div>
+    </div>
   </header>
   <main>
-    {% if msg %}<div class="flash {{ 'error' if error }}">{{ msg }}</div>{% endif %}
+    {% if msg %}<div id="toast" class="toast {{ 'error' if error }}" role="{{ 'alert' if error else 'status' }}">
+      <span class="toast-icon" aria-hidden="true">{{ '!' if error else '✓' }}</span><span class="toast-text">{{ msg }}</span>
+      <button type="button" class="toast-close" aria-label="Close">×</button></div>{% endif %}
     {% block content %}{% endblock %}
   </main>
   <script>
@@ -171,6 +180,7 @@
       open(names.includes(start) ? start : names[0], false);
       buttons.forEach((button) => button.addEventListener("click", () => open(button.dataset.tab, true)));
       box.openTab = (name) => open(name, true);
+      window.addEventListener("hashchange", () => { const name = location.hash.slice(1); if (names.includes(name)) open(name, true); });
     }
   </script>
   <script>
@@ -240,6 +250,117 @@
       }
       window.attachAutocomplete = attach;
       document.querySelectorAll("input[data-autocomplete]").forEach(attach);
+    })();
+  </script>
+  <script>
+    // Messages pop up at the bottom right: a confirmation goes away by itself, an error stays until you
+    // close it. The message leaves the address, so a reload does not show it again.
+    (() => {
+      const toast = document.getElementById("toast");
+      if (!toast) return;
+      const close = () => { toast.classList.add("leaving"); setTimeout(() => toast.remove(), 250); };
+      toast.querySelector(".toast-close").addEventListener("click", close);
+      if (!toast.classList.contains("error")) setTimeout(close, 5000);
+      const url = new URL(location.href);
+      url.searchParams.delete("msg");
+      url.searchParams.delete("error");
+      history.replaceState(null, "", url);
+    })();
+
+    // Search everything: your cards, decks and wishlist as you type. "/" starts a search from anywhere.
+    (() => {
+      const input = document.getElementById("global-search");
+      const box = document.getElementById("global-results");
+      if (!input) return;
+      let timer = null;
+      let links = [];
+      let active = -1;
+      const escape = (text) => String(text).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+      const euro = (v) => (v === null || v === undefined ? "–" : "€" + Number(v).toFixed(2));
+      const item = (href, image, title, sub) => `<a class="result" href="${href}">${image ? `<img src="${escape(image)}" alt="" loading="lazy">` : '<span class="result-blank"></span>'}<span><strong>${escape(title)}</strong><small>${sub}</small></span></a>`;
+      function highlight(index) {
+        active = index;
+        links.forEach((link, i) => link.classList.toggle("active", i === index));
+        if (index >= 0) links[index].scrollIntoView({ block: "nearest" });
+      }
+      async function run() {
+        const q = input.value.trim();
+        if (q.length < 2) { box.hidden = true; return; }
+        let data;
+        try { data = await fetch(`/api/search?q=${encodeURIComponent(q)}`).then((r) => r.json()); } catch (error) { return; }
+        if (input.value.trim() !== q) return;
+        const parts = [];
+        if (data.cards.length) parts.push('<div class="result-group">Your cards</div>' + data.cards.map((c) =>
+          item(`/cards/${c.card_id}`, c.image_url, c.name, `${c.copies} cop${c.copies === 1 ? "y" : "ies"}${c.versions > 1 ? ` · ${c.versions} versions` : ""}`)).join("")
+          + (data.more.cards ? `<a class="result more" href="/collection?q=${encodeURIComponent(q)}">and ${data.more.cards} more in your collection →</a>` : ""));
+        if (data.decks.length) parts.push('<div class="result-group">Decks</div>' + data.decks.map((d) =>
+          item(`/decks/${d.id}`, d.image_url, d.name, d.cards.length ? `has ${escape(d.cards.join(", "))}` : "deck")).join("")
+          + (data.more.decks ? `<a class="result more" href="/deck?q=${encodeURIComponent(q)}">and ${data.more.decks} more decks →</a>` : ""));
+        if (data.wishlist.length) parts.push('<div class="result-group">Wishlist</div>' + data.wishlist.map((w) =>
+          item(`/cards/${w.card_id}`, w.image_url, w.name, `now ${euro(w.price)} · target ${euro(w.target)}`)).join(""));
+        box.innerHTML = parts.length ? parts.join("") : `<div class="result-none">Nothing found for “${escape(q)}”.</div>`;
+        links = [...box.querySelectorAll("a.result")];
+        box.hidden = false;
+        highlight(links.length ? 0 : -1);
+      }
+      input.addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(run, 180); });
+      input.addEventListener("focus", () => { if (input.value.trim().length >= 2) run(); });
+      input.addEventListener("keydown", (event) => {
+        if (event.key === "ArrowDown") { event.preventDefault(); highlight(Math.min(links.length - 1, active + 1)); }
+        else if (event.key === "ArrowUp") { event.preventDefault(); highlight(Math.max(0, active - 1)); }
+        else if (event.key === "Enter" && active >= 0) { event.preventDefault(); location.href = links[active].href; }
+        else if (event.key === "Escape") { box.hidden = true; input.blur(); }
+      });
+      document.addEventListener("click", (event) => { if (!event.target.closest(".global-search")) box.hidden = true; });
+      document.addEventListener("keydown", (event) => {
+        const typing = event.target.closest("input, textarea, select, [contenteditable]");
+        if (event.key === "/" && !typing && !event.ctrlKey && !event.metaKey) { event.preventDefault(); input.focus(); input.select(); }
+      });
+    })();
+
+    // Point at a card (its name or its row) and its picture shows big next to the mouse.
+    (() => {
+      if (!matchMedia("(hover: hover)").matches) return;
+      const preview = document.createElement("img");
+      preview.className = "card-preview";
+      preview.alt = "";
+      document.body.append(preview);
+      let current = null;
+      const named = (name) => `https://api.scryfall.com/cards/named?format=image&version=normal&exact=${encodeURIComponent(name)}`;
+      function pictureFor(element) {
+        if (element.dataset.cardImg) return element.dataset.cardImg;
+        const holder = element.closest("tr, .suggestion, .token-card");
+        const thumb = holder && holder.querySelector("img.thumb, .suggestion > img");
+        if (thumb && thumb.src && !element.closest("[data-card-name]")) return thumb.src.replace("/small/", "/normal/");
+        const name = element.closest("[data-card-name]");
+        if (name) return thumb && thumb.src && name.tagName === "TD" ? thumb.src : named(name.dataset.cardName);
+        return null;
+      }
+      function place(event) {
+        const width = 250;
+        const height = width * 1.4;
+        let x = event.clientX + 24;
+        let y = event.clientY - height / 2;
+        if (x + width > innerWidth - 8) x = event.clientX - width - 24;
+        y = Math.max(8, Math.min(innerHeight - height - 8, y));
+        preview.style.transform = `translate(${x}px, ${y}px)`;
+      }
+      document.addEventListener("mouseover", (event) => {
+        const target = event.target.closest('a[href^="/cards/"], [data-card-name], [data-card-img]');
+        if (!target || target.closest(".global-results")) return;
+        const src = pictureFor(target);
+        if (!src) return;
+        current = target;
+        if (preview.getAttribute("src") !== src) preview.src = src;
+        preview.classList.add("shown");
+        place(event);
+      });
+      document.addEventListener("mousemove", (event) => { if (current) place(event); });
+      document.addEventListener("mouseout", (event) => {
+        if (!current || (event.relatedTarget && current.contains(event.relatedTarget))) return;
+        current = null;
+        preview.classList.remove("shown");
+      });
     })();
   </script>
   {% block scripts %}{% endblock %}

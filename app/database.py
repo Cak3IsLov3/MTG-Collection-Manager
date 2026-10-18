@@ -26,7 +26,7 @@ def add_missing_columns(target=None) -> None:
     if target.dialect.name != "sqlite":
         return
     added = {
-        "card": {"colors": "VARCHAR", "type_line": "VARCHAR", "cmc": "FLOAT", "roles": "VARCHAR"},
+        "card": {"colors": "VARCHAR", "rarity": "VARCHAR", "type_line": "VARCHAR", "cmc": "FLOAT", "roles": "VARCHAR"},
         # Before this column existed only an import could tell, so existing cards count as imported.
         "collectionentry": {"imported": "BOOLEAN NOT NULL DEFAULT 1", "unsorted": "INTEGER NOT NULL DEFAULT 0",
                             "purchase_price": "FLOAT"},
@@ -44,6 +44,7 @@ def add_missing_columns(target=None) -> None:
             "image_url": "VARCHAR",
             "bracket_flags": "VARCHAR",
             "token_parts": "VARCHAR",
+            "colors": "VARCHAR",
         },
         "game": {"opponents": "VARCHAR", "winner": "VARCHAR", "opponent_commanders": "VARCHAR"},
         "pricesnapshot": {"eur_from_set": "VARCHAR", "eur_foil_from_set": "VARCHAR"},

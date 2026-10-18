@@ -85,3 +85,70 @@ def test_table_page(client):
     client.post("/api/decks", json={"name": "Ramp", "decklist": "1 Sol Ring"})
     page = client.get("/table").text
     assert "New game" in page and "Start the game" in page and 'href="/table"' in page and "wakeLock" in page
+
+
+# --- searching everything, game nights, the coloured curve --------------------------------------------
+
+
+def test_search_everything(client):
+    client.post("/api/collection", json={"name": "Sol Ring", "set_code": "cmm", "quantity": 2})
+    client.post("/api/collection", json={"name": "Sol Ring", "set_code": "lea"})
+    client.post("/api/decks", json={"name": "Artifacts", "decklist": "1 Sol Ring\n1 Lim-Dûl's Vault"})
+    client.post("/api/decks", json={"name": "Solar Flare", "decklist": "1 Fire // Ice"})
+    client.post("/api/wishlist", json={"name": "Lim-Dûl's Vault", "target_price": 5})
+    found = client.get("/api/search", params={"q": "sol"}).json()
+    assert [(c["name"], c["copies"], c["versions"]) for c in found["cards"]] == [("Sol Ring", 3, 2)]
+    # A deck by its name first, then decks that have a matching card.
+    assert [(d["name"], d["cards"]) for d in found["decks"]] == [("Solar Flare", []), ("Artifacts", ["Sol Ring"])]
+    vault = client.get("/api/search", params={"q": "lim dul"}).json()  # accents and word order do not matter
+    assert [w["name"] for w in vault["wishlist"]] == ["Lim-Dûl's Vault"] and vault["cards"] == []
+    assert client.get("/api/search", params={"q": "s"}).json()["cards"] == []
+    assert 'id="global-search"' in client.get("/").text
+
+
+async def test_game_nights(client, session):
+    import datetime as dt
+
+    from app.jobs import send_game_night
+
+    deck = client.post("/api/decks", json={"name": "Ramp", "decklist": "1 Sol Ring"}).json()
+    day = (dt.date.today() - dt.timedelta(days=1)).isoformat()
+    client.post("/api/games", json={"deck_id": deck["id"], "result": "win", "played_on": day, "opponents": ["Sam"],
+                                    "opponent_commanders": {"Sam": "Atraxa"}})
+    client.post("/api/games", json={"deck_id": deck["id"], "result": "loss", "played_on": day, "opponents": ["Sam", "Robin"],
+                                    "winner": "Sam", "notes": "Close one"})
+    [night] = client.get("/api/games/nights").json()
+    assert (night["games"], night["wins"], night["winners"], night["decks"]) == (2, 1, {"You": 1, "Sam": 1}, {"Ramp": 2})
+    assert night["players"] == ["Sam", "Robin"] and night["commanders"] == {"Atraxa": 1} and night["sent"] is False
+
+    class Notifier:
+        configured = True
+        sent = []
+
+        async def send_game_night(self, lines, when):
+            self.sent.append((lines, when))
+            return True
+
+    notifier = Notifier()
+    assert await send_game_night(session, notifier, dt.date.fromisoformat(day))
+    lines, when = notifier.sent[0]
+    assert when == day and lines[0] == "**2 games**, you won 1" and "**Wins** You 1× · Sam 1×" in lines
+    assert client.get("/api/games/nights").json()[0]["sent"] is True
+    page = client.get("/games").text
+    assert "Game nights" in page and "✓ Sent to Discord" in page
+
+
+def test_curve_in_colours(client):
+    deck = client.post("/api/decks", json={"name": "Mix", "decklist": "1 Sol Ring\n1 Lim-Dûl's Vault\n1 Marwyn, the Nurturer"}).json()
+    page = client.get(f"/decks/{deck['id']}").text
+    # Sol Ring colourless (1), Lim-Dûl's Vault blue-black (2), Marwyn green (3).
+    assert '"C": [0, 1, 0, 0, 0, 0, 0, 0]' in page and '"M": [0, 0, 1, 0, 0, 0, 0, 0]' in page and '"G": [0, 0, 0, 1, 0, 0, 0, 0]' in page
+    assert 'class="deck-hero' in page and 'data-card-name="Sol Ring"' in page
+
+
+def test_rarity_and_bracket_colours(client):
+    client.post("/api/collection", json={"name": "Sol Ring", "set_code": "cmm"})
+    page = client.get("/collection").text
+    assert 'class="set-mark rarity-uncommon"' in page and '<span class="rarity-uncommon">CMM</span>' in page
+    client.post("/api/decks", json={"name": "Ramp", "decklist": "1 Sol Ring", "bracket": 4})
+    assert 'class="badge bracket bracket-4"' in client.get("/deck").text

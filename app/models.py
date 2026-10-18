@@ -19,6 +19,7 @@ class Card(SQLModel, table=True):
     image_url: str | None = None
     # Colour identity as letters in WUBRG order; "" is colourless, None not fetched yet.
     colors: str | None = None
+    rarity: str | None = None  # "common" .. "mythic"; None: not looked up yet
     # For the deck suggestions: type line, mana value and what the card does ("ramp,draw"),
     # from Scryfall; type_line None: not looked up yet.
     type_line: str | None = None
@@ -108,6 +109,14 @@ class ReprintAlert(SQLModel, table=True):
     notified: bool = False
 
 
+class GameNightRecap(SQLModel, table=True):
+    """A game night (all games of one day) whose recap went to Discord."""
+
+    id: int | None = Field(default=None, primary_key=True)
+    night: dt.date = Field(unique=True, index=True)
+    sent_at: dt.datetime = Field(default_factory=utcnow)
+
+
 class Game(SQLModel, table=True):
     """One game played with one of your decks."""
 
@@ -185,6 +194,8 @@ class DeckEntry(SQLModel, table=True):
     # The tokens the card makes, as JSON: [{"id": Scryfall id, "name": "Treasure", "count": 3}], count
     # being about how many you need of it for this card; None: not looked up yet.
     token_parts: str | None = None
+    # Colour identity of the card, letters in WUBRG order ("" colourless); None: not looked up yet.
+    colors: str | None = None
     image_url: str | None = None
 
 
