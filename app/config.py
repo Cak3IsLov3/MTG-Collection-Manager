@@ -45,6 +45,9 @@ class Settings:
     # looking at printings released (or announced) in the last that many days.
     reprint_min_eur: float
     reprint_days: int
+    # The token overlay for OBS (/stream): the file it keeps the board in (presets and the deck go
+    # next to it).
+    stream_state: str
     # Tokens you always bring along, so the token suggestions leave them out.
     standard_tokens: tuple[str, ...]
     # A Discord message when the automatic sync finds changes in a deck on Archidekt.
@@ -80,6 +83,7 @@ def get_settings() -> Settings:
         weekly_summary_hour=int(os.getenv("WEEKLY_SUMMARY_HOUR", "9")),
         reprint_min_eur=float(os.getenv("REPRINT_MIN_EUR", "5")),
         reprint_days=int(os.getenv("REPRINT_DAYS", "60")),
+        stream_state=os.getenv("STREAM_STATE", "stream-state.json").strip() or "stream-state.json",
         standard_tokens=tuple(
             name.strip() for name in os.getenv("STANDARD_TOKENS", "Clue,Copy").split(",") if name.strip()
         ),

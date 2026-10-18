@@ -212,18 +212,18 @@
     data: {
       labels: history.labels,
       datasets: [
-        { label: "Collection value", data: history.collection, borderColor: "#4c9aff", backgroundColor: "rgba(76,154,255,.15)", fill: true, tension: 0.25 },
-        { label: "Wishlist cost", data: history.wishlist, borderColor: "#c77dff", tension: 0.25 },
+        { label: "Collection value", data: history.collection, borderColor: "#5aa2ff", backgroundColor: "rgba(76,154,255,.15)", fill: true, tension: 0.25 },
+        { label: "Wishlist cost", data: history.wishlist, borderColor: "#c48cff", tension: 0.25 },
       ],
     },
     options: {
       maintainAspectRatio: false,
       interaction: { mode: "index", intersect: false },
       scales: {
-        x: { ticks: { color: "#8b93a3" }, grid: { color: "#2c313c" } },
-        y: { ticks: { color: "#8b93a3", callback: (v) => "€" + v }, grid: { color: "#2c313c" } },
+        x: { ticks: { color: "#9599a8" }, grid: { color: "#2b2f39" } },
+        y: { ticks: { color: "#9599a8", callback: (v) => "€" + v }, grid: { color: "#2b2f39" } },
       },
-      plugins: { legend: { labels: { color: "#e6e8ec" } } },
+      plugins: { legend: { labels: { color: "#eceef3" } } },
     },
   });
 </script>

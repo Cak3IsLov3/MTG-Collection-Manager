@@ -9,7 +9,7 @@
       <label>Your deck
         <select id="setup-deck" required>
           {% for deck in decks | sort(attribute="name") %}
-          <option value="{{ deck.id }}" data-commander="{{ deck.commander or '' }}">{{ deck.name }}</option>
+          <option value="{{ deck.id }}" data-commander="{{ deck.commander or '' }}" {{ 'selected' if deck.id == chosen_deck }}>{{ deck.name }}</option>
           {% endfor %}
         </select>
       </label>

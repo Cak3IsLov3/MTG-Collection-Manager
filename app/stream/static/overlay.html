@@ -1,0 +1,1341 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>MTG Token Overlay</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    /* Card size in whole pixels (set from ?size= by the script). Anything
+       landing between pixels gets smeared, so nothing here is fractional. */
+    --w: 150px;
+    --h: 210px;
+    --shift: 30px;                    /* (h - w) / 2, for the tapped rotation */
+    --gap: 18px;
+    --margin: 32px;
+    --ease: cubic-bezier(.3, .7, .3, 1);
+  }
+  html, body {
+    margin: 0;
+    height: 100%;
+    background: transparent;
+    overflow: hidden;
+    /* Condensed, so long token names fit; falls back to the system font. */
+    font-family: "Barlow Condensed", "Segoe UI", system-ui, sans-serif;
+  }
+  /* Default row: top-left, wrapping downwards. ?row=bottom puts it at the
+     bottom, wrapping upwards. */
+  #row {
+    position: fixed;
+    left: var(--margin);
+    right: var(--margin);
+    top: var(--margin);
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: flex-start;
+    gap: var(--gap);
+  }
+  body.row-bottom #row {
+    top: auto;
+    bottom: var(--margin);
+    /* With wrap-reverse the cross axis is flipped: flex-start = bottom edge. */
+    flex-wrap: wrap-reverse;
+  }
+  body.pos-center #row { justify-content: center; }
+  body.pos-right  #row { justify-content: flex-end; }
+
+  /* The slot takes up space in the row. When tapped it becomes as wide as the
+     card is tall, so the rotated card doesn't overlap its neighbours. */
+  .token {
+    position: relative;
+    width: var(--w);
+    height: var(--h);
+    flex: none;
+    animation: appear .45s cubic-bezier(.2, .9, .3, 1.2) both;
+    transition: width .3s var(--ease);
+  }
+  .token.tapped { width: var(--h); }
+
+  /* A stack dragged to its own spot. */
+  .token.placed {
+    position: fixed;                  /* left/top are set in whole px by the script */
+    transition: width .3s var(--ease), left .15s linear, top .15s linear;
+  }
+  .token.dragging {
+    z-index: 10;
+    transition: width .3s var(--ease);
+  }
+  .token { touch-action: none; cursor: grab; user-select: none; }
+  .token.dragging { cursor: grabbing; }
+  .card img { -webkit-user-drag: none; }
+
+  /* ?preview=1 (used by the control panel): show the canvas area. */
+  body.preview {
+    background:
+      repeating-conic-gradient(#202128 0 25%, #1a1b21 0 50%) 0 0 / 64px 64px;
+  }
+
+  .card {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: var(--w);
+    height: var(--h);
+    border-radius: calc(var(--w) * 0.05);
+    transition: transform .3s var(--ease);
+  }
+  .token.tapped .card {
+    /* Rotate around the centre and shift so the card sits at the bottom of the slot. */
+    transform: translate(var(--shift), var(--shift)) rotate(90deg);
+  }
+  .card img {
+    width: 100%;
+    height: 100%;
+    display: block;
+    border-radius: inherit;
+    /* Light outline so the black card border doesn't blend into a dark scene,
+       plus a drop shadow. box-shadow instead of CSS filters: filters make the
+       browser render the card into a separate layer and resample it. */
+    box-shadow:
+      0 0 0 max(2px, calc(var(--w) * 0.012)) rgba(255, 255, 255, .92),
+      0 2px 4px rgba(0, 0, 0, .5),
+      0 10px 26px rgba(0, 0, 0, .6);
+  }
+  body.no-outline .card img { box-shadow: 0 2px 4px rgba(0, 0, 0, .5), 0 10px 26px rgba(0, 0, 0, .6); }
+  .card::after {                      /* dims tapped cards, also without a filter */
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: rgba(0, 0, 0, .15);
+    opacity: 0;
+    transition: opacity .3s;
+    pointer-events: none;
+  }
+  .token.tapped .card::after { opacity: 1; }
+
+  /* Labels don't rotate; this layer follows the card's visible outline. */
+  .face {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: var(--w);
+    height: var(--h);
+    pointer-events: none;
+    transition: top .3s var(--ease), width .3s var(--ease), height .3s var(--ease);
+  }
+  .token.tapped .face {
+    top: calc(var(--h) - var(--w));
+    width: var(--h);
+    height: var(--w);
+  }
+  /* Row at the top: tapped cards line up with the top edge instead. */
+  body:not(.row-bottom) .token.tapped .card {
+    transform: translate(var(--shift), calc(var(--shift) * -1)) rotate(90deg);
+  }
+  body:not(.row-bottom) .token.tapped .face { top: 0; }
+
+  .badge, .pt {
+    position: absolute;
+    box-sizing: border-box;
+    color: #fff;
+    font-weight: 800;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, .5);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  .badge {
+    top: calc(var(--w) * -0.08);
+    right: calc(var(--w) * -0.08);
+    min-width: calc(var(--w) * 0.28);
+    height: calc(var(--w) * 0.28);
+    padding: 0 calc(var(--w) * 0.06);
+    border-radius: 999px;
+    background: radial-gradient(circle at 35% 28%, #ff5a5a, #d01b26 55%, #8f0d15);
+    border: calc(var(--w) * 0.02) solid #fff;
+    font-size: calc(var(--w) * 0.17);
+    text-shadow: 0 1px 2px rgba(0, 0, 0, .45);
+    box-shadow: 0 3px 8px rgba(0, 0, 0, .55);
+  }
+  .pt {
+    bottom: calc(var(--w) * -0.06);
+    right: calc(var(--w) * -0.06);
+    height: calc(var(--w) * 0.22);
+    padding: 0 calc(var(--w) * 0.06);
+    border-radius: calc(var(--w) * 0.05);
+    border: calc(var(--w) * 0.015) solid #fff;
+    font-size: calc(var(--w) * 0.13);
+    background: #1f8a3b;
+  }
+  .pt.minus { background: #7a1fa2; }
+  .badge[hidden], .pt[hidden] { display: none; }
+
+  /* Loose counter (no card): a round chip, green for +1/+1, purple for -1/-1. */
+  .token.counter { width: var(--c); height: var(--c); }
+  .chip {
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    font-weight: 800;
+    font-size: max(13px, calc(var(--w) * 0.17));
+    letter-spacing: .01em;
+    font-variant-numeric: tabular-nums;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, .5);
+    background: radial-gradient(circle at 34% 28%, #5fd67f, #23944a 45%, #125a2a);
+    /* white rim, an inner ring like a coin, and a drop shadow */
+    box-shadow:
+      0 0 0 max(2px, calc(var(--w) * 0.015)) rgba(255, 255, 255, .92),
+      inset 0 0 0 max(2px, calc(var(--w) * 0.025)) rgba(255, 255, 255, .22),
+      inset 0 calc(var(--w) * -0.03) calc(var(--w) * 0.06) rgba(0, 0, 0, .35),
+      0 2px 4px rgba(0, 0, 0, .5),
+      0 10px 22px rgba(0, 0, 0, .55);
+  }
+  .chip.minus { background: radial-gradient(circle at 34% 28%, #c47ae6, #8a2bb4 45%, #4c1069); }
+  /* Mana in the pool: the coloured circles of real mana symbols. */
+  .chip.mana {
+    color: #151515;
+    text-shadow: 0 1px 0 rgba(255, 255, 255, .45);
+    font-size: max(15px, calc(var(--w) * 0.24));
+  }
+  .chip.mana .mana-symbol {
+    width: 100%;
+    height: 100%;
+    display: block;
+    border-radius: 50%;
+    -webkit-user-drag: none;
+  }
+  .chip.mana[data-mana="W"] { background: radial-gradient(circle at 34% 28%, #fffef0, #f8f6d8 45%, #d6cf9a); }
+  .chip.mana[data-mana="U"] { background: radial-gradient(circle at 34% 28%, #e6f1fa, #b3cfe6 45%, #6f9cc4); }
+  .chip.mana[data-mana="B"] { background: radial-gradient(circle at 34% 28%, #ddd7d2, #b1a7a0 45%, #776c65); }
+  .chip.mana[data-mana="R"] { background: radial-gradient(circle at 34% 28%, #fbc7ae, #e49977 45%, #b8603d); }
+  .chip.mana[data-mana="G"] { background: radial-gradient(circle at 34% 28%, #cfe3c4, #a3c095 45%, #678a58); }
+  .chip.mana[data-mana="C"] { background: radial-gradient(circle at 34% 28%, #ece6e4, #ccc2c0 45%, #948885); }
+  .token.counter .badge { top: calc(var(--w) * -0.06); right: calc(var(--w) * -0.06); }
+  /* Keyword counter (Flying, Trample, ...): a pill sized by its text. */
+  .token.counter.keyword { width: auto; height: var(--kh); }
+  .chip.keyword {
+    position: relative;
+    inset: auto;
+    height: 100%;
+    border-radius: 999px;
+    padding: 0 calc(var(--w) * 0.09);
+    font-size: max(12px, calc(var(--w) * 0.13));
+    white-space: nowrap;
+    background: linear-gradient(180deg, #5b6f9a, #2c3956);
+  }
+  /* A colour per keyword (falls back to the slate blue above). */
+  .chip.keyword[data-kw="Flying"]         { background: linear-gradient(180deg, #5aa2e8, #2a5f9e); }
+  .chip.keyword[data-kw="First strike"],
+  .chip.keyword[data-kw="Double strike"]  { background: linear-gradient(180deg, #f0a040, #a9560f); }
+  .chip.keyword[data-kw="Deathtouch"]     { background: linear-gradient(180deg, #4f6b45, #141c12); }
+  .chip.keyword[data-kw="Defender"]       { background: linear-gradient(180deg, #9aa0ab, #535965); }
+  .chip.keyword[data-kw="Haste"]          { background: linear-gradient(180deg, #f0594a, #a01f14); }
+  .chip.keyword[data-kw="Hexproof"],
+  .chip.keyword[data-kw="Shroud"],
+  .chip.keyword[data-kw="Ward"]           { background: linear-gradient(180deg, #45b8c6, #1d6a76); }
+  .chip.keyword[data-kw="Indestructible"] { background: linear-gradient(180deg, #f2cd64, #a87c12); color: #2a1d00; text-shadow: none; }
+  .chip.keyword[data-kw="Lifelink"]       { background: linear-gradient(180deg, #fbf5df, #cdbd88); color: #3a2f0e; text-shadow: none; }
+  .chip.keyword[data-kw="Menace"]         { background: linear-gradient(180deg, #cf3340, #5c0d14); }
+  .chip.keyword[data-kw="Reach"]          { background: linear-gradient(180deg, #5cc261, #23702a); }
+  .chip.keyword[data-kw="Trample"]        { background: linear-gradient(180deg, #86a83c, #3d5812); }
+  .chip.keyword[data-kw="Vigilance"]      { background: linear-gradient(180deg, #ffffff, #b8bec9); color: #1d2330; text-shadow: none; }
+
+  /* Name + power/toughness as real text at the bottom of the card, so it stays
+     sharp and readable at any size (the card's own print is tiny). It lives in
+     .face, so it stays horizontal on tapped cards too. */
+  .plate {
+    position: absolute;
+    left: calc(var(--w) * 0.04);
+    right: calc(var(--w) * 0.04);
+    bottom: calc(var(--w) * 0.04);
+    display: flex;
+    flex-direction: column;
+    gap: calc(var(--w) * 0.01);
+    padding: calc(var(--w) * 0.025) calc(var(--w) * 0.03) calc(var(--w) * 0.03) calc(var(--w) * 0.055);
+    /* dark glass with a thin gold line on top */
+    background: linear-gradient(180deg, rgba(36, 38, 48, .94), rgba(10, 10, 14, .96));
+    border: max(1px, calc(var(--w) * 0.007)) solid rgba(255, 255, 255, .16);
+    border-top-color: rgba(231, 179, 67, .85);
+    border-radius: calc(var(--w) * 0.05);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, .1),
+      0 4px 12px rgba(0, 0, 0, .6);
+    color: #fff;
+    line-height: 1.1;
+  }
+  .plate .top {
+    display: flex;
+    align-items: center;
+    gap: calc(var(--w) * 0.04);
+  }
+  .plate .kw {
+    font-size: max(11px, calc(var(--w) * 0.088));
+    font-weight: 600;
+    letter-spacing: .02em;
+    color: #ecd9a2;
+    line-height: 1.15;
+    /* at most two lines */
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .plate .kw[hidden] { display: none; }
+  .plate .name {
+    flex: 1;
+    min-width: 0;
+    font-size: max(12px, calc(var(--w) * 0.125));
+    font-weight: 700;
+    letter-spacing: .01em;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, .6);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .plate .stats {
+    flex: none;
+    font-size: max(13px, calc(var(--w) * 0.14));
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.15;
+    padding: 0 calc(var(--w) * 0.045);
+    border-radius: calc(var(--w) * 0.035);
+    /* parchment box, like the P/T frame on a real card */
+    background: linear-gradient(180deg, #faf4e2, #d6cba9);
+    border: 1px solid rgba(0, 0, 0, .45);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .7), 0 1px 3px rgba(0, 0, 0, .5);
+    color: #1b1b1b;
+  }
+  .plate .stats.plus  { background: linear-gradient(180deg, #4cc46c, #1b7a38); color: #fff; box-shadow: inset 0 1px 0 rgba(255, 255, 255, .3); }
+  .plate .stats.minus { background: linear-gradient(180deg, #b45ddc, #6a1d91); color: #fff; box-shadow: inset 0 1px 0 rgba(255, 255, 255, .3); }
+  .plate .stats[hidden] { display: none; }
+  body.no-label .plate { display: none; }
+  /* With the plate on, P/T is shown there; the corner label is only the
+     fallback for ?label=0. */
+  body:not(.no-label) .pt { display: none; }
+  .bump { animation: bump .4s ease-out; }
+
+  .token.leaving {
+    animation: leave .35s ease-in forwards;
+    pointer-events: none;
+  }
+
+  /* ---- sparks when a token is sacrificed / removed */
+  .spark {
+    position: fixed;
+    z-index: 30;
+    border-radius: 50%;
+    pointer-events: none;
+    box-shadow: 0 0 6px currentColor;
+  }
+  .spark.coin { border-radius: 40%; box-shadow: 0 0 4px rgba(255, 215, 94, .8), inset 0 -2px 0 rgba(0, 0, 0, .25); }
+
+  /* ---- text floating up from a sacrificed token ("+1 mana", "Sacrificed") */
+  .float-text {
+    position: fixed;
+    z-index: 31;
+    transform: translate(-50%, -50%);
+    font-weight: 800;
+    font-size: max(18px, calc(var(--w) * 0.17));
+    letter-spacing: .02em;
+    white-space: nowrap;
+    pointer-events: none;
+    color: #ff9a6b;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, .8);
+    /* dark pill so it reads on any scene, light or dark */
+    padding: .08em .55em .12em;
+    border-radius: 999px;
+    background: rgba(12, 12, 16, .78);
+    border: 1px solid currentColor;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, .5);
+  }
+  .float-text.mana { color: #ffd75e; }
+  .float-text.life { color: #7be08f; }
+  .float-text.draw { color: #8cc4ff; }
+  .float-text.attack { color: #ff7b6b; }
+
+  /* ---- attacking: a red glow while the card lunges forward */
+  .token.attacking .card img {
+    box-shadow:
+      0 0 0 max(2px, calc(var(--w) * 0.012)) rgba(255, 120, 100, .95),
+      0 0 calc(var(--w) * 0.18) calc(var(--w) * 0.04) rgba(255, 60, 40, .75),
+      0 10px 26px rgba(0, 0, 0, .6);
+  }
+
+  /* ---- big banner across the top: "Untap step", "Attack!" */
+  .banner {
+    position: fixed;
+    left: 50%;
+    top: 16%;
+    z-index: 25;
+    transform: translate(-50%, -50%);
+    padding: .15em .9em .2em;
+    border-radius: 999px;
+    font-weight: 800;
+    font-size: 6vh;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    pointer-events: none;
+    color: #fff;
+    text-shadow: 0 2px 8px rgba(0, 0, 0, .7);
+    background: rgba(12, 12, 16, .8);
+    border: 2px solid rgba(255, 255, 255, .25);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, .55);
+  }
+  .banner.untap { color: #ffe08a; border-color: rgba(231, 179, 67, .8); }
+  .banner.attack { color: #ff8a7a; border-color: rgba(255, 90, 70, .85); }
+  .banner.turn { border-color: rgba(231, 179, 67, .85); }
+
+  /* ---- turn tracker: the phases of the turn, the current one lit up */
+  #phases {
+    position: fixed;
+    left: 50%;
+    bottom: 3vh;
+    z-index: 18;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: .4vh;
+    padding: .5vh .6vh;
+    border-radius: 999px;
+    font-weight: 700;
+    font-size: 2.3vh;
+    letter-spacing: .02em;
+    white-space: nowrap;
+    color: rgba(255, 255, 255, .55);
+    background: rgba(12, 12, 16, .82);
+    border: 1px solid rgba(255, 255, 255, .15);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, .5);
+  }
+  #phases[hidden] { display: none; }
+  #phases.top { bottom: auto; top: 3vh; }
+  #phases .turn-no { padding: 0 1.2vh 0 1vh; color: #f3cc6e; font-weight: 800; }
+  #phases .ph {
+    padding: .45vh 1.3vh .55vh;
+    border-radius: 999px;
+    transition: background .3s, color .3s, transform .3s, box-shadow .3s;
+  }
+  #phases .ph.done { color: rgba(255, 255, 255, .35); }
+  #phases .ph.on {
+    color: #1a1406;
+    background: linear-gradient(180deg, #f8d988, #e7b343);
+    box-shadow: 0 0 1.6vh rgba(231, 179, 67, .6);
+    transform: scale(1.08);
+  }
+  #phases .ph.on.combat {
+    color: #fff;
+    background: linear-gradient(180deg, #f0594a, #a01f14);
+    box-shadow: 0 0 1.6vh rgba(240, 89, 74, .65);
+  }
+
+  /* ---- dice and coin rolls: they roll in across the screen and land in the middle */
+  #dice {
+    --d: 15vh;
+    position: fixed;
+    left: 50%;
+    top: 42%;
+    transform: translate(-50%, -50%);
+    z-index: 20;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: calc(var(--d) * 0.16);
+    pointer-events: none;
+    transition: opacity .5s;
+  }
+  #dice.out { opacity: 0; }
+  #dice .dice-row { display: flex; gap: calc(var(--d) * 0.25); }
+  .die { position: relative; width: var(--d); height: var(--d); }
+  /* each die is an SVG in its real shape (d4 triangle, d6 square with pips, ...) */
+  .die svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+    overflow: visible;
+    filter: drop-shadow(0 calc(var(--d) * 0.08) calc(var(--d) * 0.1) rgba(0, 0, 0, .55));
+  }
+  .die .num {
+    font-family: "Barlow Condensed", "Segoe UI", sans-serif;
+    font-weight: 800;
+    fill: #fff;
+    paint-order: stroke;
+    stroke: rgba(0, 0, 0, .35);
+    stroke-width: 2.5px;
+  }
+  .die.landed svg, .die.landed .coin-face { animation: land .45s cubic-bezier(.2, .9, .3, 1.4); }
+  /* the coin is a gold disc that flips while it flies in */
+  .coin-face {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    font-weight: 800;
+    font-size: calc(var(--d) * 0.42);
+    color: #5a3c00;
+    background: radial-gradient(circle at 35% 30%, #fff1a8, #f2c440 45%, #b8860b);
+    box-shadow:
+      inset 0 0 0 calc(var(--d) * 0.05) rgba(255, 255, 255, .35),
+      inset 0 0 0 calc(var(--d) * 0.08) rgba(120, 80, 0, .35),
+      0 calc(var(--d) * 0.1) calc(var(--d) * 0.25) rgba(0, 0, 0, .6);
+  }
+  .die.coin.rolling .coin-face { animation: flip .22s linear infinite; }
+  .dice-caption {
+    font-weight: 800;
+    font-size: calc(var(--d) * 0.3);
+    letter-spacing: .03em;
+    color: #fff;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, .8);
+    white-space: nowrap;
+    /* dark pill so it reads on any scene, light or dark */
+    padding: .05em .7em .1em;
+    border-radius: 999px;
+    background: rgba(12, 12, 16, .78);
+    border: 1px solid rgba(255, 255, 255, .18);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, .5);
+  }
+  .dice-caption.crit { border-color: rgba(255, 215, 94, .7); }
+  .dice-caption.fail { border-color: rgba(255, 107, 94, .6); }
+  .dice-caption.crit { color: #ffd75e; animation: glow 1s ease-in-out infinite alternate; }
+  .dice-caption.fail { color: #ff6b5e; }
+  @keyframes flip {
+    from { transform: rotateY(0); }
+    to   { transform: rotateY(360deg); }
+  }
+  @keyframes land {
+    0%   { transform: scale(1.3); }
+    60%  { transform: scale(.92); }
+    100% { transform: scale(1); }
+  }
+  @keyframes glow {
+    from { text-shadow: 0 2px 6px rgba(0, 0, 0, .8), 0 0 8px rgba(255, 215, 94, .4); }
+    to   { text-shadow: 0 2px 6px rgba(0, 0, 0, .8), 0 0 26px rgba(255, 215, 94, .95); }
+  }
+
+  @keyframes appear {
+    0%   { opacity: 0; transform: translateY(-18px) scale(.82) rotate(-5deg); }
+    60%  { opacity: 1; }
+    100% { opacity: 1; transform: none; }
+  }
+  @keyframes bump {
+    0%   { transform: scale(1); }
+    35%  { transform: scale(1.4); }
+    65%  { transform: scale(.94); }
+    100% { transform: scale(1); }
+  }
+  @keyframes leave {
+    to { opacity: 0; transform: scale(.75) rotate(4deg); }
+  }
+</style>
+</head>
+<body>
+<div id="row"></div>
+<div id="dice"></div>
+<div id="phases" hidden></div>
+<script>
+  // The app can live under a path (/stream); every address starts from there.
+  const ROOT = location.pathname.replace(/\/(control|overlay)\/?$/, "");
+(() => {
+  // ---- URL options: /overlay?size=200&pos=right
+  const params = new URLSearchParams(location.search);
+  const sizeParam = parseInt(params.get("size"), 10);
+  const W = sizeParam >= 40 && sizeParam <= 600 ? sizeParam : 150;
+  // Height from the card's aspect ratio, rounded so that H - W is even: then
+  // the tapped (rotated) card also lands exactly on whole pixels.
+  const H = W + 2 * Math.round((W * 680 / 488 - W) / 2);
+  const rootStyle = document.documentElement.style;
+  rootStyle.setProperty("--w", `${W}px`);
+  rootStyle.setProperty("--h", `${H}px`);
+  rootStyle.setProperty("--shift", `${(H - W) / 2}px`);
+  const C = 2 * Math.round(W * 0.3);  // counter chip diameter, whole and even
+  rootStyle.setProperty("--c", `${C}px`);
+  rootStyle.setProperty("--kh", `${2 * Math.round(W * 0.15)}px`);  // keyword pill height
+  if (params.get("outline") === "0") document.body.classList.add("no-outline");
+  if (params.get("preview") === "1") document.body.classList.add("preview");
+  if (params.get("label") === "0") document.body.classList.add("no-label");
+  const pos = params.get("pos");
+  if (pos === "center") document.body.classList.add("pos-center");
+  if (pos === "right") document.body.classList.add("pos-right");
+  if (params.get("row") === "bottom") document.body.classList.add("row-bottom");
+  // Turn tracker position: ?phases=top|bottom|off; by default opposite the row.
+  const phasesPos = params.get("phases") || (params.get("row") === "bottom" ? "top" : "bottom");
+
+  const row = document.getElementById("row");
+  const elements = new Map(); // id -> {el, badge, pt, count, ptText, tapped, pos}
+
+  function bump(node) {
+    // Force a reflow so the animation restarts on rapid clicks.
+    node.classList.remove("bump");
+    void node.offsetWidth;
+    node.classList.add("bump");
+  }
+
+  function insertAfter(el, after) {
+    // Place a new stack (e.g. after a split) right after its predecessor,
+    // without moving existing elements.
+    if (after) after.after(el);
+    else row.prepend(el);
+  }
+
+  // "+1/+1", "Flying", "Ward 2", "Ward — Pay 3 life".
+  function counterLabel(t) {
+    const name = t.name.replace("-", "−");
+    if (!t.value) return name;
+    return /^[\d{X]/.test(t.value) ? `${name} ${t.value}` : `${name} — ${t.value}`;
+  }
+
+  function updateCounter(entry, t, isNew) {
+    const label = counterLabel(t);
+    if (entry.label === label) return;
+    entry.label = label;
+    if (entry.isMana) return;         // shows the mana symbol, not text
+    entry.chip.textContent = label;
+    if (!isNew) bump(entry.chip);
+    layoutPlaced(entry.el);           // the pill may have become wider
+  }
+
+  const MANA = new Set(["W", "U", "B", "R", "G", "C"]);
+
+  // The real mana symbol (Scryfall's SVG); the letter if it can't be loaded.
+  function manaSymbol(letter) {
+    const img = document.createElement("img");
+    img.className = "mana-symbol";
+    img.alt = letter;
+    img.src = `https://svgs.scryfall.io/card-symbols/${letter}.svg`;
+    img.addEventListener("error", () => img.replaceWith(letter));
+    return img;
+  }
+
+  function createCounter(t, after) {
+    const el = document.createElement("div");
+    const isPT = t.name === "+1/+1" || t.name === "-1/-1";
+    const isMana = MANA.has(t.name);
+    el.className = "token counter" + (isPT || isMana ? "" : " keyword");
+    el.dataset.id = t.id;
+    const chip = document.createElement("div");
+    if (isMana) {
+      chip.className = "chip mana";
+      chip.dataset.mana = t.name;
+      chip.append(manaSymbol(t.name));
+    } else {
+      chip.className = "chip" + (isPT ? (t.name.startsWith("-") ? " minus" : "") : " keyword");
+      if (!isPT) chip.dataset.kw = t.name;
+    }
+    const badge = document.createElement("div");
+    badge.className = "badge";
+    for (const b of [badge, chip]) b.addEventListener("animationend", () => b.classList.remove("bump"));
+    el.append(chip, badge);
+    insertAfter(el, after);
+    const entry = { kind: "counter", name: t.name, el, badge, chip, label: null, count: null, pos: undefined,
+                    isMana };
+    elements.set(t.id, entry);
+    return entry;
+  }
+
+  function createToken(t, after) {
+    const el = document.createElement("div");
+    el.className = "token";
+    el.dataset.id = t.id;
+    const card = document.createElement("div");
+    card.className = "card";
+    const img = document.createElement("img");
+    img.alt = t.name;
+    img.decoding = "async";
+    // Use Scryfall's "large" image (672×936) so cards stay sharp at bigger
+    // sizes and on 1440p canvases; fall back to the stored "normal" one.
+    const large = t.image_url.replace("/normal/", "/large/");
+    img.addEventListener("error", () => { if (img.src !== t.image_url) img.src = t.image_url; });
+    img.src = large;
+    card.append(img);
+
+    const face = document.createElement("div");
+    face.className = "face";
+    const badge = document.createElement("div");
+    badge.className = "badge";
+    const pt = document.createElement("div");
+    pt.className = "pt";
+    const plate = document.createElement("div");
+    plate.className = "plate";
+    const nameEl = document.createElement("span");
+    nameEl.className = "name";
+    nameEl.textContent = t.name;
+    const stats = document.createElement("span");
+    stats.className = "stats";
+    const top = document.createElement("div");
+    top.className = "top";
+    top.append(nameEl, stats);
+    const kw = document.createElement("div");
+    kw.className = "kw";
+    plate.append(top, kw);
+    for (const b of [badge, pt, stats]) b.addEventListener("animationend", () => b.classList.remove("bump"));
+    face.append(plate, badge, pt);
+    el.append(card, face);
+    insertAfter(el, after);
+
+    const entry = { name: t.name, el, badge, pt, stats, kw, count: null, ptText: null, statsText: null, kwText: null,
+                    tapped: null, pos: undefined };
+    elements.set(t.id, entry);
+    return entry;
+  }
+
+  // "+2/+2", or the new power/toughness when the card's base P/T is known.
+  function ptLabel(t) {
+    const c = t.counters || 0;
+    if (!c) return "";
+    const power = t.set_power ?? t.power, tough = t.set_toughness ?? t.toughness;
+    const p = Number(power), w = Number(tough);
+    if (power != null && tough != null && Number.isFinite(p) && Number.isFinite(w)) {
+      return `${p + c}/${w + c}`;
+    }
+    return c > 0 ? `+${c}/+${c}` : `${c}/${c}`;
+  }
+
+  // Current power/toughness for the plate, counters included: "3/3", "*/*",
+  // "*/* +1/+1", or "+1/+1" when the token has no P/T at all. A manual value
+  // (set in the control panel for */* tokens) replaces the printed one.
+  function statsLabel(t) {
+    const c = t.counters || 0;
+    const mod = c ? (c > 0 ? `+${c}/+${c}` : `${c}/${c}`) : "";
+    const power = t.set_power ?? t.power;
+    const tough = t.set_toughness ?? t.toughness;
+    if (power == null || tough == null) return mod;
+    const p = Number(power), w = Number(tough);
+    if (Number.isFinite(p) && Number.isFinite(w)) return `${p + c}/${w + c}`;
+    return [`${power}/${tough}`, mod].filter(Boolean).join(" ");
+  }
+
+  function update(entry, t, isNew) {
+    if (entry.count !== t.count) {
+      // One taken off the stack (sacrificed, died): a small burst.
+      if (!isNew && entry.count !== null && t.count < entry.count && !recentlySacrificed(entry)) {
+        burst(entry.el, paletteFor(entry), 12);
+      }
+      entry.count = t.count;
+      entry.badge.textContent = String(t.count);
+      entry.badge.hidden = t.count <= 1;
+      if (!isNew) bump(entry.badge);
+    }
+    if (entry.kind === "counter") updateCounter(entry, t, isNew);
+    else updateCard(entry, t, isNew);
+    // Don't fight the user: ignore position echoes while this stack is dragged.
+    const posKey = t.pos ? `${t.pos.x},${t.pos.y}` : null;
+    if (entry.pos !== posKey && !(drag && drag.el === entry.el)) {
+      entry.pos = posKey;
+      setPlaced(entry.el, t.pos);
+    }
+  }
+
+  function updateCard(entry, t, isNew) {
+    const label = ptLabel(t);
+    if (entry.ptText !== label) {
+      entry.ptText = label;
+      entry.pt.textContent = label;
+      entry.pt.hidden = !label;
+      entry.pt.classList.toggle("minus", (t.counters || 0) < 0);
+      if (!isNew && label) bump(entry.pt);
+    }
+    const stats = statsLabel(t);
+    if (entry.statsText !== stats) {
+      entry.statsText = stats;
+      entry.stats.textContent = stats;
+      entry.stats.hidden = !stats;
+      entry.stats.classList.toggle("plus", (t.counters || 0) > 0);
+      entry.stats.classList.toggle("minus", (t.counters || 0) < 0);
+      if (!isNew && stats) bump(entry.stats);
+    }
+    const kwText = (t.keywords || []).join(", ");
+    if (entry.kwText !== kwText) {
+      entry.kwText = kwText;
+      entry.kw.textContent = kwText;
+      entry.kw.hidden = !kwText;
+    }
+    if (entry.tapped !== !!t.tapped) {
+      entry.tapped = !!t.tapped;
+      entry.el.classList.toggle("tapped", entry.tapped);
+      layoutPlaced(entry.el);         // a tapped card is wider; keep it on screen
+    }
+  }
+
+  // Positions are fractions of the screen; turn them into whole pixels and
+  // keep the card on screen.
+  function setPlaced(el, pos) {
+    el._pos = pos || null;
+    el.classList.toggle("placed", !!pos);
+    if (pos) layoutPlaced(el);
+    else el.style.left = el.style.top = "";
+  }
+
+  function layoutPlaced(el) {
+    const pos = el._pos;
+    if (!pos) return;
+    const counter = el.classList.contains("counter");
+    const w = counter ? el.offsetWidth : el.classList.contains("tapped") ? H : W;
+    const h = counter ? el.offsetHeight : H;
+    el.style.left = `${Math.round(Math.max(0, Math.min(pos.x * innerWidth, innerWidth - w)))}px`;
+    el.style.top = `${Math.round(Math.max(0, Math.min(pos.y * innerHeight, innerHeight - h)))}px`;
+  }
+
+  addEventListener("resize", () => {
+    for (const { el } of elements.values()) layoutPlaced(el);
+  });
+
+  // ---- Dragging: works in the control panel preview and in OBS (right-click
+  // the source > Interact). Positions are sent to the server while dragging.
+  let drag = null;
+
+  function sendPos(id, pos) {
+    fetch(`${ROOT}/api/tokens/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pos }),
+    }).catch(() => {});
+  }
+
+  function dragPos(e) {
+    const el = drag.el;
+    const left = Math.min(Math.max(e.clientX - drag.dx, 0), Math.max(innerWidth - el.offsetWidth, 0));
+    const top = Math.min(Math.max(e.clientY - drag.dy, 0), Math.max(innerHeight - el.offsetHeight, 0));
+    const round = (v) => Math.round(Math.min(Math.max(v, 0), 1) * 10000) / 10000;
+    return { x: round(left / innerWidth), y: round(top / innerHeight) };
+  }
+
+  row.addEventListener("pointerdown", (e) => {
+    const el = e.target.closest(".token");
+    if (!el || el.classList.contains("leaving") || e.button !== 0) return;
+    e.preventDefault();
+    const r = el.getBoundingClientRect();
+    drag = { el, id: el.dataset.id, dx: e.clientX - r.left, dy: e.clientY - r.top,
+             sx: e.clientX, sy: e.clientY, moved: false, last: 0 };
+    el.setPointerCapture(e.pointerId);
+  });
+
+  document.addEventListener("pointermove", (e) => {
+    if (!drag) return;
+    if (!drag.moved && Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy) < 4) return;
+    drag.moved = true;
+    drag.el.classList.add("dragging");
+    const pos = dragPos(e);
+    drag.pos = pos;
+    setPlaced(drag.el, pos);
+    const now = performance.now();
+    if (now - drag.last > 80) {         // live updates, but not on every pixel
+      drag.last = now;
+      sendPos(drag.id, pos);
+    }
+  });
+
+  function endDrag(e) {
+    if (!drag) return;
+    if (drag.moved) {
+      // pointercancel has no useful coordinates; use the last known spot.
+      const pos = e.type === "pointerup" ? dragPos(e) : drag.pos;
+      setPlaced(drag.el, pos);
+      sendPos(drag.id, pos);
+      const entry = elements.get(drag.id);
+      if (entry) entry.pos = `${pos.x},${pos.y}`;
+    }
+    drag.el.classList.remove("dragging");
+    drag = null;
+  }
+  document.addEventListener("pointerup", endDrag);
+  document.addEventListener("pointercancel", endDrag);
+
+  // ---- Sparks: a little burst when tokens leave (sacrificed, destroyed, removed)
+  const GOLD = ["#ffd75e", "#f2b632", "#fff1a8", "#e9a21c"];
+  const FIRE = ["#ffb347", "#ff6a2b", "#ffe08a", "#ffffff"];
+  const PALETTES = {
+    "+1/+1": ["#5fd67f", "#23944a", "#c9ffd8"],
+    "-1/-1": ["#c47ae6", "#8a2bb4", "#f0d4ff"],
+  };
+
+  function paletteFor(entry) {
+    if (entry.kind === "counter") {
+      return PALETTES[entry.name] || [getComputedStyle(entry.chip).backgroundImage.match(/#[0-9a-f]{6}|rgb\([^)]*\)/i)?.[0] || "#9fb4e0", "#ffffff"];
+    }
+    return /treasure|gold|coin/i.test(entry.name) ? GOLD : FIRE;
+  }
+
+  function burst(el, palette, n) {
+    const r = el.getBoundingClientRect();
+    if (!r.width) return;
+    const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+    const scale = Math.max(r.width, r.height) / 200;
+    const coins = palette === GOLD;
+    for (let i = 0; i < n; i++) {
+      const p = document.createElement("i");
+      p.className = "spark" + (coins ? " coin" : "");
+      const size = (coins ? 8 : 4) + Math.random() * (coins ? 7 : 6);
+      const color = palette[i % palette.length];
+      Object.assign(p.style, {
+        left: `${cx}px`, top: `${cy}px`, width: `${size}px`, height: `${size}px`,
+        background: color, color,
+      });
+      document.body.append(p);
+      const angle = Math.random() * Math.PI * 2;
+      const dist = (60 + Math.random() * 90) * Math.max(scale, .6);
+      const dx = Math.cos(angle) * dist, dy = Math.sin(angle) * dist;
+      p.animate([
+        { transform: "translate(-50%, -50%) scale(1)", opacity: 1 },
+        { transform: `translate(calc(-50% + ${dx * .7}px), calc(-50% + ${dy * .7 - 25}px)) scale(.9)`, opacity: 1, offset: .55 },
+        { transform: `translate(calc(-50% + ${dx}px), calc(-50% + ${dy + 35}px)) scale(.2)`, opacity: 0 },
+      ], { duration: 700 + Math.random() * 400, easing: "cubic-bezier(.2, .7, .3, 1)" })
+        .onfinish = () => p.remove();
+      setTimeout(() => p.remove(), 1600);   // also when the animation can't play (hidden source)
+    }
+  }
+
+  // ---- Sacrifice and Use
+  // Sacrifice on its own gives nothing (edicts, sac outlets, ...): just a burst
+  // and "Sacrificed". Use activates a token's ability (Treasure, Food, Clue,
+  // ...): if the cost includes {T} the token taps first, then it bursts with
+  // what you get. Powerstone only taps.
+  const recentlySacrificed = (entry) => entry.sacrificedAt && performance.now() - entry.sacrificedAt < 1500;
+  const TAP_MS = 380;                 // a bit longer than the .3s tap transition
+
+  function onSacrifice(ev) {
+    const entry = elements.get(ev.id);
+    if (!entry) return;
+    entry.sacrificedAt = performance.now();   // no extra bursts from the state update
+    burst(entry.el, paletteFor(entry), Math.min(24 + 8 * ev.count, 60));
+    floatText(entry.el, ev.count > 1 ? `Sacrificed ×${ev.count}` : "Sacrificed", "");
+  }
+
+  const textClass = (text) => (/mana|colorless/i.test(text) ? "mana" : /life/i.test(text) ? "life" : "draw");
+
+  function onUse(ev) {
+    const entry = elements.get(ev.id);
+    if (!entry) return;
+    const cls = textClass(ev.text);
+    if (!ev.sac) {
+      // Tap-only ability (Powerstone): the state update taps it; show the result.
+      floatText(entry.el, ev.text, cls);
+      burst(entry.el, GOLD, 10);
+      return;
+    }
+    entry.sacrificedAt = performance.now();
+    if (!ev.tap) {
+      burst(entry.el, paletteFor(entry), 32);
+      floatText(entry.el, ev.text, cls);
+      return;
+    }
+    // Costs {T}: tap first, then burst. When it's the last of the stack, the
+    // stack itself taps (its removal waits for that); otherwise a copy of the
+    // card taps and bursts while the stack counts down.
+    const whole = entry.count === null || entry.count <= 1;
+    const target = whole ? entry.el : ghostOf(entry.el);
+    target.classList.add("tapped");
+    if (whole) { entry.sacrificing = true; layoutPlaced(entry.el); }
+
+    setTimeout(() => {
+      entry.sacrificedAt = performance.now();
+      burst(target, paletteFor(entry), 32);
+      floatText(target, ev.text, cls);
+      if (whole) {
+        entry.sacrificing = false;
+        entry.afterSacrifice?.();
+      } else {
+        target.style.animation = "leave .35s ease-in forwards";
+        setTimeout(() => target.remove(), 400);
+      }
+    }, TAP_MS);
+  }
+
+  // A copy of a card, laid exactly over it (for using one token of a stack).
+  function ghostOf(el) {
+    const r = el.getBoundingClientRect();
+    const g = el.cloneNode(true);
+    g.classList.remove("placed", "dragging", "leaving", "tapped");
+    g.querySelector(".badge")?.setAttribute("hidden", "");
+    Object.assign(g.style, {
+      position: "fixed", left: `${Math.round(r.left)}px`, top: `${Math.round(r.top)}px`,
+      zIndex: 15, animation: "none", pointerEvents: "none",
+    });
+    document.body.append(g);
+    void g.offsetWidth;                 // so the tap below animates instead of jumping
+    return g;
+  }
+
+  // ---- Attack: the card lunges forward with a red glow (the state update
+  // taps it at the same time). Attack with all also shows a banner.
+  function onAttack(ev) {
+    const entries = ev.ids.map((id) => elements.get(id)).filter(Boolean);
+    entries.forEach((entry, i) => setTimeout(() => lunge(entry), i * 90));
+    if (ev.ids.length > 1) showBanner("⚔ Attack!", "attack");
+  }
+
+  function lunge(entry) {
+    const el = entry.el;
+    el.classList.add("attacking");
+    const d = Math.round(H * 0.16);
+    el.animate([
+      { transform: "translate(0, 0) scale(1)" },
+      { transform: `translate(0, ${-d}px) scale(1.08)`, offset: .35 },
+      { transform: `translate(0, ${-d * .3}px) scale(1.02)`, offset: .7 },
+      { transform: "translate(0, 0) scale(1)" },
+    ], { duration: 650, easing: "cubic-bezier(.3, .7, .3, 1)" });
+    floatText(el, "⚔ Attack", "attack");
+    setTimeout(() => el.classList.remove("attacking"), 1300);
+  }
+
+  // ---- Banner across the top, for a moment.
+  let bannerFreeAt = 0;
+  function showBanner(text, cls) {
+    // One after the other (e.g. "Turn 4", then "Untap step"), never on top of each other.
+    const now = performance.now();
+    const start = Math.max(now, bannerFreeAt);
+    bannerFreeAt = start + 1100;
+    if (start > now) { setTimeout(() => showBanner2(text, cls), start - now); return; }
+    showBanner2(text, cls);
+  }
+
+  function showBanner2(text, cls) {
+    const b = document.createElement("div");
+    b.className = `banner ${cls || ""}`;
+    b.textContent = text;
+    document.body.append(b);
+    b.animate([
+      { transform: "translate(-50%, -110%) scale(.9)", opacity: 0 },
+      { transform: "translate(-50%, -50%) scale(1.04)", opacity: 1, offset: .15 },
+      { transform: "translate(-50%, -50%) scale(1)", opacity: 1, offset: .75 },
+      { transform: "translate(-50%, -40%) scale(.98)", opacity: 0 },
+    ], { duration: 1700, easing: "ease-out" }).onfinish = () => b.remove();
+    setTimeout(() => b.remove(), 2000);      // also when the animation can't play
+  }
+
+  function onUntap(ev) {
+    showBanner("Untap step", "untap");
+    // A little sparkle on everything that untaps.
+    if (ev.count) {
+      for (const entry of elements.values()) {
+        if (entry.tapped) burst(entry.el, GOLD, 8);
+      }
+    }
+  }
+
+  function floatText(el, text, cls) {
+    const r = el.getBoundingClientRect();
+    const t = document.createElement("div");
+    t.className = "float-text" + (cls ? ` ${cls}` : "");
+    t.textContent = text;
+    Object.assign(t.style, { left: `${r.left + r.width / 2}px`, top: `${r.top + r.height * 0.4}px` });
+    document.body.append(t);
+    t.animate([
+      { transform: "translate(-50%, -50%) scale(.6)", opacity: 0 },
+      { transform: "translate(-50%, -80%) scale(1.1)", opacity: 1, offset: .2 },
+      { transform: "translate(-50%, -150%) scale(1)", opacity: 1, offset: .7 },
+      { transform: "translate(-50%, -220%) scale(.95)", opacity: 0 },
+    ], { duration: 1600, easing: "cubic-bezier(.2, .7, .3, 1)" }).onfinish = () => t.remove();
+    setTimeout(() => t.remove(), 1900);     // also when the animation can't play (hidden source)
+  }
+
+  // ---- Dice and coin rolls (rolled by the server, shown here)
+  const diceBox = document.getElementById("dice");
+  const SVG_NS = "http://www.w3.org/2000/svg";
+  let diceTimers = [];
+  let rollSeq = 0;
+  let dieUid = 0;
+
+  // Regular polygon points around (cx, cy), first point at the top.
+  function ring(n, r, cx = 50, cy = 50) {
+    return Array.from({ length: n }, (_, i) => {
+      const a = -Math.PI / 2 + (i * 2 * Math.PI) / n;
+      return [cx + r * Math.cos(a), cy + r * Math.sin(a)];
+    });
+  }
+  const pts = (list) => list.map((p) => p.join(",")).join(" ");
+
+  // The front view of each die: outline, facet lines, where the number goes,
+  // and its colours. All in a 100 × 100 box.
+  const D12_OUT = ring(5, 48, 50, 53), D12_IN = ring(5, 27, 50, 53);
+  const DICE = {
+    d4: {
+      body: "50,4 97,90 3,90",
+      facets: [[50, 4, 50, 63], [97, 90, 50, 63], [3, 90, 50, 63]],
+      text: [50, 74, 26], colors: ["#6fd174", "#1e6b2a"],
+    },
+    d6: {
+      rect: true, pips: true, colors: ["#ffffff", "#cdd1dc"],
+    },
+    d8: {
+      body: "50,3 95,50 50,97 5,50",
+      facets: [[17.5, 62, 82.5, 62], [50, 3, 17.5, 62], [50, 3, 82.5, 62]],
+      text: [50, 44, 28], colors: ["#bb7ae8", "#5a1f8a"],
+    },
+    d10: {
+      body: "50,3 96,42 85,75 50,97 15,75 4,42",
+      facets: [[50, 3, 77, 52], [77, 52, 50, 66], [50, 66, 23, 52], [23, 52, 50, 3],
+               [77, 52, 96, 42], [77, 52, 85, 75], [50, 66, 50, 97], [23, 52, 4, 42], [23, 52, 15, 75]],
+      text: [50, 43, 26], colors: ["#f6a84c", "#a4520e"],
+    },
+    d12: {
+      body: pts(D12_OUT),
+      facets: [...D12_IN.map((p, i) => [...p, ...D12_IN[(i + 1) % 5]]),
+               ...D12_IN.map((p, i) => [...p, ...D12_OUT[i]])],
+      text: [50, 54, 28], colors: ["#4fd0d8", "#16717a"],
+    },
+    d20: {
+      body: "50,3 92,27 92,73 50,97 8,73 8,27",
+      facets: [[50, 22, 77, 68], [77, 68, 23, 68], [23, 68, 50, 22],
+               [50, 22, 50, 3], [50, 22, 8, 27], [50, 22, 92, 27],
+               [77, 68, 92, 27], [77, 68, 92, 73], [77, 68, 50, 97],
+               [23, 68, 8, 27], [23, 68, 8, 73], [23, 68, 50, 97]],
+      text: [50, 54, 27], colors: ["#6b97f5", "#1f3f9e"],
+    },
+  };
+  const TONES = { crit: ["#fff3b0", "#c9940f"], fail: ["#f0594a", "#7a1010"] };
+  // d6 pip positions per value
+  const PIPS = {
+    1: [[50, 50]], 2: [[29, 29], [71, 71]], 3: [[29, 29], [50, 50], [71, 71]],
+    4: [[29, 29], [71, 29], [29, 71], [71, 71]],
+    5: [[29, 29], [71, 29], [50, 50], [29, 71], [71, 71]],
+    6: [[29, 27], [71, 27], [29, 50], [71, 50], [29, 73], [71, 73]],
+  };
+
+  function svgEl(tag, attrs) {
+    const node = document.createElementNS(SVG_NS, tag);
+    for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, v);
+    return node;
+  }
+
+  // Builds one die; returns its element plus setters for the value and colour.
+  function makeDie(kind) {
+    const el = document.createElement("div");
+    el.className = `die rolling ${kind}`;
+    if (kind === "coin") {
+      const face = document.createElement("div");
+      face.className = "coin-face";
+      el.append(face);
+      return { el, set: (v) => { face.textContent = v === "heads" ? "H" : "T"; }, tone() {} };
+    }
+    const spec = DICE[kind];
+    const id = `dg${++dieUid}`;
+    const svg = svgEl("svg", { viewBox: "0 0 100 100" });
+    const grad = svgEl("linearGradient", { id, x1: "0", y1: "0", x2: "1", y2: "1" });
+    const stops = spec.colors.map((c, i) => svgEl("stop", { offset: i, "stop-color": c }));
+    grad.append(...stops);
+    const defs = svgEl("defs", {});
+    defs.append(grad);
+    const common = { fill: `url(#${id})`, stroke: "rgba(255,255,255,.95)", "stroke-width": 3, "stroke-linejoin": "round" };
+    const body = spec.rect
+      ? svgEl("rect", { x: 5, y: 5, width: 90, height: 90, rx: 16, ...common })
+      : svgEl("polygon", { points: spec.body, ...common });
+    svg.append(defs, body);
+    for (const [x1, y1, x2, y2] of spec.facets || []) {
+      svg.append(svgEl("line", { x1, y1, x2, y2, stroke: "rgba(255,255,255,.4)", "stroke-width": 1.6, "stroke-linecap": "round" }));
+    }
+    const face = svgEl("g", {});
+    svg.append(face);
+    el.append(svg);
+
+    const set = (v) => {
+      face.replaceChildren();
+      if (spec.pips) {
+        for (const [cx, cy] of PIPS[v]) face.append(svgEl("circle", { cx, cy, r: 8.5, fill: "#1b1d24" }));
+      } else {
+        const [x, y, size] = spec.text;
+        const t = svgEl("text", { x, y, class: "num", "text-anchor": "middle", "dominant-baseline": "central", "font-size": size });
+        t.textContent = String(v);
+        face.append(t);
+      }
+    };
+    const tone = (name) => TONES[name].forEach((c, i) => stops[i].setAttribute("stop-color", c));
+    return { el, set, tone };
+  }
+
+  // Rolls a die in from one side of the screen: a few bounces, spinning
+  // slower and slower, ending exactly in its spot.
+  function rollIn(el, i, isCoin) {
+    const r = el.getBoundingClientRect();
+    const fromLeft = Math.random() < .5;
+    const dx = fromLeft ? -(r.right + 60) : innerWidth - r.left + 60;
+    const d = r.height;
+    const spin = isCoin ? 0 : (fromLeft ? 1 : -1) * (720 + Math.random() * 360);
+    const at = (f, lift) => `translate(${dx * f}px, ${-lift}px) rotate(${spin * f}deg)`;
+    return el.animate([
+      { transform: at(1, d * .9), easing: "ease-in" },
+      { transform: at(.5, 0), offset: .32, easing: "ease-out" },
+      { transform: at(.27, d * .45), offset: .52, easing: "ease-in" },
+      { transform: at(.1, 0), offset: .7, easing: "ease-out" },
+      { transform: at(.04, d * .15), offset: .82, easing: "ease-in" },
+      { transform: at(.01, 0), offset: .92, easing: "ease-out" },
+      { transform: "translate(0, 0) rotate(0deg)" },
+    ], { duration: 1300, delay: i * 110, fill: "backwards" });
+  }
+
+  function showRoll(ev) {
+    const seq = ++rollSeq;
+    diceTimers.forEach(clearTimeout);
+    diceTimers = [];
+    const isCoin = ev.kind === "coin";
+    const sides = isCoin ? 2 : parseInt(ev.kind.slice(1), 10);
+    const dice = ev.results.map(() => makeDie(ev.kind));
+    const row = document.createElement("div");
+    row.className = "dice-row";
+    row.append(...dice.map((d) => d.el));
+    const caption = document.createElement("div");
+    caption.className = "dice-caption";
+    caption.textContent = isCoin ? "Coin flip…" : `Rolling ${ev.results.length > 1 ? ev.results.length : ""}${ev.kind}…`;
+    diceBox.classList.remove("out");
+    diceBox.replaceChildren(row, caption);
+
+    // While they roll, show random faces.
+    const randomFace = () => (isCoin ? (Math.random() < .5 ? "heads" : "tails") : 1 + Math.floor(Math.random() * sides));
+    const landed = dice.map(() => false);
+    dice.forEach((d) => d.set(randomFace()));
+    const flicker = setInterval(() => dice.forEach((d, i) => { if (!landed[i]) d.set(randomFace()); }), 80);
+
+    const anims = dice.map((d, i) => rollIn(d.el, i, isCoin));
+    anims.forEach((a, i) => a.finished.then(() => {
+      if (seq !== rollSeq) return;
+      landed[i] = true;
+      const d = dice[i];
+      d.set(ev.results[i]);
+      d.el.classList.remove("rolling");
+      d.el.classList.add("landed");
+      if (ev.kind === "d20" && ev.results[i] === 20) { d.tone("crit"); burst(d.el, GOLD, 30); }
+      if (ev.kind === "d20" && ev.results[i] === 1) d.tone("fail");
+      if (isCoin) burst(d.el, GOLD, 14);
+    }).catch(() => {}));
+
+    Promise.all(anims.map((a) => a.finished)).then(() => {
+      if (seq !== rollSeq) return;
+      clearInterval(flicker);
+      const crit = ev.kind === "d20" && ev.results.includes(20);
+      const fail = ev.kind === "d20" && !crit && ev.results.includes(1);
+      if (isCoin) caption.textContent = ev.results.map((r) => r.toUpperCase()).join(" · ");
+      else if (crit) caption.textContent = "NAT 20!";
+      else if (fail) caption.textContent = "NAT 1…";
+      else caption.textContent = ev.results.length > 1
+        ? `${ev.results.length}${ev.kind} = ${ev.total}` : `${ev.kind}: ${ev.total}`;
+      caption.classList.toggle("crit", crit);
+      caption.classList.toggle("fail", fail);
+      diceTimers.push(setTimeout(() => diceBox.classList.add("out"), 3800));
+      diceTimers.push(setTimeout(() => { if (seq === rollSeq) diceBox.replaceChildren(); }, 4400));
+    }).catch(() => clearInterval(flicker));
+  }
+
+  function removeToken(id, entry) {
+    elements.delete(id);
+    const leave = () => {
+      if (!recentlySacrificed(entry)) burst(entry.el, paletteFor(entry), 26);
+      entry.el.classList.add("leaving");
+      entry.el.addEventListener("animationend", () => entry.el.remove(), { once: true });
+      setTimeout(() => entry.el.remove(), 600); // fallback
+    };
+    // Being sacrificed: let it finish tapping and bursting first.
+    if (entry.sacrificing) entry.afterSacrifice = leave;
+    else leave();
+  }
+
+  // ---- Turn tracker
+  const PHASES = [["untap", "Untap"], ["upkeep", "Upkeep"], ["draw", "Draw"], ["main1", "Main 1"],
+                  ["combat", "Combat"], ["main2", "Main 2"], ["end", "End"]];
+  const phasesBar = document.getElementById("phases");
+  phasesBar.classList.toggle("top", phasesPos === "top");
+  let phaseKey = null;
+
+  function renderTurn(turn) {
+    const show = !!(turn && turn.on) && phasesPos !== "off";
+    phasesBar.hidden = !show;
+    if (!show) { phaseKey = null; return; }
+    const key = `${turn.number}|${turn.phase}`;
+    if (key === phaseKey) return;
+    phaseKey = key;
+    if (!phasesBar.children.length) {
+      phasesBar.append(Object.assign(document.createElement("span"), { className: "turn-no" }),
+        ...PHASES.map(([k, label]) => Object.assign(document.createElement("span"),
+          { className: `ph ${k}`, textContent: label })));
+    }
+    phasesBar.querySelector(".turn-no").textContent = `Turn ${turn.number}`;
+    const at = PHASES.findIndex(([k]) => k === turn.phase);
+    [...phasesBar.querySelectorAll(".ph")].forEach((el, i) => {
+      el.classList.toggle("on", i === at);
+      el.classList.toggle("done", i < at);
+    });
+  }
+
+  function onPhase(ev) {
+    if (ev.phase === "combat" && ev.on && phasesPos !== "off") showBanner("⚔ Combat", "attack");
+  }
+
+  function render(state) {
+    renderTurn(state.turn);
+    const seen = new Set();
+    let prev = null;
+    for (const t of state.tokens || []) {
+      const isCounter = t.kind === "counter";
+      if (!isCounter && (typeof t.image_url !== "string" || !t.image_url.startsWith("https://cards.scryfall.io/"))) continue;
+      seen.add(t.id);
+      let entry = elements.get(t.id);
+      const isNew = !entry;
+      if (isNew) entry = (isCounter ? createCounter : createToken)(t, prev && prev.el);
+      update(entry, t, isNew);
+      prev = entry;
+    }
+    for (const [id, entry] of elements) {
+      if (!seen.has(id)) removeToken(id, entry);
+    }
+  }
+
+  // ---- WebSocket with automatic reconnect
+  let delay = 500;
+  let serverId = null;
+
+  // Server restarted (e.g. after an update)? Reload the page so OBS
+  // doesn't keep running an old version of it.
+  function isNewServer(data) {
+    if (!data.server) return false;
+    if (serverId && serverId !== data.server) {
+      location.reload();
+      return true;
+    }
+    serverId = data.server;
+    return false;
+  }
+
+  function connect() {
+    const proto = location.protocol === "https:" ? "wss:" : "ws:";
+    const ws = new WebSocket(`${proto}//${location.host}${ROOT}/ws`);
+    ws.onopen = () => { delay = 500; };
+    ws.onmessage = (ev) => {
+      try {
+        const data = JSON.parse(ev.data);
+        if (isNewServer(data)) return;
+        // Events (dice rolls) carry no board state; don't treat them as one.
+        if (data.event) {
+          if (data.event.type === "roll") showRoll(data.event);
+          if (data.event.type === "sacrifice") onSacrifice(data.event);
+          if (data.event.type === "use") onUse(data.event);
+          if (data.event.type === "attack") onAttack(data.event);
+          if (data.event.type === "untap") onUntap(data.event);
+          if (data.event.type === "turn") showBanner(`Turn ${data.event.number}`, "turn");
+          if (data.event.type === "phase") onPhase(data.event);
+          return;
+        }
+        render(data);
+      } catch (e) { console.error(e); }
+    };
+    ws.onclose = () => {
+      setTimeout(connect, delay);
+      delay = Math.min(delay * 2, 5000);
+    };
+    ws.onerror = () => ws.close();
+  }
+
+  connect();
+})();
+</script>
+</body>
+</html>

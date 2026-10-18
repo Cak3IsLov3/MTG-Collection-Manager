@@ -288,12 +288,13 @@ MAX_TOKENS = 20
 _token_images: dict[str, str] = {}
 
 
-def token_suggestions(session: Session, deck: Deck) -> list[TokenSuggestion]:
+def token_suggestions(session: Session, deck: Deck, include_standard: bool = False) -> list[TokenSuggestion]:
     """The tokens the cards of a deck make (from Scryfall), each with about how many you need, next
-    to the deck's own token list. Missing ones first, then the ones you have too few of."""
+    to the deck's own token list. Missing ones first, then the ones you have too few of. The tokens
+    you always bring (STANDARD_TOKENS) are left out, unless `include_standard`."""
     from app.config import get_settings
 
-    standard = {name_key(name) for name in get_settings().standard_tokens}  # you always bring these
+    standard = set() if include_standard else {name_key(name) for name in get_settings().standard_tokens}
     # Per token name: cards point at different prints of the same token (many Food tokens).
     found: dict[str, TokenSuggestion] = {}
     for entry in session.exec(select(DeckEntry).where(DeckEntry.deck_id == deck.id).order_by(DeckEntry.name)):

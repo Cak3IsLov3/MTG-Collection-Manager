@@ -248,17 +248,17 @@
     data: {
       labels: months,
       datasets: [
-        { label: "Played", data: {{ overview.months | map(attribute="played") | list | tojson }}, backgroundColor: "#4c9aff" },
-        { label: "Won", data: {{ overview.months | map(attribute="wins") | list | tojson }}, backgroundColor: "#3ecf8e" },
+        { label: "Played", data: {{ overview.months | map(attribute="played") | list | tojson }}, backgroundColor: "#5aa2ff" },
+        { label: "Won", data: {{ overview.months | map(attribute="wins") | list | tojson }}, backgroundColor: "#3fb950" },
       ],
     },
     options: {
       maintainAspectRatio: false,
       scales: {
-        x: { ticks: { color: "#8b93a3" }, grid: { color: "#2c313c" } },
-        y: { beginAtZero: true, ticks: { color: "#8b93a3", precision: 0 }, grid: { color: "#2c313c" } },
+        x: { ticks: { color: "#9599a8" }, grid: { color: "#2b2f39" } },
+        y: { beginAtZero: true, ticks: { color: "#9599a8", precision: 0 }, grid: { color: "#2b2f39" } },
       },
-      plugins: { legend: { labels: { color: "#e6e8ec" } } },
+      plugins: { legend: { labels: { color: "#eceef3" } } },
     },
   });
 </script>

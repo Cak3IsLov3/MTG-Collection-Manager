@@ -265,11 +265,34 @@ def games_page(request: Request, deck: int | None = None, session: Session = Dep
     )
 
 
+@router.get("/stream")
+def stream_page():
+    return RedirectResponse("/stream/control", status_code=307)
+
+
+@router.post("/decks/{deck_id}/stream")
+async def saved_deck_stream(deck_id: int, session: Session = Depends(get_session)):
+    """Put the tokens of this deck in the stream overlay's control panel and open it."""
+    from app.main import stream_app
+    from app.services.stream_link import StreamLinkError, deck_for_stream
+    from app.stream.server import set_deck
+
+    deck = session.get(Deck, deck_id)
+    if deck is None:
+        return redirect("/deck", "Deck not found", error=True)
+    try:
+        await set_deck(stream_app, await deck_for_stream(session, deck))
+    except StreamLinkError as exc:
+        return redirect(f"/decks/{deck_id}", f"Could not get the tokens from Scryfall: {exc}", error=True)
+    return RedirectResponse("/stream/control#add", status_code=303)
+
+
 @router.get("/table")
-def table_page(request: Request, session: Session = Depends(get_session)):
-    """The live table: life, poison, commander damage and turns on one screen; logged afterwards."""
+def table_page(request: Request, deck: int | None = None, session: Session = Depends(get_session)):
+    """The live table: life, poison, commander damage and turns on one screen; logged afterwards.
+    `deck` chooses the deck to play in the setup."""
     return render(request, "table.html", decks=list(session.exec(select(Deck))), players=games.known_players(session),
-                  last_commanders=games.last_commanders(session))
+                  last_commanders=games.last_commanders(session), chosen_deck=deck)
 
 
 @router.post("/games")

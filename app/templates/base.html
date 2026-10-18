@@ -4,11 +4,13 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}MTG Collection Manager{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/style.css?v={{ asset_version() }}">
 </head>
 <body>
   <header class="nav">
-    <span class="brand">MTG Collection Manager</span>
+    <a class="brand" href="/" style="text-decoration: none"><span class="brand-dots" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>MTG Collection Manager</a>
     <nav>
       {% set path = request.url.path %}
       <a href="/" class="{{ 'active' if path == '/' }}">Dashboard</a>
@@ -17,6 +19,7 @@
       <a href="/deck" class="{{ 'active' if path.startswith('/deck') }}">Decks</a>
       <a href="/games" class="{{ 'active' if path.startswith('/games') }}">Games</a>
       <a href="/table" class="{{ 'active' if path.startswith('/table') }}">Table</a>
+      <a href="/stream/control" title="The token overlay for OBS: control panel">Stream</a>
       <a href="/docs">API</a>
     </nav>
   </header>

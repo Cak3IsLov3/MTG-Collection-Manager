@@ -1,14 +1,20 @@
 :root {
-  --bg: #14161b;
-  --panel: #1d2027;
-  --border: #2c313c;
-  --text: #e6e8ec;
-  --muted: #8b93a3;
-  --accent: #e8a33d;
-  --have: #4c9aff;
-  --want: #c77dff;
-  --up: #3ecf8e;
-  --down: #f2616d;
+  /* One look for the whole app, the same as the stream control panel. */
+  --bg: #0e0f13;
+  --panel: #16181e;
+  --panel-2: #1d2027;
+  --panel-3: #252932;
+  --border: #2b2f39;
+  --line-2: #383d49;
+  --text: #eceef3;
+  --muted: #9599a8;
+  --accent: #e7b343;
+  --accent-2: #f3cc6e;
+  --have: #5aa2ff;
+  --want: #c48cff;
+  --up: #3fb950;
+  --down: #e0434b;
+  --shadow: 0 1px 0 rgba(255, 255, 255, .03) inset, 0 8px 24px rgba(0, 0, 0, .35);
 }
 
 * { box-sizing: border-box; }
@@ -427,3 +433,67 @@ a.button-link:hover { border-color: var(--accent); color: var(--accent); text-de
 .pip .mana[alt]:not([src=""]) { font-size: 9px; color: var(--text); }
 button.pip { width: 28px; height: 28px; padding: 0; background: none; border: 0; border-radius: 50%; }
 button.pip[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--accent); }
+
+/* Quieter tables: fields look like text until you point at or click them, and row buttons show on hover */
+th.card-col { min-width: 220px; }
+.more-decks { border-bottom: 1px dotted var(--muted); cursor: help; }
+#collection-table input.qty, #collection-table input.paid { background: transparent; border-color: transparent; }
+#collection-table tr:hover input.qty, #collection-table tr:hover input.paid,
+#collection-table input.qty:focus, #collection-table input.paid:focus { border-color: var(--border); background: var(--bg); }
+#collection-table input.paid::placeholder { color: var(--muted); opacity: .5; }
+@media (hover: hover) {
+  #collection-table tr .actions, .panel.table-wrap tr td button.secondary.small,
+  #collection-table .foil-toggle:not(.on) { opacity: 0; transition: opacity .12s; }
+  #collection-table tr:hover .actions, #collection-table tr:focus-within .actions,
+  .panel.table-wrap tr:hover td button.secondary.small, .panel.table-wrap tr:focus-within td button.secondary.small,
+  #collection-table tr:hover .foil-toggle, #collection-table tr:focus-within .foil-toggle { opacity: 1; }
+}
+
+/* Play: the main action of a deck */
+button.play-button { padding: 4px 14px; font-size: 13px; }
+
+/* ===== The common look (same as the stream control panel) ===== */
+body {
+  background:
+    radial-gradient(1200px 500px at 10% -10%, rgba(231, 179, 67, .07), transparent 60%),
+    radial-gradient(900px 500px at 110% 0%, rgba(90, 120, 220, .07), transparent 60%),
+    var(--bg);
+  background-attachment: fixed;
+  font: 14.5px/1.5 "Inter", "Segoe UI", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+::selection { background: rgba(231, 179, 67, .35); }
+header.nav { background: rgba(14, 15, 19, .82); backdrop-filter: blur(10px); }
+header.nav .brand { display: inline-flex; align-items: center; gap: 10px; }
+.brand-dots { display: inline-flex; gap: 4px; }
+.brand-dots i { width: 11px; height: 11px; border-radius: 50%; box-shadow: inset 0 -2px 3px rgba(0,0,0,.35), 0 0 0 1px rgba(0,0,0,.4); }
+.brand-dots i:nth-child(1) { background: #f6efd2; }
+.brand-dots i:nth-child(2) { background: #3d8be0; }
+.brand-dots i:nth-child(3) { background: #5b4f55; }
+.brand-dots i:nth-child(4) { background: #e2483a; }
+.brand-dots i:nth-child(5) { background: #3fa45a; }
+header.nav nav a.active { background: var(--panel-3); }
+h1 { font-weight: 800; letter-spacing: -.01em; }
+.panel { border-radius: 14px; box-shadow: var(--shadow); }
+.panel .panel, .mini-stat { box-shadow: none; }
+input, textarea, select { background: var(--panel-2); border-color: var(--line-2); border-radius: 9px; }
+input:focus, textarea:focus, select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(231, 179, 67, .15); }
+button { border-radius: 9px; background: linear-gradient(180deg, var(--accent-2), var(--accent)); border: 1px solid #c9952a; color: #1a1406;
+  transition: background .15s, border-color .15s, transform .05s; }
+button:hover { filter: none; background: linear-gradient(180deg, #f8d988, #eebd52); border-color: #d9a43a; }
+button:active { transform: translateY(1px); }
+button.secondary { background: var(--panel-3); border-color: var(--line-2); color: var(--text); font-weight: 600; }
+button.secondary:hover { background: #2f3440; border-color: #4a5060; }
+button.danger, button.danger:hover { background: var(--down); border-color: var(--down); color: #fff; }
+button:disabled, button:disabled:hover { opacity: .4; background: var(--panel-3); border-color: var(--line-2); color: var(--muted); transform: none; }
+a.button-link { background: var(--panel-3); border-color: var(--line-2); border-radius: 9px; }
+.flash { border-radius: 10px; background: rgba(63, 185, 80, .1); }
+.flash.error { background: rgba(224, 67, 75, .12); }
+tbody tr:hover > td { background: rgba(255, 255, 255, .018); }
+.progress { background: var(--panel-2); border-color: var(--line-2); }
+.progress div { background: linear-gradient(90deg, #2f9e44, var(--up)); }
+.tabs button[aria-selected="true"], .segmented button.on { background: linear-gradient(180deg, var(--accent-2), var(--accent)); color: #1a1406; }
+.sticky-tabs > .tabs { background: rgba(22, 24, 30, .92); backdrop-filter: blur(10px); border-radius: 12px; }
+.mini-stat { background: var(--panel-2); border-color: var(--border); border-radius: 10px; }
+.badge { border-radius: 999px; }
+.token-card img, .top-cards img, .suggestion img { box-shadow: 0 4px 14px rgba(0, 0, 0, .35); }

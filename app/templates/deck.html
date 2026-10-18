@@ -26,7 +26,8 @@
     </select>
   </div>
   {% endif %}
-  {% if row.used_by %}<div class="printing muted">{{ row.reserved }} in use by {{ row.used_by | join(', ') }}</div>{% endif %}
+  {% if row.used_by %}{% set others = row.used_by | length %}
+  <div class="printing muted" title="In use by {{ row.used_by | join(', ') }}">{{ row.reserved }} in use by {{ row.used_by[:2] | join(', ') }}{% if others > 2 %} <span class="more-decks">and {{ others - 2 }} more deck{{ 's' if others - 2 != 1 }}</span>{% endif %}</div>{% endif %}
 {% endmacro %}
 
 {# The printing the deck list asks for, when it names one (an Archidekt deck does). #}
@@ -80,7 +81,10 @@
     <button form="deck-form" class="deck-save small">Save changes</button>
   </div>
   <div class="actions deck-tools">
-    <a class="button-link" href="/table" title="Play this deck on the live table">▶ Play</a>
+    <form class="inline" method="post" action="/decks/{{ deck.id }}/stream">
+      <button class="small play-button" title="Open the stream screen with every token this deck makes ready to put on the board">▶ Play</button>
+    </form>
+    <a class="button-link" href="/table?deck={{ deck.id }}" title="Life, poison and commander damage for the table, with this deck chosen">♥ Life counter</a>
     <a class="button-link" href="/decks/{{ deck.id }}/export.txt" title="Download this deck as a text list for Archidekt or Moxfield">⤓ Export list</a>
     <a class="button-link" href="/decks/{{ deck.id }}/proxies" title="A printable sheet of the cards you still miss, to play-test with">⎙ Proxies</a>
     <form class="inline" method="post" action="/decks/{{ deck.id }}/delete" data-confirm="Click again to delete">
@@ -679,7 +683,7 @@
   {% if have %}
   <table>
     <tr>
-      <th></th><th>Card</th><th class="num">Needed</th><th class="num">Owned</th><th class="num">Free</th>
+      <th></th><th class="card-col">Card</th><th class="num">Needed</th><th class="num">Owned</th><th class="num">Free</th>
       <th>{{ 'Printing in this deck' if deck else 'Copies to use' }}</th><th class="num">Value</th>{% if deck %}<th></th>{% endif %}
     </tr>
     {% for row in have %}
@@ -722,7 +726,7 @@
   </div>
   {% if need %}
   <table>
-    <tr><th></th><th>Card</th><th class="num">Needed</th><th class="num">Owned</th><th class="num">Free</th><th class="num">Missing</th><th>Status</th></tr>
+    <tr><th></th><th class="card-col">Card</th><th class="num">Needed</th><th class="num">Owned</th><th class="num">Free</th><th class="num">Missing</th><th>Status</th></tr>
     {% for row in need %}
     <tr data-deck-row="{{ row.name }} {% for p, n in row.picks %}{{ p.card.set_name }} {{ p.card.set_code }} {% endfor %}">
       <td>{{ thumb(row) }}</td>
@@ -770,12 +774,12 @@
   const curve = {{ deck_stats.curve | tojson }};
   new Chart(document.getElementById("curve-chart"), {
     type: "bar",
-    data: { labels: Object.keys(curve), datasets: [{ label: "Cards", data: Object.values(curve), backgroundColor: "#4c9aff" }] },
+    data: { labels: Object.keys(curve), datasets: [{ label: "Cards", data: Object.values(curve), backgroundColor: "#5aa2ff" }] },
     options: {
       maintainAspectRatio: false,
       scales: {
-        x: { title: { display: true, text: "Mana value", color: "#8b93a3" }, ticks: { color: "#8b93a3" }, grid: { display: false } },
-        y: { beginAtZero: true, ticks: { color: "#8b93a3", precision: 0 }, grid: { color: "#2c313c" } },
+        x: { title: { display: true, text: "Mana value", color: "#9599a8" }, ticks: { color: "#9599a8" }, grid: { display: false } },
+        y: { beginAtZero: true, ticks: { color: "#9599a8", precision: 0 }, grid: { color: "#2b2f39" } },
       },
       plugins: { legend: { display: false } },
     },
@@ -892,14 +896,14 @@
     type: "line",
     data: {
       labels: deckValue.labels,
-      datasets: [{ label: "Deck value", data: deckValue.values, borderColor: "#e8a33d", backgroundColor: "rgba(232,163,61,.15)", fill: true, tension: 0.25 }],
+      datasets: [{ label: "Deck value", data: deckValue.values, borderColor: "#e7b343", backgroundColor: "rgba(232,163,61,.15)", fill: true, tension: 0.25 }],
     },
     options: {
       maintainAspectRatio: false,
       interaction: { mode: "index", intersect: false },
       scales: {
-        x: { ticks: { color: "#8b93a3" }, grid: { color: "#2c313c" } },
-        y: { ticks: { color: "#8b93a3", callback: (v) => "€" + v }, grid: { color: "#2c313c" } },
+        x: { ticks: { color: "#9599a8" }, grid: { color: "#2b2f39" } },
+        y: { ticks: { color: "#9599a8", callback: (v) => "€" + v }, grid: { color: "#2b2f39" } },
       },
       plugins: { legend: { display: false } },
     },

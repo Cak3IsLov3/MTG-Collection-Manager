@@ -53,9 +53,9 @@
 <script>
   const history = {{ history | tojson }};
   const series = [
-    { label: "Scryfall (non-foil)", data: history.scryfall, borderColor: "#4c9aff" },
-    { label: "Scryfall (foil)", data: history.scryfall_foil, borderColor: "#e8a33d" },
-    { label: "Cardmarket (from)", data: history.cardmarket, borderColor: "#3ecf8e" },
+    { label: "Scryfall (non-foil)", data: history.scryfall, borderColor: "#5aa2ff" },
+    { label: "Scryfall (foil)", data: history.scryfall_foil, borderColor: "#e7b343" },
+    { label: "Cardmarket (from)", data: history.cardmarket, borderColor: "#3fb950" },
   ].filter((s) => s.data.some((v) => v !== null));
   new Chart(document.getElementById("price-chart"), {
     type: "line",
@@ -64,10 +64,10 @@
       maintainAspectRatio: false,
       interaction: { mode: "index", intersect: false },
       scales: {
-        x: { ticks: { color: "#8b93a3" }, grid: { color: "#2c313c" } },
-        y: { ticks: { color: "#8b93a3", callback: (v) => "€" + v }, grid: { color: "#2c313c" } },
+        x: { ticks: { color: "#9599a8" }, grid: { color: "#2b2f39" } },
+        y: { ticks: { color: "#9599a8", callback: (v) => "€" + v }, grid: { color: "#2b2f39" } },
       },
-      plugins: { legend: { labels: { color: "#e6e8ec" } } },
+      plugins: { legend: { labels: { color: "#eceef3" } } },
     },
   });
 </script>

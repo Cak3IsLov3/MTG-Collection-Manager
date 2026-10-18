@@ -7,3 +7,8 @@ __pycache__/
 .claude/
 *.bak
 backups/
+# The token overlay's board, presets and deck (and their temporary files)
+stream-state*.json
+.state-*.tmp
+.presets-*.tmp
+.deck-*.tmp

@@ -4,6 +4,10 @@ import os
 os.environ["DATABASE_URL"] = "sqlite://"
 os.environ["SCHEDULER_ENABLED"] = "false"
 os.environ["DISCORD_WEBHOOK_URL"] = ""
+# The stream overlay keeps its files in a folder of its own, not in the project.
+import tempfile  # noqa: E402
+
+os.environ["STREAM_STATE"] = os.path.join(tempfile.mkdtemp(prefix="mtg-stream-"), "stream-state.json")
 
 import httpx
 import pytest

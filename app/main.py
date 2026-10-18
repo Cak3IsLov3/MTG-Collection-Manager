@@ -9,6 +9,7 @@ from app.database import init_db
 from app.deps import close_clients
 from app.jobs import start_scheduler
 from app.routers import api, pages
+from app.stream.server import create_app as create_stream_app
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
@@ -31,3 +32,6 @@ app = FastAPI(
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 app.include_router(api.router)
 app.include_router(pages.router)
+# The token overlay for OBS: /stream/control (control panel) and /stream/overlay (Browser source).
+stream_app = create_stream_app(get_settings().stream_state)
+app.mount("/stream", stream_app)

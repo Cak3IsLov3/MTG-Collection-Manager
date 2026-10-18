@@ -655,6 +655,22 @@ async def deck_combos(
     return {"included": [out(c) for c in found.included], "one_card_away": [out(c) for c in found.almost]}
 
 
+@router.post("/decks/{deck_id}/stream")
+async def send_deck_to_stream(deck_id: int, session: Session = Depends(get_session)):
+    """Show the tokens of this deck in the control panel of the stream overlay, ready to put on the board."""
+    from app.main import stream_app
+    from app.services.stream_link import StreamLinkError, deck_for_stream
+    from app.stream.server import set_deck
+
+    deck = _saved_deck(session, deck_id)
+    try:
+        found = await deck_for_stream(session, deck)
+    except StreamLinkError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    await set_deck(stream_app, found)
+    return found
+
+
 @router.get("/decks/{deck_id}/edhrec")
 async def deck_edhrec(
     deck_id: int, session: Session = Depends(get_session), edhrec: EdhrecClient = Depends(get_edhrec)

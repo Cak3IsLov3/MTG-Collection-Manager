@@ -6,6 +6,7 @@ price.
 
 - **HAVE** – your collection, valued daily with Scryfall prices
 - **WANT** – your wishlist, watched against Cardmarket prices
+- **PLAY** – your decks, game nights and a token overlay for your stream
 
 > "Your collection is worth €850, your wishlist still costs €120."
 
@@ -18,6 +19,16 @@ price.
 | Collection: add by name or card number, edit quantities, tick foil | Saved decks with their commander, colours, games played and value |
 | --- | --- |
 | ![The collection: your cards, with adding and importing in their own tab](docs/collection.jpg) | ![Saved decks with their commander, colours, bracket, progress, value and how often they were played](docs/decks.jpg) |
+
+### Stream overlay for OBS
+
+Press **▶ Play** on a deck and the stream screen opens with every token that deck makes ready to put on the board. See [docs/stream.md](docs/stream.md).
+
+![The stream control panel after Play: the tokens of the deck, emblems included, each with the cards that make it](docs/stream-tokens.jpg)
+
+| The board: counters, mana, dice and every stack | The overlay in OBS (shown here on a checkered background) |
+| --- | --- |
+| ![The Board tab of the stream control panel: three Soldiers with a +1/+1 counter, two Treasures, an Elf Warrior, mana and the turn tracker](docs/stream-board.jpg) | ![The overlay: the token stacks with counts and power/toughness, the mana pool and the turn tracker](docs/stream-overlay.jpg) |
 
 ![Wishlist targets set to 85% of the current price: the changed prices are highlighted until you save them all](docs/wishlist-targets.jpg)
 
@@ -189,6 +200,7 @@ price.
 - Commander picture: every deck shows its commander, taken from the Commander category on Archidekt, recognised from the deck name (only when that card can be a commander), or chosen on the deck page
 - Game log: log a game from the Games page or from a deck (date, players, who you played against and their commanders, who won, notes). Every deck shows how often it was played, its win rate and when it was last played
 - Live table for game night (made for an iPad on the table): life, poison and commander damage per player, whose turn it is and the round, undo, full screen, and the screen stays on. Players are out at 0 life, 10 poison or 21 commander damage; the top row can be turned upside down for the players across. At the end you pick the winner and the game goes into the log with everyone and their commanders. A game in progress survives a reload
+- **Stream overlay for OBS**: show tokens, counters, mana, dice and a turn tracker on your stream, with a control panel to run it (also as an OBS dock). Take the tokens of any saved deck with one click (**◉ Stream tokens** on a deck). Control panel at `/stream/control`, Browser source at `/stream/overlay`; see [docs/stream.md](docs/stream.md)
 - The commanders of your opponents: fill them in when you log a game (the one a player used last time is filled in). The Games page shows the commanders each player plays and your results against every commander
 - Weakest cards per deck: the cards the fewest decks with its commander play on EDHREC (under 10%), each with a more popular card of the same kind from your collection to swap in. "Only cards I have free" shows just the ones you can swap right away
 - Game statistics: your win rate, current streak and longest winning streak, games per month, win rates by table size (next to your fair share), deck colour and bracket, and per opponent, with the player who beats you most as your nemesis
@@ -346,6 +358,7 @@ app/
   spellbook.py         Commander Spellbook client: the combos in a deck
   edhrec.py            EDHREC client: the most played cards per commander
   backup.py            daily copies of the SQLite database
+  stream/              the token overlay for OBS, mounted at /stream (see docs/stream.md)
   rate_limit.py        one independent rate-limit queue per external source
   csv_import.py        CSV parsing and format detection
   discord.py           webhook alerts
