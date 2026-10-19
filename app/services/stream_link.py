@@ -4,10 +4,11 @@ import asyncio
 
 from sqlmodel import Session, select
 
-from app.models import Deck, DeckEntry
+from app.models import Card, Deck, DeckEntry
 from app.scryfall import name_key
 from app.services.deck_insights import token_suggestions
-from app.services.decks import deck_tokens
+from app.services.decks import BRACKETS, deck_tokens
+from app.services.games import deck_plays
 from app.stream import server
 
 
@@ -20,6 +21,38 @@ def _cards_for(ids: list[str]) -> list[dict]:
 
 class StreamLinkError(Exception):
     pass
+
+
+def deck_intro(session: Session, deck: Deck) -> dict:
+    """What the deck intro on stream shows: commander, deck name, bracket and how the deck has done."""
+    stats = deck_plays(session).get(deck.id)
+    record = None
+    if stats and stats.played:
+        record = f"{stats.wins} W · {stats.losses} L" + (f" · {stats.draws} D" if stats.draws else "")
+    image = deck.commander_image if (deck.commander_image or "").startswith(server.ALLOWED_IMAGE_PREFIX) else None
+    return {
+        "name": deck.name,
+        "commander": deck.commander or None,
+        "image_url": image,
+        "bracket": f"Bracket {deck.bracket} · {BRACKETS[deck.bracket]}" if deck.bracket in BRACKETS else None,
+        "record": record,
+    }
+
+
+def spotlight_cards(session: Session, entries: list[DeckEntry]) -> list[dict]:
+    """The cards of the deck with their picture (the printing in the deck), for the spotlight. A card
+    without a known picture is still listed; the control panel then asks Scryfall for one."""
+    ids = [entry.scryfall_id for entry in entries if entry.scryfall_id]
+    images = {card.scryfall_id: card.image_url
+              for card in session.exec(select(Card).where(Card.scryfall_id.in_(ids)))} if ids else {}
+    cards: dict[str, dict] = {}
+    for entry in entries:
+        image = images.get(entry.scryfall_id) or entry.image_url
+        if not (image or "").startswith(server.ALLOWED_IMAGE_PREFIX):
+            image = None
+        card = cards.setdefault(name_key(entry.name), {"name": entry.name, "image_url": image})
+        card["image_url"] = card["image_url"] or image
+    return sorted(cards.values(), key=lambda c: c["name"].lower())
 
 
 async def deck_for_stream(session: Session, deck: Deck) -> dict:
@@ -46,4 +79,6 @@ async def deck_for_stream(session: Session, deck: Deck) -> dict:
         "deck_id": deck.id,
         "cards": sum(entry.quantity for entry in entries),
         "tokens": sorted(merged.values(), key=lambda t: (t["name"].lower(), t["text"])),
+        "intro": deck_intro(session, deck),
+        "spotlight": spotlight_cards(session, entries),
     }

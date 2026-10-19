@@ -194,6 +194,8 @@
     <label>Players<input id="random-players" class="qty" type="number" min="1" max="{{ summaries | length }}" step="1" value="1"></label>
     <label class="check"><input id="random-complete" type="checkbox">&nbsp;Only decks I can build right now</label>
     <label class="check" title="Decks you have not played for a long time (or never) get a bigger chance"><input id="random-fresh" type="checkbox">&nbsp;Prefer decks I haven't played in a while</label>
+    {% set tonight_count = deck_data | selectattr('played_tonight') | list | length %}
+    <label class="check" title="Decks that are already in the game log for tonight are left out (until six in the morning it is still tonight)"><input id="random-tonight" type="checkbox">&nbsp;Skip decks played tonight{% if tonight_count %} <span class="muted">({{ tonight_count }})</span>{% endif %}</label>
     <button id="random-go">Pick a random deck</button>
   </div>
   <div id="random-result" class="random-result" aria-live="polite"></div>
@@ -1042,7 +1044,9 @@
   function eligibleDecks() {
     const bracket = document.getElementById("random-bracket").value;
     const completeOnly = document.getElementById("random-complete").checked;
-    return savedDecks.filter((d) => (!bracket || String(d.bracket) === bracket) && (!completeOnly || d.complete));
+    const skipTonight = document.getElementById("random-tonight").checked;
+    return savedDecks.filter((d) => (!bracket || String(d.bracket) === bracket) && (!completeOnly || d.complete) &&
+      (!skipTonight || !d.played_tonight));
   }
 
   function shuffled(list) {
@@ -1084,7 +1088,10 @@
       player,
       deck.bracket ? `Bracket ${deck.bracket} · ${deck.bracket_name}` : "No bracket",
       deck.complete ? "ready to play" : `${deck.needed - deck.usable} card${deck.needed - deck.usable === 1 ? "" : "s"} missing`,
-      deck.days_since_played === null ? "never played" : `played ${deck.days_since_played} day${deck.days_since_played === 1 ? "" : "s"} ago`,
+      deck.days_since_played === null ? "never played"
+        : deck.played_tonight ? "played tonight"
+        : deck.days_since_played === 0 ? "played today"
+        : `played ${deck.days_since_played} day${deck.days_since_played === 1 ? "" : "s"} ago`,
     ].filter(Boolean).join(" · ");
     if (deck.commander_image) {
       const art = document.createElement("img");

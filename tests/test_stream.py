@@ -821,7 +821,7 @@ def turn(client):
 
 
 def test_turn_starts_off(client):
-    assert turn(client) == {"on": False, "number": 1, "phase": "untap"}
+    assert turn(client) == {"on": False, "number": 1, "phase": "untap", "casts": 0, "storm": 0}
 
 
 def test_next_phase_walks_through_the_turn(client):
@@ -868,7 +868,7 @@ def test_prev_phase(client):
 
 def test_patch_turn(client):
     client.patch("/api/turn", json={"on": True, "phase": "combat", "number": 5})
-    assert turn(client) == {"on": True, "number": 5, "phase": "combat"}
+    assert turn(client) == {"on": True, "number": 5, "phase": "combat", "casts": 0, "storm": 0}
     client.patch("/api/turn", json={"on": False})
     assert turn(client)["on"] is False
     assert client.patch("/api/turn", json={"phase": "lunch"}).status_code == 422
@@ -888,13 +888,13 @@ def test_turn_survives_restart(state_path):
     with TestClient(create_app(state_path)) as c:
         c.patch("/api/turn", json={"on": True, "phase": "main2", "number": 4})
     with TestClient(create_app(state_path)) as c:
-        assert turn(c) == {"on": True, "number": 4, "phase": "main2"}
+        assert turn(c) == {"on": True, "number": 4, "phase": "main2", "casts": 0, "storm": 0}
 
 
 def test_broken_turn_in_state_file(state_path):
     state_path.write_text('{"tokens": [], "turn": {"on": "yes", "number": -3, "phase": "nap"}}', encoding="utf-8")
     with TestClient(create_app(state_path)) as c:
-        assert turn(c) == {"on": False, "number": 1, "phase": "untap"}
+        assert turn(c) == {"on": False, "number": 1, "phase": "untap", "casts": 0, "storm": 0}
 
 
 def test_pages_not_cached(client):
@@ -935,6 +935,65 @@ def test_missing_state_file_gives_empty_list(tmp_path):
         assert tokens(c) == []
 
 
+# --- commander tax, storm, spotlight and deck intro --------------------------------------------------
+
+
+def test_commander_casts_and_storm(client, state_path):
+    with client.websocket_connect("/ws") as ws:
+        ws.receive_json()
+        client.post("/api/tally/casts")
+        assert ws.receive_json()["event"] == {"type": "tally", "name": "casts", "value": 1, "delta": 1}
+        assert ws.receive_json()["turn"]["casts"] == 1
+    client.post("/api/tally/casts")
+    client.post("/api/tally/storm", json={"delta": 3})
+    assert turn(client)["casts"] == 2 and turn(client)["storm"] == 3
+    client.post("/api/tally/storm", json={"delta": -10})          # never below 0
+    assert turn(client)["storm"] == 0
+    assert client.post("/api/tally/life").status_code == 422
+    client.post("/api/undo")                                        # undo works for tallies too
+    assert turn(client)["storm"] == 3
+    # Kept after a restart.
+    with TestClient(create_app(state_path)) as again:
+        assert again.get("/api/state").json()["turn"]["casts"] == 2
+
+
+def test_storm_resets_on_a_new_turn_and_a_new_game_resets_all(client):
+    client.post("/api/tally/casts")
+    client.post("/api/tally/storm", json={"delta": 2})
+    client.patch("/api/turn", json={"phase": "main2", "on": True})
+    client.post("/api/turn/next")
+    assert turn(client)["storm"] == 2                               # same turn still
+    client.post("/api/turn/next")
+    assert turn(client)["storm"] == 0 and turn(client)["casts"] == 1  # new turn: storm starts over
+    client.patch("/api/turn", json={"number": 1, "phase": "untap", "casts": 0, "storm": 0})
+    assert turn(client)["casts"] == 0
+
+
+def test_spotlight_is_an_event_only(client):
+    card = {"name": "Odric, Lunarch Marshal", "image_url": IMG.format(7), "seconds": 5}
+    with client.websocket_connect("/ws") as ws:
+        ws.receive_json()
+        assert client.post("/api/spotlight", json=card).status_code == 200
+        event = ws.receive_json()["event"]
+        assert event["type"] == "spotlight" and event["name"] == card["name"] and event["seconds"] == 5 and event["id"]
+        client.delete("/api/spotlight")
+        assert ws.receive_json()["event"] == {"type": "spotlight", "id": None}
+    assert client.post("/api/spotlight", json={**card, "image_url": "https://evil.example/x.jpg"}).status_code == 422
+    assert client.post("/api/spotlight", json={**card, "seconds": 999}).status_code == 422
+    assert tokens(client) == []
+
+
+def test_deck_intro(client):
+    assert client.post("/api/intro").status_code == 404             # no deck yet
+    intro = {"name": "Odric", "commander": "Odric, Lunarch Marshal", "image_url": "https://evil.example/x.jpg",
+             "bracket": "Bracket 2 · Core", "record": "3 W · 1 L"}
+    with client.websocket_connect("/ws") as ws:
+        ws.receive_json()
+        client.post("/api/intro", json=intro)
+        event = ws.receive_json()["event"]
+    assert event == {"type": "intro", **intro, "image_url": None}  # only Scryfall pictures
+
+
 # --- part of the MTG Collection Manager -----------------------------------------------------------
 
 
@@ -972,6 +1031,7 @@ def test_deck_tokens_to_the_stream(monkeypatch):
                 for c in fake.cards if c["id"] in ids]
 
     monkeypatch.setattr(stream_server, "scryfall_cards", scryfall_cards)
+    monkeypatch.setattr(stream_server, "ALLOWED_IMAGE_PREFIX", ("https://cards.scryfall.io/", "https://img.example/"))
     try:
         with AppClient(manager) as c:
             deck = c.post("/api/decks", json={"name": "Tokens", "decklist": "1 Pitiless Plunderer\n1 Raise the Alarm"}).json()
@@ -982,11 +1042,22 @@ def test_deck_tokens_to_the_stream(monkeypatch):
             assert set(names) == {"Soldier", "Treasure"}
             assert names["Treasure"]["made_by"] == ["Pitiless Plunderer"]
             assert names["Soldier"]["image_url"] == "https://cards.scryfall.io/normal/front/a/b/id-soldier.jpg"
+            assert found["intro"] == {"name": "Tokens", "commander": None, "image_url": None, "bracket": None, "record": None}
+            assert [c["name"] for c in found["spotlight"]] == ["Pitiless Plunderer", "Raise the Alarm"]
             # The control panel shows it like a scanned deck.
             assert c.get("/stream/api/deck").json()["deck_id"] == deck["id"]
             # The button on the deck page sends you to the control panel.
-            r = c.post(f"/decks/{deck['id']}/stream", follow_redirects=False)
+            c.post("/api/games", json={"deck_id": deck["id"], "result": "win"})
+            with c.websocket_connect("/stream/ws") as ws:
+                ws.receive_json()
+                r = c.post(f"/decks/{deck['id']}/stream", follow_redirects=False)
+                assert ws.receive_json()["event"] == {"type": "deck"}
+                intro = ws.receive_json()["event"]  # Play also shows the deck intro
+                assert intro["type"] == "intro" and intro["name"] == "Tokens" and intro["record"] == "1 W · 0 L"
+                again = c.post(f"/api/decks/{deck['id']}/stream/intro").json()
+                assert again == intro and ws.receive_json()["event"] == intro
             assert r.status_code == 303 and r.headers["location"] == "/stream/control#add"
+            assert c.post("/api/decks/99999/stream/intro").status_code == 404
             page = c.get(f"/decks/{deck['id']}").text
             # Play opens the stream screen with the deck's tokens; the life counter has the deck chosen.
             assert f'action="/decks/{deck['id']}/stream"' in page and "▶ Play" in page and f'href="/table?deck={deck['id']}"' in page

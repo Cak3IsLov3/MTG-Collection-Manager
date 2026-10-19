@@ -745,3 +745,25 @@ def test_decks_can_be_sorted_on_missing_cards(client):
     assert 'data-cards="5" data-percent="0" data-value="0' in page and 'data-missing="5"' in page
     assert 'data-order="2" data-name="Ramp"' in page and 'data-cards="11" data-percent="100" data-value="1.5" data-missing="0"' in page
     assert page.count('id="deck-list"') == 1 and "<tbody>" in page
+
+
+def test_randomizer_skips_decks_played_tonight(client):
+    import datetime as dt
+
+    from app.services.games import tonight
+
+    assert tonight(dt.datetime(2026, 10, 18, 23, 30)) == dt.date(2026, 10, 18)
+    assert tonight(dt.datetime(2026, 10, 19, 2, 0)) == dt.date(2026, 10, 18)  # after midnight: still the same night
+    assert tonight(dt.datetime(2026, 10, 19, 7, 0)) == dt.date(2026, 10, 19)
+
+    played = client.post("/api/decks", json={"name": "Played", "decklist": "1 Sol Ring"}).json()
+    fresh = client.post("/api/decks", json={"name": "Fresh", "decklist": "1 Sol Ring"}).json()
+    client.post("/api/games", json={"deck_id": played["id"], "result": "win", "played_on": tonight().isoformat()})
+
+    page = client.get("/deck").text
+    assert 'id="random-tonight"' in page and '"played_tonight": true' in page
+    for _ in range(10):
+        picked = client.get("/api/decks/random", params={"skip_played_tonight": True}).json()
+        assert [d["id"] for d in picked] == [fresh["id"]]
+    too_many = client.get("/api/decks/random", params={"skip_played_tonight": True, "count": 2})
+    assert too_many.status_code == 400

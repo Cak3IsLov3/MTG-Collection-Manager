@@ -638,6 +638,23 @@
   .dice-bar button.roll { min-width: 40px; padding: 6px 9px; }
   .sublabel { display: block; margin: 16px 2px 8px; }
 
+  /* ---- show on stream: deck intro, commander tax & storm, spotlight */
+  .show-bar { margin-bottom: 0; grid-template-columns: minmax(0, .9fr) minmax(0, 1fr) minmax(0, 1.5fr); }
+  @media (max-width: 760px) { .show-bar { grid-template-columns: 1fr; } }
+  .show-bar input, .show-bar select {
+    padding: 7px 10px;
+    border-radius: 9px;
+    border: 1px solid var(--line-2);
+    background: #111318;
+    color: inherit;
+    font: inherit;
+    font-size: 14px;
+  }
+  .show-bar input { flex: 1; min-width: 150px; }
+  .show-bar input:focus, .show-bar select:focus { outline: none; border-color: var(--accent); }
+  .show-bar .note { color: var(--muted); font-size: 13px; }
+  .show-bar .tally-btn b { margin-left: 4px; color: var(--accent-2, #f3cc6e); font-variant-numeric: tabular-nums; }
+
   /* ---- stacks: actions, counters pill, "more" menu */
   .board .actions { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
   button.icon { width: 32px; height: 32px; padding: 0; display: inline-flex; align-items: center; justify-content: center; }
@@ -1013,6 +1030,49 @@
     </div>
   </section>
 
+  <section class="panel" data-tab="board">
+    <div class="panel-head">
+      <h2>Show on stream</h2>
+    </div>
+    <div class="quick show-bar">
+      <div class="qgroup">
+        <span class="qlabel">Deck intro</span>
+        <div class="qrow">
+          <button id="introBtn" class="primary" type="button" disabled
+                  title="A bar with the commander, the deck name, its bracket and record slides in for a few seconds">▶ Show deck intro</button>
+        </div>
+        <span id="introDeck" class="note">Pick a deck under Add tokens first.</span>
+      </div>
+      <div class="qgroup">
+        <span class="qlabel">Commander tax &amp; storm</span>
+        <div class="qrow">
+          <button id="castsMinus" class="icon" type="button" title="One cast back (Shift+K)">−</button>
+          <button id="castsPlus" class="tally-btn" type="button"
+                  title="You cast your commander (K): the tax goes up by 2. A new game starts at 0.">♛ Cast commander<b id="castsValue"></b></button>
+        </div>
+        <div class="qrow">
+          <button id="stormMinus" class="icon" type="button" title="One spell back (Shift+X)">−</button>
+          <button id="stormPlus" class="tally-btn" type="button"
+                  title="A spell cast this turn (X), for storm. Back to 0 on every new turn.">⚡ Spell cast<b id="stormValue"></b></button>
+        </div>
+      </div>
+      <div class="qgroup">
+        <span class="qlabel">Spotlight</span>
+        <form id="spotForm" class="qrow">
+          <input id="spotName" list="spotList" placeholder="A card from your deck, or any card" autocomplete="off"
+                 aria-label="Card to show big on stream">
+          <datalist id="spotList"></datalist>
+          <select id="spotSeconds" aria-label="How long" title="How long the card stays in view">
+            <option value="5">5 s</option><option value="7" selected>7 s</option>
+            <option value="10">10 s</option><option value="15">15 s</option>
+          </select>
+          <button class="primary" type="submit" title="Show this card big in the middle of the stream">★ Show</button>
+          <button id="spotHide" class="ghost" type="button" title="Take the card away now">Hide</button>
+        </form>
+      </div>
+    </div>
+  </section>
+
   <section class="panel" data-tab="add">
     <div class="panel-head">
       <h2>Deck tokens</h2>
@@ -1132,6 +1192,8 @@
       <dt>1 – 6</dt><dd>Add W U B R G C mana</dd>
       <dt>0</dt><dd>Empty the mana pool</dd>
       <dt>R</dt><dd>Roll a d20</dd>
+      <dt>K</dt><dd>Cast your commander (Shift+K: one back)</dd>
+      <dt>X</dt><dd>A spell for storm (Shift+X: one back)</dd>
       <dt>Ctrl+Z</dt><dd>Undo</dd>
       <dt>/</dt><dd>Search</dd>
       <dt>?</dt><dd>This list</dd>
@@ -1552,7 +1614,7 @@
                      onclick: () => api("POST", ROOT + "/api/turn/next") }),
       moreMenu([
         { text: "New game (turn 1)", onclick: () => {
-            if (confirm("Start over at turn 1?")) api("PATCH", ROOT + "/api/turn", { number: 1, phase: "untap", on: true });
+            if (confirm("Start over at turn 1?")) api("PATCH", ROOT + "/api/turn", { number: 1, phase: "untap", on: true, casts: 0, storm: 0 });
           } },
         { text: "Hide tracker", onclick: () => api("PATCH", ROOT + "/api/turn", { on: false }) },
       ]),
@@ -1562,6 +1624,7 @@
   function renderActive(state) {
     lastState = state;
     renderTurn(state.turn);
+    renderTally(state.turn);
     const list = $("active");
     const grid = $("counterGrid");
     const tokens = state.tokens || [];
@@ -1959,6 +2022,8 @@
     }
     if (key === "0") { api("POST", ROOT + "/api/mana/empty"); return handled(); }
     if (key === "r" || key === "R") { api("POST", ROOT + "/api/roll", { kind: "d20", count: 1 }); return handled(); }
+    if (key === "k" || key === "K") { tally("casts", e.shiftKey ? -1 : 1); return handled(); }
+    if (key === "x" || key === "X") { tally("storm", e.shiftKey ? -1 : 1); return handled(); }
 
     if (!t) return;
     const isCard = t.kind === "card";
@@ -2226,6 +2291,7 @@
   // Paste an Archidekt/Moxfield link; the server finds every token the deck's
   // cards make. They stay here (also after a restart) as one-click buttons.
   function renderDeck(deck) {
+    renderShowDeck(deck);
     const link = $("deckName");
     $("deckForget").hidden = !deck;
     link.hidden = !deck;
@@ -2339,6 +2405,88 @@
       $("deckScan").textContent = "Scan deck";
       renderDeck(null);
     }
+  });
+
+  // ---------------------------------------------------------- show on stream
+  // Deck intro, commander tax & storm and the spotlight.
+  let shownDeck = null;
+
+  function renderShowDeck(deck) {
+    shownDeck = deck;
+    $("introBtn").disabled = !deck;
+    $("introDeck").textContent = deck ? deck.name : "Pick a deck under Add tokens first.";
+    const cards = (deck && deck.spotlight) || [];
+    $("spotList").replaceChildren(...cards.map((c) => el("option", { value: c.name })));
+  }
+
+  $("introBtn").addEventListener("click", async () => {
+    if (!shownDeck) return;
+    // A deck from the collection: the app works out the record as it is now.
+    const ok = shownDeck.source === "collection"
+      ? await api("POST", `/api/decks/${encodeURIComponent(shownDeck.deck_id)}/stream/intro`)
+      : await api("POST", ROOT + "/api/intro");
+    if (ok) toast(`Intro of ${shownDeck.name} on stream`);
+  });
+
+  const tally = (name, delta) => api("POST", `${ROOT}/api/tally/${name}`, { delta });
+  $("castsPlus").addEventListener("click", () => tally("casts", 1));
+  $("castsMinus").addEventListener("click", () => tally("casts", -1));
+  $("stormPlus").addEventListener("click", () => tally("storm", 1));
+  $("stormMinus").addEventListener("click", () => tally("storm", -1));
+
+  function renderTally(turn) {
+    const casts = (turn && turn.casts) || 0;
+    const storm = (turn && turn.storm) || 0;
+    $("castsValue").textContent = casts ? ` · tax +${2 * casts}` : "";
+    $("stormValue").textContent = storm ? ` · ${storm}` : "";
+    $("castsMinus").disabled = !casts;
+    $("stormMinus").disabled = !storm;
+  }
+
+  // Spotlight: a card of your deck (in the printing you play), or any card from Scryfall.
+  async function spotlightCard(name) {
+    const own = ((shownDeck && shownDeck.spotlight) || []).find((c) => c.name.toLowerCase() === name.toLowerCase());
+    if (own && own.image_url) return own;
+    if (own) name = own.name;
+    const res = await fetch(`https://api.scryfall.com/cards/named?fuzzy=${encodeURIComponent(name)}`,
+                            { headers: { Accept: "application/json" } });
+    if (!res.ok) return null;
+    const card = await res.json();
+    const image = card.image_uris?.normal || card.card_faces?.[0]?.image_uris?.normal;
+    return image ? { name: card.name, image_url: image } : null;
+  }
+
+  $("spotForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const name = $("spotName").value.trim();
+    if (!name) { $("spotName").focus(); return; }
+    let card = null;
+    try { card = await spotlightCard(name); } catch {}
+    if (!card) { toast(`No card found for "${name}"`, true); return; }
+    $("spotName").value = card.name;
+    if (await api("POST", ROOT + "/api/spotlight", { ...card, seconds: Number($("spotSeconds").value) })) {
+      toast(`${card.name} in the spotlight`);
+    }
+  });
+  $("spotHide").addEventListener("click", () => api("DELETE", ROOT + "/api/spotlight"));
+
+  // Not one of your deck's cards? Scryfall suggests names as you type.
+  let spotTimer;
+  $("spotName").addEventListener("input", () => {
+    clearTimeout(spotTimer);
+    const q = $("spotName").value.trim();
+    const own = (shownDeck && shownDeck.spotlight) || [];
+    if (q.length < 3 || own.some((c) => c.name.toLowerCase().includes(q.toLowerCase()))) {
+      if (q.length < 3) renderShowDeck(shownDeck);
+      return;
+    }
+    spotTimer = setTimeout(async () => {
+      try {
+        const res = await fetch(`https://api.scryfall.com/cards/autocomplete?q=${encodeURIComponent(q)}`);
+        const data = res.ok ? await res.json() : { data: [] };
+        $("spotList").replaceChildren(...(data.data || []).slice(0, 12).map((n) => el("option", { value: n })));
+      } catch {}
+    }, 250);
   });
 
   fetch(ROOT + "/api/deck").then((r) => r.json()).then(renderDeck).catch(() => {});

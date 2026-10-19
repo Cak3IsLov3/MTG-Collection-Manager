@@ -60,10 +60,16 @@ COUNTER_TYPES = PT_COUNTERS + KEYWORD_COUNTERS + MANA_COUNTERS
 # The turn tracker: the phases and steps of a turn, in order.
 PHASES = ("untap", "upkeep", "draw", "main1", "combat", "main2", "end")
 MAX_TURN = 999
+# Tallies shown on stream: how often you cast your commander (the tax is 2 per cast) and the
+# spells cast this turn (storm, back to 0 every new turn).
+MAX_CASTS = 99
+MAX_STORM = 999
+TALLY_LIMITS = {"casts": MAX_CASTS, "storm": MAX_STORM}
+SPOTLIGHT_SECONDS = (2, 30)
 
 
 def default_turn() -> dict:
-    return {"on": False, "number": 1, "phase": "untap"}
+    return {"on": False, "number": 1, "phase": "untap", "casts": 0, "storm": 0}
 
 
 def clean_turn(raw: Any) -> dict:
@@ -75,6 +81,9 @@ def clean_turn(raw: Any) -> dict:
             turn["number"] = raw["number"]
         if raw.get("phase") in PHASES:
             turn["phase"] = raw["phase"]
+        for name, limit in TALLY_LIMITS.items():
+            if isinstance(raw.get(name), int) and 0 <= raw[name] <= limit:
+                turn[name] = raw[name]
     return turn
 MANUAL_PT = {"ge": -99, "le": 999}
 
@@ -234,6 +243,40 @@ class TurnPatch(BaseModel):
     on: bool | None = None
     phase: Literal["untap", "upkeep", "draw", "main1", "combat", "main2", "end"] | None = None
     number: int | None = Field(default=None, ge=1, le=MAX_TURN)
+    casts: int | None = Field(default=None, ge=0, le=MAX_CASTS)
+    storm: int | None = Field(default=None, ge=0, le=MAX_STORM)
+
+
+class TallyIn(BaseModel):
+    delta: int = Field(default=1, ge=-MAX_STORM, le=MAX_STORM)
+
+
+class SpotlightIn(BaseModel):
+    """One card shown big on stream for a few seconds."""
+    name: str = Field(min_length=1, max_length=150)
+    image_url: str
+    seconds: int = Field(default=7, ge=SPOTLIGHT_SECONDS[0], le=SPOTLIGHT_SECONDS[1])
+
+    @field_validator("image_url")
+    @classmethod
+    def check_image_url(cls, v: str) -> str:
+        if not v.startswith(ALLOWED_IMAGE_PREFIX):
+            raise ValueError("only Scryfall images are allowed")
+        return v
+
+
+class IntroIn(BaseModel):
+    """The deck intro: a bar with the commander, the deck name, its bracket and record."""
+    name: str = Field(min_length=1, max_length=120)
+    commander: str | None = Field(default=None, max_length=200)
+    image_url: str | None = None
+    bracket: str | None = Field(default=None, max_length=60)
+    record: str | None = Field(default=None, max_length=60)
+
+    @field_validator("image_url")
+    @classmethod
+    def check_image_url(cls, v: str | None) -> str | None:
+        return v if v and v.startswith(ALLOWED_IMAGE_PREFIX) else None
 
 
 class UseIn(BaseModel):
@@ -551,6 +594,7 @@ class TokenStore:
         if new_turn:
             self.turn["number"] = min(self.turn["number"] + 1, MAX_TURN)
             self.turn["phase"] = PHASES[0]
+            self.turn["storm"] = 0  # storm counts the spells of this turn only
             untapped = sum(1 for t in self.tokens if t.tapped)
             for t in self.tokens:
                 t.tapped = False
@@ -580,7 +624,18 @@ class TokenStore:
             self.turn["number"] = patch.number
         if patch.phase is not None:
             self.turn["phase"] = patch.phase
+        if patch.casts is not None:
+            self.turn["casts"] = patch.casts
+        if patch.storm is not None:
+            self.turn["storm"] = patch.storm
         self._save()
+
+    @mutating
+    def tally(self, name: str, delta: int) -> int:
+        """One more (or less) commander cast or spell for storm; never below 0."""
+        self.turn[name] = max(0, min(self.turn[name] + delta, TALLY_LIMITS[name]))
+        self._save()
+        return self.turn[name]
 
     def reset_positions(self) -> None:
         for t in self.tokens:
@@ -1046,6 +1101,39 @@ def create_app(state_path: Path | str = DEFAULT_STATE_PATH) -> FastAPI:
         await phase_event()
         return await publish()
 
+    @app.post("/api/tally/{name}")
+    async def tally(name: Literal["casts", "storm"], body: TallyIn | None = None):
+        """Commander cast (casts) or a spell for storm (storm): +1 by default, {"delta": -1} takes one back."""
+        delta = body.delta if body else 1
+        value = store.tally(name, delta)
+        await hub.broadcast({"event": {"type": "tally", "name": name, "value": value, "delta": delta}})
+        return await publish()
+
+    @app.post("/api/spotlight")
+    async def spotlight(body: SpotlightIn):
+        """Show one card big on stream for a few seconds. Not stored, just an event."""
+        event = {"type": "spotlight", "id": uuid.uuid4().hex[:8], **body.model_dump()}
+        await hub.broadcast({"event": event})
+        return event
+
+    @app.delete("/api/spotlight")
+    async def end_spotlight():
+        await hub.broadcast({"event": {"type": "spotlight", "id": None}})
+        return None
+
+    @app.post("/api/intro")
+    async def intro(body: IntroIn | None = None):
+        """The deck intro on stream: the one sent, or the one of the deck in the control panel."""
+        if body is None:
+            deck = decks.deck or {}
+            data = deck.get("intro") or ({"name": deck["name"]} if deck.get("name") else None)
+            if data is None:
+                raise HTTPException(404, "no deck to introduce: pick a deck first")
+            body = IntroIn(**data)
+        event = {"type": "intro", **body.model_dump()}
+        await hub.broadcast({"event": event})
+        return event
+
     @app.post("/api/untap")
     async def untap_all():
         tapped = sum(1 for t in store.tokens if t.tapped)
@@ -1173,7 +1261,16 @@ def create_app(state_path: Path | str = DEFAULT_STATE_PATH) -> FastAPI:
 
 
 
-async def set_deck(app: FastAPI, deck: dict | None) -> None:
-    """Show these deck tokens in the control panel (from the collection manager), as a scan would."""
+async def set_deck(app: FastAPI, deck: dict | None, intro: bool = False) -> None:
+    """Show these deck tokens in the control panel (from the collection manager), as a scan would;
+    with intro, the overlay also shows the deck intro."""
     app.state.decks.save(deck)
     await app.state.hub.broadcast({"event": {"type": "deck"}})
+    if intro and deck and deck.get("intro"):
+        await show_intro(app, deck["intro"])
+
+
+async def show_intro(app: FastAPI, intro: dict) -> dict:
+    event = {"type": "intro", **IntroIn(**intro).model_dump()}
+    await app.state.hub.broadcast({"event": event})
+    return event

@@ -34,6 +34,15 @@ class DeckPlays:
             return None
         return ((today or dt.date.today()) - self.last_played).days
 
+    def played_tonight(self, now: dt.datetime | None = None) -> bool:
+        return self.last_played is not None and self.last_played >= tonight(now)
+
+
+def tonight(now: dt.datetime | None = None) -> dt.date:
+    """The date of tonight's game night: until six in the morning that is still yesterday."""
+    now = now or dt.datetime.now()
+    return (now - dt.timedelta(hours=6)).date()
+
 
 def split_names(text: str | None) -> list[str]:
     """"Sam, robin,  Sam" -> ["Sam", "robin"]: names separated by commas, each once."""

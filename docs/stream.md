@@ -55,6 +55,7 @@ Via the URL, for example `http://localhost:8017/stream/overlay?size=200&pos=righ
 | `row`  | `bottom` puts the row at the bottom    | top     |
 | `outline` | `0` turns off the white card outline | on     |
 | `phases` | turn tracker: `top`, `bottom` or `off`  | opposite the row |
+| `tally` | commander tax & storm: `right`, `left` or `off` | right |
 | `label` | `0` turns off the name & P/T plate     | on      |
 | `preview` | `1` shows a checkered background (used by the control panel) | off |
 
@@ -163,6 +164,23 @@ Draw, Main 1, Combat, Main 2, End), the current one lit up.
   a cleared board, a loaded preset... up to 50 steps. Dragging things around
   isn't an undo step, and positions stay where they are when you undo.
 
+## Show on stream: deck intro, commander tax & storm, spotlight
+
+The **Show on stream** block on the Board tab:
+
+- **Deck intro**: a bar slides in from the left with the commander art, "Now playing", the deck
+  name, the commander, its bracket and your record with it from the game log (e.g. "4 W · 3 L").
+  It shows by itself when you press **▶ Play** on a deck; **▶ Show deck intro** shows it again.
+  For a deck from Archidekt or Moxfield it shows the deck name.
+- **Commander tax & storm**: **♛ Cast commander** (or **K**) counts your commander casts; the
+  overlay shows "Commander tax +4 · 2× cast". **⚡ Spell cast** (or **X**) counts the spells of this
+  turn for storm and goes back to 0 every new turn. **−** (or **Shift+K** / **Shift+X**) takes one
+  back. **New game** in the turn tracker resets both. The pills sit at the same height as the turn
+  tracker, on the right (`?tally=left` or `?tally=off` in the overlay URL).
+- **Spotlight**: type a card (the cards of your deck are suggested, in the printing you play; any
+  other card comes from Scryfall) and press **★ Show**: it appears big in the middle of the stream
+  for 5 to 15 seconds. **Hide** takes it away sooner.
+
 ## Deck presets
 
 Put a deck's tokens on the board (with your layout), type a name under
@@ -177,6 +195,7 @@ Click a stack in the control panel to select it (or use ↑ ↓), then:
 sacrifice one, **+ / −** one more / less, **C** copy one, **D** double,
 **Delete** remove. Anytime: **Shift+A** attack with all, **Shift+T** untap all,
 **1–6** add W U B R G C mana, **0** empty the pool, **R** roll a d20,
+**K** / **Shift+K** commander cast / one back, **X** / **Shift+X** a spell for storm / one back,
 **N** / **Shift+N** next / previous phase, **Ctrl+Z** undo, **/** search,
 **?** the list of shortcuts, **Esc** deselect.
 
@@ -195,6 +214,9 @@ send web requests, e.g. "API Ninja" or "Web Requests") can trigger them:
 | Add red mana | `POST http://localhost:8017/stream/api/counters` with `{"type": "R"}` |
 | Empty mana pool | `POST http://localhost:8017/stream/api/mana/empty` |
 | Load a preset | `POST http://localhost:8017/stream/api/presets/Krenko/load` |
+| Cast commander | `POST http://localhost:8017/stream/api/tally/casts` |
+| Spell for storm | `POST http://localhost:8017/stream/api/tally/storm` |
+| Deck intro | `POST http://localhost:8017/stream/api/intro` |
 
 ## Mana pool
 
@@ -338,11 +360,16 @@ Handy for hotkeys or a Stream Deck.
 | POST   | `/stream/api/mana/empty`        |                                       | remove all mana from the pool |
 | POST   | `/stream/api/turn/next`         |                                       | next phase (mana empties; after End a new turn, everything untaps) |
 | POST   | `/stream/api/turn/prev`         |                                       | previous phase |
-| PATCH  | `/stream/api/turn`              | `{"on": true}` / `{"phase": "combat"}` / `{"number": 1}` | show/hide the tracker, jump to a phase, set the turn |
+| PATCH  | `/stream/api/turn`              | `{"on": true}` / `{"phase": "combat"}` / `{"number": 1}` / `{"casts": 0, "storm": 0}` | show/hide the tracker, jump to a phase, set the turn or the tallies |
 | POST   | `/stream/api/untap`             |                                       | untap everything |
+| POST   | `/stream/api/tally/casts`       | none, or `{"delta": -1}`              | one commander cast more (or back); the tax is 2 per cast |
+| POST   | `/stream/api/tally/storm`       | none, or `{"delta": -1}`              | one spell more for storm (or back); 0 again every new turn |
+| POST   | `/stream/api/spotlight`         | `{"name": "...", "image_url": "...", "seconds": 7}` | show a card big on stream (2–30 seconds) |
+| DELETE | `/stream/api/spotlight`         |                                       | take the spotlight card away |
+| POST   | `/stream/api/intro`             | none, or `{"name": "...", "commander": "...", "bracket": "...", "record": "..."}` | show the deck intro (of the deck in the control panel) |
 | DELETE | `/stream/api/tokens/{id}`       |                                       | remove |
 | POST   | `/stream/api/clear`             |                                       | clear everything |
-| WS     | `/stream/ws`                    |                                       | state on connect and after every change; dice rolls, sacrifices, uses, attacks and the untap step arrive as `{"event": {...}}` |
+| WS     | `/stream/ws`                    |                                       | state on connect and after every change; dice rolls, sacrifices, uses, attacks, the untap step, tallies, the spotlight and the deck intro arrive as `{"event": {...}}` |
 
 `POST /api/tokens` also accepts optional `power`, `toughness` and `keywords`
 (a list of strings). PATCH also takes `set_power` / `set_toughness` (numbers,

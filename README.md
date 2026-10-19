@@ -28,13 +28,17 @@ price.
 
 ### Stream overlay for OBS
 
-Press **▶ Play** on a deck and the stream screen opens with every token that deck makes ready to put on the board. See [docs/stream.md](docs/stream.md).
+Press **▶ Play** on a deck and the stream screen opens with every token that deck makes ready to put on the board, while the deck intro slides in on stream. See [docs/stream.md](docs/stream.md).
 
 ![The stream control panel after Play: the tokens of the deck, emblems included, each with the cards that make it](docs/stream-tokens.jpg)
 
 | The board: counters, mana, dice and every stack | The overlay in OBS (shown here on a checkered background) |
 | --- | --- |
-| ![The Board tab of the stream control panel: three Soldiers with a +1/+1 counter, two Treasures, an Elf Warrior, mana and the turn tracker](docs/stream-board.jpg) | ![The overlay: the token stacks with counts and power/toughness, the mana pool and the turn tracker](docs/stream-overlay.jpg) |
+| ![The Board tab of the stream control panel: the stacks, and under Show on stream the deck intro, commander tax and storm, and the spotlight](docs/stream-board.jpg) | ![The overlay: the token stacks with counts and power/toughness, the mana pool and the turn tracker](docs/stream-overlay.jpg) |
+
+| The deck intro: commander, deck, bracket and record | A card in the spotlight, with commander tax and storm at the bottom |
+| --- | --- |
+| ![The deck intro on stream: Kess art, "Now playing Grixis Storm", Bracket 4 and 4 W · 3 L](docs/stream-intro.jpg) | ![Rhystic Study big in the middle of the stream; commander tax +4 and storm 6 next to the turn tracker](docs/stream-spotlight.jpg) |
 
 ![Wishlist targets set to 85% of the current price: the changed prices are highlighted until you save them all](docs/wishlist-targets.jpg)
 
@@ -126,7 +130,7 @@ Press **▶ Play** on a deck and the stream screen opens with every token that d
 
 ![The commanders each opponent plays, and your results against every commander](docs/games-commanders.jpg)
 
-![The randomizer for three players, preferring decks that were not played for a while](docs/decks-random.jpg)
+![The randomizer for three players, preferring decks that were not played for a while and skipping the decks played tonight](docs/decks-random.jpg)
 
 ![Price rises in your collection: also sent to Discord after the daily price update](docs/dashboard-rises.jpg)
 
@@ -200,7 +204,7 @@ Press **▶ Play** on a deck and the stream screen opens with every token that d
 - Basic lands and tokens are left out of the tracked cards by default, so they do not show up as missing or end up on your wishlist; tick a box to include them
 - Deck size: basic lands count towards the cards of a deck, so you can see at a glance whether a Commander deck has exactly 100 cards, or how many it is short or over
 - Basic lands per deck: fill in how many of each basic land a deck runs (shown as land cards), whatever the printing. Imported decks start with the numbers from the list, and older decks can move their lands over in one click
-- Deck randomizer: can't decide what to play? Pick a random deck, or a different one for every player at the table, optionally only from one bracket or only decks you can build right now, and with a bigger chance for the decks you have not played for a while
+- Deck randomizer: can't decide what to play? Pick a random deck, or a different one for every player at the table, optionally only from one bracket or only decks you can build right now, with a bigger chance for the decks you have not played for a while, and skipping the decks you already played tonight
 - Tokens per deck: which tokens, emblems and helper cards (Morph, Manifest) a deck needs and how many (from the deck list, or added by hand), in alphabetical order with their pictures (click a number to change it) and tick boxes for packing them for game night. There are often several tokens with one name (many Angels): "other version" shows them all to pick from
 - Mana curve and card types per deck: cards per mana value, the average mana value, how many creatures, instants, lands and so on, and how many cards ramp, draw, remove or wipe the board (guessed from the rules text)
 - Proxies: a printable sheet of the cards a deck still misses (or the whole deck) at real card size, nine to an A4 page, for play-testing
@@ -209,7 +213,7 @@ Press **▶ Play** on a deck and the stream screen opens with every token that d
 - Commander picture: every deck shows its commander, taken from the Commander category on Archidekt, recognised from the deck name (only when that card can be a commander), or chosen on the deck page
 - Game log: log a game from the Games page or from a deck (date, players, who you played against and their commanders, who won, notes). Every deck shows how often it was played, its win rate and when it was last played
 - Live table for game night (made for an iPad on the table): life, poison and commander damage per player, whose turn it is and the round, undo, full screen, and the screen stays on. Players are out at 0 life, 10 poison or 21 commander damage; the top row can be turned upside down for the players across. At the end you pick the winner and the game goes into the log with everyone and their commanders. A game in progress survives a reload
-- **Stream overlay for OBS**: show tokens, counters, mana, dice and a turn tracker on your stream, with a control panel to run it (also as an OBS dock). Take the tokens of any saved deck with one click (**◉ Stream tokens** on a deck). Control panel at `/stream/control`, Browser source at `/stream/overlay`; see [docs/stream.md](docs/stream.md)
+- **Stream overlay for OBS**: show tokens, counters, mana, dice and a turn tracker on your stream, with a control panel to run it (also as an OBS dock). Take the tokens of any saved deck with one click (**▶ Play** on a deck), with a deck intro on stream (commander, bracket and record). Put any card big in the spotlight, and keep track of commander tax and storm. Control panel at `/stream/control`, Browser source at `/stream/overlay`; see [docs/stream.md](docs/stream.md)
 - The commanders of your opponents: fill them in when you log a game (the one a player used last time is filled in). The Games page shows the commanders each player plays and your results against every commander
 - Weakest cards per deck: the cards the fewest decks with its commander play on EDHREC (under 10%), each with a more popular card of the same kind from your collection to swap in. "Only cards I have free" shows just the ones you can swap right away
 - Game statistics: your win rate, current streak and longest winning streak, games per month, win rates by table size (next to your fair share), deck colour and bracket, and per opponent, with the player who beats you most as your nemesis
@@ -329,7 +333,7 @@ product page. Two things to know:
 | `GET` | `/api/tokens?name=` | The different tokens with a name, to choose from |
 | `POST` | `/api/decks/check` | Have/missing overview for a decklist or Archidekt URL |
 | `GET` / `POST` | `/api/decks` | List saved decks (`?q=` deck name or card, `?bracket=`, `?colors=WG&color_match=exact\|any\|within`) / save a deck and set its cards aside |
-| `GET` | `/api/decks/random` | Pick random decks (`count`, `bracket`, `complete_only`) |
+| `GET` | `/api/decks/random` | Pick random decks (`count`, `bracket`, `complete_only`, `skip_played_tonight`) |
 | `GET` / `DELETE` | `/api/decks/{id}` | A saved deck with its cards / delete it and free its cards |
 | `PUT` | `/api/decks/{id}/cards/{entry_id}/printing` | Choose which printing a deck uses for a card |
 | `POST` | `/api/decks/{id}/cards` | Add a card to a saved deck |
@@ -339,6 +343,8 @@ product page. Two things to know:
 | `PUT` | `/api/decks/{id}/basic-lands` | Set how many of each basic land a deck runs |
 | `PUT` | `/api/decks/{id}/tokens` | Mark that you own the tokens of a deck, or not (`null` follows the deck list) |
 | `PUT` | `/api/decks/{id}/commander` | Choose the commander of a deck (a card in it), or `null` for none |
+| `POST` | `/api/decks/{id}/stream` | Put the tokens of a deck in the stream control panel |
+| `POST` | `/api/decks/{id}/stream/intro` | Show the deck intro on stream, with the record as it is now |
 | `GET` | `/api/decks/{id}/value-history` | What the copies in a deck were worth on every day with prices |
 | `GET` / `POST` | `/api/games` | The game log (`?deck_id=` for one deck) / log a game |
 | `DELETE` | `/api/games/{id}` | Remove a game from the log |

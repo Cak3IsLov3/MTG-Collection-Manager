@@ -282,7 +282,7 @@ async def saved_deck_stream(deck_id: int, session: Session = Depends(get_session
     if deck is None:
         return redirect("/deck", "Deck not found", error=True)
     try:
-        await set_deck(stream_app, await deck_for_stream(session, deck))
+        await set_deck(stream_app, await deck_for_stream(session, deck), intro=True)
     except StreamLinkError as exc:
         return redirect(f"/decks/{deck_id}", f"Could not get the tokens from Scryfall: {exc}", error=True)
     return RedirectResponse("/stream/control#add", status_code=303)
@@ -572,6 +572,7 @@ def _deck_data(summaries: list[decks.DeckSummary], plays: dict | None = None) ->
             "commander_image": s.deck.commander_image or None,
             "played": plays[s.deck.id].played if s.deck.id in plays else 0,
             "days_since_played": plays[s.deck.id].days_since() if s.deck.id in plays else None,
+            "played_tonight": s.deck.id in plays and plays[s.deck.id].played_tonight(),
         }
         for s in summaries
     ]

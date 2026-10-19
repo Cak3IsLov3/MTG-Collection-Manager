@@ -5,7 +5,7 @@
 <title>MTG Token Overlay</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Cinzel:wght@700&display=swap" rel="stylesheet">
 <style>
   :root {
     /* Card size in whole pixels (set from ?size= by the script). Anything
@@ -397,6 +397,141 @@
   .banner.attack { color: #ff8a7a; border-color: rgba(255, 90, 70, .85); }
   .banner.turn { border-color: rgba(231, 179, 67, .85); }
 
+  /* ---- tallies: commander tax and storm, small pills next to the turn tracker */
+  #tally {
+    position: fixed;
+    right: 2.2vh;
+    bottom: 3vh;
+    z-index: 18;
+    display: flex;
+    gap: 1vh;
+    pointer-events: none;
+  }
+  #tally.top { bottom: auto; top: 3vh; }
+  #tally.left { right: auto; left: 2.2vh; }
+  #tally[hidden] { display: none; }
+  .tally {
+    display: flex;
+    align-items: center;
+    gap: .9vh;
+    padding: .55vh 1.6vh .6vh 1.1vh;
+    border-radius: 999px;
+    font-weight: 800;
+    font-size: 2.5vh;
+    color: #fff;
+    white-space: nowrap;
+    background: rgba(12, 12, 16, .84);
+    border: 1px solid rgba(255, 255, 255, .16);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, .5);
+  }
+  .tally[hidden] { display: none; }
+  .tally .ico {
+    display: grid;
+    place-items: center;
+    width: 3.2vh;
+    height: 3.2vh;
+    border-radius: 50%;
+    font-size: 1.9vh;
+  }
+  .tally .lbl { color: rgba(255, 255, 255, .62); font-weight: 700; letter-spacing: .04em; text-transform: uppercase; font-size: 1.9vh; }
+  .tally .num { font-variant-numeric: tabular-nums; }
+  .tally .sub { color: rgba(255, 255, 255, .5); font-weight: 600; font-size: 1.8vh; }
+  .tally.casts .ico { background: linear-gradient(180deg, #f8d988, #c99a2e); color: #2a1d04; }
+  .tally.casts .num { color: #f3cc6e; }
+  .tally.storm .ico { background: linear-gradient(180deg, #9fd0ff, #3b74d6); color: #0b1830; }
+  .tally.storm .num { color: #9fd0ff; }
+  .tally.bump { animation: bump .45s var(--ease); }
+
+  /* ---- spotlight: one card big in the middle of the screen */
+  .spotlight {
+    position: fixed;
+    left: 50%;
+    top: 46%;
+    z-index: 30;
+    height: 62vh;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1.6vh;
+  }
+  .spotlight img {
+    height: 100%;
+    aspect-ratio: 488 / 680;
+    border-radius: 3.4vh / 2.5vh;
+    box-shadow:
+      0 0 0 .35vh rgba(255, 236, 190, .9),
+      0 0 7vh 1.2vh rgba(231, 179, 67, .55),
+      0 3vh 7vh rgba(0, 0, 0, .7);
+  }
+  .spotlight .caption {
+    padding: .3em 1em .35em;
+    border-radius: 999px;
+    font-size: 3.4vh;
+    font-weight: 800;
+    letter-spacing: .03em;
+    color: #ffe9b0;
+    white-space: nowrap;
+    background: rgba(12, 12, 16, .84);
+    border: 1px solid rgba(231, 179, 67, .7);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, .55);
+  }
+  .spotlight-dim {
+    position: fixed;
+    inset: 0;
+    z-index: 29;
+    pointer-events: none;
+    background: radial-gradient(ellipse at center, rgba(0, 0, 0, .15) 0%, rgba(0, 0, 0, .55) 70%);
+  }
+
+  /* ---- deck intro: a bar with the commander art, the deck name, bracket and record */
+  .intro {
+    position: fixed;
+    left: 0;
+    bottom: 14vh;
+    z-index: 26;
+    display: flex;
+    align-items: stretch;
+    min-width: 46vh;
+    max-width: 78vw;
+    pointer-events: none;
+    color: #fff;
+    background: linear-gradient(90deg, rgba(14, 15, 19, .96) 0%, rgba(22, 24, 30, .92) 70%, rgba(22, 24, 30, .0) 100%);
+    border-top: .3vh solid #e7b343;
+    border-bottom: .3vh solid rgba(231, 179, 67, .35);
+    box-shadow: 0 2vh 5vh rgba(0, 0, 0, .55);
+  }
+  .intro .art {
+    width: 30vh;
+    background-size: cover;
+    background-position: center 30%;
+    -webkit-mask-image: linear-gradient(90deg, #000 70%, transparent);
+    mask-image: linear-gradient(90deg, #000 70%, transparent);
+  }
+  .intro .text { padding: 2vh 10vh 2.2vh 2.6vh; display: flex; flex-direction: column; justify-content: center; gap: .5vh; }
+  .intro .kicker { color: #e7b343; font-size: 2vh; font-weight: 700; letter-spacing: .3em; text-transform: uppercase; }
+  .intro .deck {
+    font-family: "Cinzel", Georgia, serif;
+    font-size: 5.2vh;
+    font-weight: 700;
+    line-height: 1.05;
+    color: #fff4d6;
+    text-shadow: 0 .3vh 1.2vh rgba(0, 0, 0, .7);
+  }
+  .intro .commander { font-size: 2.7vh; font-weight: 600; color: rgba(255, 255, 255, .78); }
+  .intro .facts { display: flex; gap: 1vh; margin-top: .6vh; }
+  .intro .fact {
+    padding: .25vh 1.2vh .35vh;
+    border-radius: 999px;
+    font-size: 2.2vh;
+    font-weight: 700;
+    border: 1px solid rgba(255, 255, 255, .25);
+    background: rgba(255, 255, 255, .06);
+  }
+  .intro .fact.bracket { border-color: rgba(231, 179, 67, .7); color: #f3cc6e; }
+  .intro .fact.record { border-color: rgba(123, 224, 143, .6); color: #9be8aa; }
+
   /* ---- turn tracker: the phases of the turn, the current one lit up */
   #phases {
     position: fixed;
@@ -544,6 +679,7 @@
 <div id="row"></div>
 <div id="dice"></div>
 <div id="phases" hidden></div>
+<div id="tally" hidden></div>
 <script>
   // The app can live under a path (/stream); every address starts from there.
   const ROOT = location.pathname.replace(/\/(control|overlay)\/?$/, "");
@@ -1266,12 +1402,113 @@
     });
   }
 
+  // ---- Tallies: commander tax (2 per cast) and storm (spells this turn).
+  // ?tally=left|right|off; they sit at the same height as the turn tracker.
+  const tallyPos = params.get("tally") || "right";
+  const tallyBox = document.getElementById("tally");
+  tallyBox.classList.toggle("top", phasesPos === "top");
+  tallyBox.classList.toggle("left", tallyPos === "left");
+  function tallyPill(cls, icon, label) {
+    const pill = Object.assign(document.createElement("div"), { className: `tally ${cls}`, hidden: true });
+    pill.append(Object.assign(document.createElement("span"), { className: "ico", textContent: icon }),
+      Object.assign(document.createElement("span"), { className: "lbl", textContent: label }),
+      Object.assign(document.createElement("span"), { className: "num" }),
+      Object.assign(document.createElement("span"), { className: "sub" }));
+    tallyBox.append(pill);
+    return pill;
+  }
+  const castsPill = tallyPill("casts", "♛", "Commander tax");
+  const stormPill = tallyPill("storm", "⚡", "Storm");
+  let tallies = null;  // not shown yet: no bump on the first draw
+
+  function renderTally(turn) {
+    const casts = (turn && turn.casts) || 0;
+    const storm = (turn && turn.storm) || 0;
+    tallyBox.hidden = tallyPos === "off" || (!casts && !storm);
+    castsPill.hidden = !casts;
+    stormPill.hidden = !storm;
+    castsPill.querySelector(".num").textContent = `+${2 * casts}`;
+    castsPill.querySelector(".sub").textContent = `${casts}× cast`;
+    stormPill.querySelector(".num").textContent = String(storm);
+    stormPill.querySelector(".sub").textContent = "";
+    if (tallies && casts !== tallies.casts && casts) bump(castsPill);
+    if (tallies && storm !== tallies.storm && storm) bump(stormPill);
+    tallies = { casts, storm };
+  }
+
+  // ---- Spotlight: one card big in the middle, for a few seconds.
+  let spotlight = null;
+  function hideSpotlight() {
+    if (!spotlight) return;
+    const { card, dim } = spotlight;
+    spotlight = null;
+    clearTimeout(card.timer);
+    card.animate([
+      { transform: "translate(-50%, -50%) scale(1)", opacity: 1 },
+      { transform: "translate(-50%, -46%) scale(.86) rotate(3deg)", opacity: 0 },
+    ], { duration: 380, easing: "ease-in", fill: "forwards" }).onfinish = () => card.remove();
+    dim.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 380, fill: "forwards" }).onfinish = () => dim.remove();
+    setTimeout(() => { card.remove(); dim.remove(); }, 700);
+  }
+
+  function onSpotlight(ev) {
+    hideSpotlight();
+    if (!ev.id || typeof ev.image_url !== "string" || !ev.image_url.startsWith("https://cards.scryfall.io/")) return;
+    const dim = Object.assign(document.createElement("div"), { className: "spotlight-dim" });
+    const card = Object.assign(document.createElement("div"), { className: "spotlight" });
+    // The large picture is sharper this big; Scryfall has it at the same address.
+    const img = Object.assign(document.createElement("img"), { alt: ev.name, src: ev.image_url.replace("/normal/", "/large/") });
+    img.onerror = () => { if (img.src !== ev.image_url) img.src = ev.image_url; };
+    card.append(img, Object.assign(document.createElement("div"), { className: "caption", textContent: ev.name }));
+    document.body.append(dim, card);
+    dim.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 400, fill: "forwards" });
+    card.animate([
+      { transform: "translate(-50%, -38%) scale(.6) rotate(-8deg)", opacity: 0 },
+      { transform: "translate(-50%, -51%) scale(1.04) rotate(1deg)", opacity: 1, offset: .7 },
+      { transform: "translate(-50%, -50%) scale(1)", opacity: 1 },
+    ], { duration: 650, easing: "cubic-bezier(.2, .8, .3, 1)" });
+    spotlight = { card, dim };
+    card.timer = setTimeout(hideSpotlight, (ev.seconds || 7) * 1000);
+  }
+
+  // ---- Deck intro: slides in from the left, stays a moment, slides out.
+  let introEl = null;
+  function onIntro(ev) {
+    if (introEl) introEl.remove();
+    const make = (tag, cls, text) => Object.assign(document.createElement(tag), { className: cls, textContent: text || "" });
+    const bar = make("div", "intro");
+    if (typeof ev.image_url === "string" && ev.image_url.startsWith("https://cards.scryfall.io/")) {
+      const art = make("div", "art");
+      art.style.backgroundImage = `url("${ev.image_url.replace("/normal/", "/art_crop/")}")`;
+      bar.append(art);
+    }
+    const text = make("div", "text");
+    text.append(make("div", "kicker", "Now playing"), make("div", "deck", ev.name));
+    if (ev.commander && ev.commander !== ev.name) text.append(make("div", "commander", ev.commander));
+    const facts = make("div", "facts");
+    if (ev.bracket) facts.append(make("span", "fact bracket", ev.bracket));
+    if (ev.record) facts.append(make("span", "fact record", ev.record));
+    if (facts.children.length) text.append(facts);
+    bar.append(text);
+    document.body.append(bar);
+    introEl = bar;
+    const anim = bar.animate([
+      { transform: "translateX(-105%)", opacity: 0 },
+      { transform: "translateX(0)", opacity: 1, offset: .08 },
+      { transform: "translateX(0)", opacity: 1, offset: .92 },
+      { transform: "translateX(-105%)", opacity: 0 },
+    ], { duration: 9000, easing: "cubic-bezier(.25, .8, .3, 1)" });
+    anim.onfinish = () => { bar.remove(); if (introEl === bar) introEl = null; };
+    setTimeout(() => bar.remove(), 9500);
+  }
+
   function onPhase(ev) {
     if (ev.phase === "combat" && ev.on && phasesPos !== "off") showBanner("⚔ Combat", "attack");
   }
 
   function render(state) {
     renderTurn(state.turn);
+    renderTally(state.turn);
     const seen = new Set();
     let prev = null;
     for (const t of state.tokens || []) {
@@ -1322,6 +1559,8 @@
           if (data.event.type === "untap") onUntap(data.event);
           if (data.event.type === "turn") showBanner(`Turn ${data.event.number}`, "turn");
           if (data.event.type === "phase") onPhase(data.event);
+          if (data.event.type === "spotlight") onSpotlight(data.event);
+          if (data.event.type === "intro") onIntro(data.event);
           return;
         }
         render(data);

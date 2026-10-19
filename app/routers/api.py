@@ -467,11 +467,16 @@ def random_decks(
     count: int = 1,
     bracket: int | None = None,
     complete_only: bool = False,
+    skip_played_tonight: bool = False,
     session: Session = Depends(get_session),
 ):
-    """Pick `count` different saved decks at random, optionally only from one bracket or only complete ones."""
+    """Pick `count` different saved decks at random, optionally only from one bracket, only complete ones
+    or none that were already played tonight."""
+    skip = set()
+    if skip_played_tonight:
+        skip = {deck_id for deck_id, stats in games.deck_plays(session).items() if stats.played_tonight()}
     try:
-        picked = decks.random_decks(decks.deck_summaries(session), count, bracket, complete_only)
+        picked = decks.random_decks(decks.deck_summaries(session), count, bracket, complete_only, skip=skip)
     except decks.DeckError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return [_deck_out(summary) for summary in picked]
@@ -654,6 +659,23 @@ async def deck_combos(
                 "two_card": combo.two_card, "url": combo.url}
 
     return {"included": [out(c) for c in found.included], "one_card_away": [out(c) for c in found.almost]}
+
+
+@router.post("/decks/{deck_id}/stream/intro")
+async def show_deck_intro(deck_id: int, session: Session = Depends(get_session)):
+    """Show the deck intro on stream, with the deck's record as it is now."""
+    from app.main import stream_app
+    from app.services.stream_link import deck_intro
+    from app.stream.server import show_intro
+
+    deck = session.get(Deck, deck_id)
+    if deck is None:
+        raise HTTPException(status_code=404, detail="Deck not found")
+    intro = deck_intro(session, deck)
+    stored = stream_app.state.decks.deck
+    if stored and stored.get("deck_id") == deck.id:
+        stream_app.state.decks.save({**stored, "intro": intro})
+    return await show_intro(stream_app, intro)
 
 
 @router.post("/decks/{deck_id}/stream")

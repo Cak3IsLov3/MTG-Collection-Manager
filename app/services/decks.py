@@ -1136,8 +1136,9 @@ def random_decks(
     bracket: int | None = None,
     complete_only: bool = False,
     rng: random.Random | None = None,
+    skip: set[int] | frozenset[int] = frozenset(),
 ) -> list[DeckSummary]:
-    """Pick `count` different decks at random, e.g. one per player at the table.
+    """Pick `count` different decks at random, e.g. one per player at the table; never one in `skip`.
 
     Raises DeckError when fewer decks match than were asked for.
     """
@@ -1145,6 +1146,7 @@ def random_decks(
         summary
         for summary in summaries
         if (bracket is None or summary.deck.bracket == bracket) and (summary.complete or not complete_only)
+        and summary.deck.id not in skip
     ]
     if count < 1:
         raise DeckError("Pick at least one deck")
