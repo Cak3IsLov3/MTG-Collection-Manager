@@ -1001,7 +1001,7 @@ def test_streamdeck_keys_fill_an_xl(client):
     data = client.get("/api/streamdeck").json()
     assert len(data["actions"]) + data["preset_keys"] == 32 and data["presets"] == []
     page = client.get("/streamdeck")
-    assert page.status_code == 200 and "Stream Deck" in page.text
+    assert page.status_code == 200 and "Stream Deck" in page.text and 'id="downloadProfile"' in page.text
     # Every key works.
     for key in data["actions"]:
         if key["action"] in ("undo", "intro"):

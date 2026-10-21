@@ -6,7 +6,7 @@
 <title>Stream Deck</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
   :root {
     --bg: #0e0f13;
@@ -75,6 +75,51 @@
   .presets { display: grid; gap: 8px; }
   .presets .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
   .presets .row b { min-width: 140px; }
+  .profile-panel select {
+    padding: 7px 10px; border-radius: 9px; border: 1px solid var(--line-2); background: #111318; color: inherit; font: inherit; font-size: 14px;
+  }
+
+  /* ---- polish */
+  h1 { font-family: "Cinzel", Georgia, serif; font-size: 32px; font-weight: 700; letter-spacing: .01em; }
+  .hero { display: flex; align-items: flex-end; gap: 16px; flex-wrap: wrap; }
+  .hero .sub { margin: 4px 0 0; color: var(--muted); }
+  .hero .spacer { flex: 1; }
+  .hero .button-link { margin-bottom: 4px; }
+  .button-link {
+    color: var(--text); text-decoration: none; font-weight: 600; font-size: 14px;
+    padding: 7px 13px; border-radius: 9px; border: 1px solid var(--line-2); background: var(--panel-3);
+  }
+  .button-link:hover { border-color: var(--accent); }
+  .small { font-size: 13px; }
+  .pill { margin-left: 6px; padding: 1px 8px; border-radius: 999px; background: var(--panel-3); color: var(--accent-2); font-size: 11px; letter-spacing: .04em; }
+  .deck-panel .head { margin-bottom: 14px; }
+  .deck-panel h2 { margin: 0; }
+  .legend { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-top: 14px; color: var(--muted); font-size: 13px; }
+  .legend i { display: inline-block; width: 18px; height: 6px; border-radius: 3px; margin-right: 7px; vertical-align: middle; background: var(--c); }
+  .ways { display: grid; grid-template-columns: 1.1fr 1fr; gap: 18px; }
+  @media (max-width: 860px) { .ways { grid-template-columns: 1fr; } }
+  .ways .panel { display: flex; flex-direction: column; gap: 12px; align-items: flex-start; position: relative; }
+  .ways h2 { margin: 0; font-size: 17px; letter-spacing: 0; text-transform: none; color: var(--text); }
+  .lead { margin: 0; color: #c3c7d1; }
+  .profile-panel {
+    border-color: rgba(231, 179, 67, .5);
+    background: radial-gradient(120% 90% at 100% 0%, rgba(231, 179, 67, .10), transparent 60%), var(--panel);
+  }
+  .tag {
+    position: absolute; top: 16px; right: 18px; padding: 2px 9px; border-radius: 999px; font-size: 11px; font-weight: 700;
+    letter-spacing: .06em; text-transform: uppercase; color: #1a1406; background: linear-gradient(180deg, #f8d988, #e7b343);
+  }
+  .field { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 14px; }
+  button.big { padding: 11px 18px; font-size: 15px; box-shadow: 0 8px 22px rgba(231, 179, 67, .22); }
+  ol.steps { list-style: none; counter-reset: step; padding: 0; margin: 0; display: grid; gap: 9px; }
+  ol.steps li { counter-increment: step; position: relative; padding-left: 34px; }
+  ol.steps li::before {
+    content: counter(step); position: absolute; left: 0; top: 0; width: 23px; height: 23px; border-radius: 50%;
+    display: grid; place-items: center; font-size: 12px; font-weight: 800; color: var(--accent-2);
+    background: rgba(231, 179, 67, .12); border: 1px solid rgba(231, 179, 67, .45);
+  }
+  .footnote { text-align: center; margin: 0; }
+  .detail { border-color: rgba(231, 179, 67, .45); }
   #toast {
     position: fixed; left: 50%; bottom: 24px; transform: translate(-50%, 20px); opacity: 0; pointer-events: none;
     padding: 10px 16px; border-radius: 10px; background: #23262e; border: 1px solid var(--line-2);
@@ -96,30 +141,28 @@
   <a class="active" href="/stream/control">Stream</a>
 </nav>
 <main>
-  <div class="head">
-    <h1>Stream Deck <span>· 32 keys, ready to use</span></h1>
+  <div class="hero">
+    <div>
+      <h1>Stream Deck</h1>
+      <p class="sub">32 keys for your stream: the turn, mana, commander tax, storm, dice and your presets.</p>
+    </div>
     <span class="spacer"></span>
-    <a id="backLink" href="control">← Control panel</a>
+    <a class="button-link" href="control">← Control panel</a>
   </div>
 
-  <section class="panel">
-    <h2>Setting up a key (no plugin needed)</h2>
-    <ol class="steps">
-      <li>In the Stream Deck software, drag <b>Website</b> (under <b>System</b>) onto a key.</li>
-      <li>Click a key below and press <b>Copy address</b>; paste it into <b>URL</b>.</li>
-      <li>Tick <b>GET request in background</b>, so no browser window opens.</li>
-      <li>Press <b>Download picture</b>, then click the key's picture in the Stream Deck software &gt; <b>Set from file</b>. Leave the title empty: the name is on the picture.</li>
-    </ol>
-    <p class="muted">The app has to be running. The keys only work from your Stream Deck or this computer, not from other websites.</p>
-  </section>
-
-  <section class="panel">
-    <div class="head" style="margin-bottom: 14px">
-      <h2 style="margin: 0">Your Stream Deck XL</h2>
+  <section class="panel deck-panel">
+    <div class="head">
+      <h2>Your Stream Deck <span class="pill">8 × 4</span></h2>
       <span class="spacer"></span>
-      <button id="downloadAll" type="button" title="All 32 pictures as PNG files (your browser may ask to allow several downloads)">Download all pictures</button>
+      <span class="muted small">Click a key for its address and picture</span>
     </div>
     <div id="deck" class="deck"></div>
+    <div class="legend">
+      <span><i style="--c: #e7b343"></i>Row 1 · Turn &amp; table</span>
+      <span><i style="--c: linear-gradient(90deg, #f8e7b9, #0e68ab, #a69f9d, #d3202a, #00733e)"></i>Row 2 · Mana &amp; d20</span>
+      <span><i style="--c: #3b74d6"></i>Row 3 · Commander tax, storm &amp; counters</span>
+      <span><i style="--c: #9599a8"></i>Row 4 · Tracker, dice &amp; presets</span>
+    </div>
   </section>
 
   <section id="detail" class="panel detail" hidden>
@@ -136,11 +179,45 @@
     </div>
   </section>
 
+  <div class="ways">
+    <section class="panel profile-panel">
+      <span class="tag">Recommended</span>
+      <h2>Ready-made profile</h2>
+      <p class="lead">One file with every key set up: pictures, addresses and <b>GET request in background</b> already ticked.</p>
+      <label class="field">For
+        <select id="profileDevice">
+          <option value="VSD2/WiFi">Stream Deck Mobile / virtual Stream Deck</option>
+          <option value="20GAT9901">Stream Deck XL</option>
+        </select>
+      </label>
+      <button id="downloadProfile" class="primary big" type="button">⬇ Download Stream Deck profile</button>
+      <ol class="steps">
+        <li>Double-click <b>MTG Stream.streamDeckProfile</b>: the Stream Deck software opens and adds it.</li>
+        <li>Pick the profile <b>MTG Stream</b>. Done.</li>
+      </ol>
+      <p class="muted small">Saved a new preset? Download the profile again to get it on a key.</p>
+    </section>
+
+    <section class="panel">
+      <h2>One key at a time</h2>
+      <p class="lead">No plugin needed: the <b>Website</b> action of the Stream Deck software does it.</p>
+      <ol class="steps">
+        <li>Drag <b>Website</b> (under <b>System</b>) onto a key.</li>
+        <li>Click a key above, press <b>Copy address</b> and paste it into <b>URL</b>.</li>
+        <li>Tick <b>GET request in background</b>, so no browser window opens.</li>
+        <li><b>Download picture</b>, then click the key picture &gt; <b>Set from file</b>. Leave the title empty.</li>
+      </ol>
+      <button id="downloadAll" type="button" title="All pictures as PNG files (your browser may ask to allow several downloads)">Download all pictures</button>
+    </section>
+  </div>
+
   <section class="panel">
     <h2>Presets</h2>
     <p class="muted" style="margin-top: 0">The last four keys load your first four presets. Every preset has its own address too:</p>
     <div id="presets" class="presets"></div>
   </section>
+
+  <p class="muted small footnote">The app has to be running. The keys only work from your Stream Deck or this computer, not from other websites.</p>
 </main>
 <div id="toast"></div>
 
@@ -207,17 +284,32 @@
     while (ctx.measureText(text).width > maxWidth && size > 9);
   }
 
+  const MANA_COLOURS = { W: "#f8e7b9", U: "#2f8fd8", B: "#a69f9d", R: "#e0443c", G: "#2fa36a", C: "#cbc2bf" };
+
   async function draw(canvas, look) {
     const ctx = canvas.getContext("2d");
+    const accent = look.mana ? MANA_COLOURS[look.mana] : (look.ring || look.color || "#e7b343");
     ctx.clearRect(0, 0, SIZE, SIZE);
+    // Background: dark, with a soft glow of the key's colour behind the symbol.
     const bg = ctx.createLinearGradient(0, 0, 0, SIZE);
-    bg.addColorStop(0, "#22252e");
-    bg.addColorStop(1, "#0e0f13");
+    bg.addColorStop(0, "#252833");
+    bg.addColorStop(1, "#0d0e12");
     ctx.fillStyle = bg;
     ctx.fillRect(0, 0, SIZE, SIZE);
-    roundRect(ctx, 5, 5, SIZE - 10, SIZE - 10, 18);
+    const glow = ctx.createRadialGradient(SIZE / 2, 52, 4, SIZE / 2, 52, 70);
+    glow.addColorStop(0, accent + "55");
+    glow.addColorStop(1, accent + "00");
+    ctx.fillStyle = glow;
+    ctx.fillRect(0, 0, SIZE, SIZE);
+    // A band behind the name.
+    ctx.fillStyle = "rgba(0, 0, 0, .38)";
+    ctx.fillRect(0, 100, SIZE, SIZE - 100);
+    ctx.fillStyle = accent + "88";
+    ctx.fillRect(14, 100, SIZE - 28, 2);
+    // The rim.
+    roundRect(ctx, 4, 4, SIZE - 8, SIZE - 8, 20);
     ctx.lineWidth = 3;
-    ctx.strokeStyle = look.ring || "rgba(231, 179, 67, .45)";
+    ctx.strokeStyle = accent + "b0";
     ctx.stroke();
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
@@ -225,26 +317,26 @@
       const img = await symbol(look.mana);
       if (img) {
         ctx.save();
-        ctx.shadowColor = "rgba(0, 0, 0, .6)";
-        ctx.shadowBlur = 10;
-        ctx.drawImage(img, 34, 16, 76, 76);
+        ctx.shadowColor = "rgba(0, 0, 0, .65)";
+        ctx.shadowBlur = 12;
+        ctx.drawImage(img, 36, 14, 72, 72);
         ctx.restore();
       } else {
         ctx.fillStyle = "#e8e6e1";
         fitText(ctx, look.mana, 800, 56, 110);
-        ctx.fillText(look.mana, SIZE / 2, 56);
+        ctx.fillText(look.mana, SIZE / 2, 52);
       }
     } else {
       ctx.fillStyle = look.color || "#eceef3";
       ctx.shadowColor = look.color || "transparent";
-      ctx.shadowBlur = 14;
-      fitText(ctx, look.glyph, 800, look.small ? 44 : 64, 116);
-      ctx.fillText(look.glyph, SIZE / 2, 58);
+      ctx.shadowBlur = 16;
+      fitText(ctx, look.glyph, 800, look.small ? 42 : 60, 112);
+      ctx.fillText(look.glyph, SIZE / 2, 52);
       ctx.shadowBlur = 0;
     }
-    ctx.fillStyle = "#eceef3";
-    fitText(ctx, look.label, 700, 20, 122);
-    ctx.fillText(look.label, SIZE / 2, 118);
+    ctx.fillStyle = "#f1f2f5";
+    fitText(ctx, look.label, 700, 19, 124);
+    ctx.fillText(look.label, SIZE / 2, 122);
   }
 
   let toastTimer;
@@ -313,6 +405,130 @@
       await new Promise((r) => setTimeout(r, 250));
     }
     toast(`${keys.length} pictures downloaded`);
+  });
+
+  // ---- A ready-made profile for the Stream Deck software (.streamDeckProfile): a zip with
+  // package.json and Profiles/<id>.sdProfile, as Stream Deck 7 exports it. Every key is the built-in
+  // Website action with "GET request in background" (openInBrowser: false) and its picture.
+  const CRC_TABLE = Array.from({ length: 256 }, (_, n) => {
+    let c = n;
+    for (let k = 0; k < 8; k += 1) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+    return c >>> 0;
+  });
+  function crc32(bytes) {
+    let c = 0xffffffff;
+    for (const b of bytes) c = CRC_TABLE[(c ^ b) & 0xff] ^ (c >>> 8);
+    return (c ^ 0xffffffff) >>> 0;
+  }
+
+  // A zip without compression ("stored"): enough for a profile, and no library needed.
+  function zip(files) {
+    const enc = new TextEncoder();
+    const parts = [];
+    const central = [];
+    let offset = 0;
+    for (const file of files) {
+      const name = enc.encode(file.name);
+      const data = file.data || new Uint8Array(0);
+      const crc = crc32(data);
+      const local = new DataView(new ArrayBuffer(30));
+      local.setUint32(0, 0x04034b50, true);
+      local.setUint16(4, 20, true);
+      local.setUint16(6, 0x0800, true);          // names are UTF-8
+      local.setUint32(14, crc, true);
+      local.setUint32(18, data.length, true);
+      local.setUint32(22, data.length, true);
+      local.setUint16(26, name.length, true);
+      parts.push(new Uint8Array(local.buffer), name, data);
+      const entry = new DataView(new ArrayBuffer(46));
+      entry.setUint32(0, 0x02014b50, true);
+      entry.setUint16(4, 20, true);
+      entry.setUint16(6, 20, true);
+      entry.setUint16(8, 0x0800, true);
+      entry.setUint32(16, crc, true);
+      entry.setUint32(20, data.length, true);
+      entry.setUint32(24, data.length, true);
+      entry.setUint16(28, name.length, true);
+      entry.setUint32(38, file.name.endsWith("/") ? 0x10 : 0, true);  // directory flag
+      entry.setUint32(42, offset, true);
+      central.push(new Uint8Array(entry.buffer), name);
+      offset += 30 + name.length + data.length;
+    }
+    const size = central.reduce((n, p) => n + p.length, 0);
+    const end = new DataView(new ArrayBuffer(22));
+    end.setUint32(0, 0x06054b50, true);
+    end.setUint16(8, files.length, true);
+    end.setUint16(10, files.length, true);
+    end.setUint32(12, size, true);
+    end.setUint32(16, offset, true);
+    return new Blob([...parts, ...central, new Uint8Array(end.buffer)], { type: "application/zip" });
+  }
+
+  const uuid = () => (crypto.randomUUID ? crypto.randomUUID()
+    : "10000000-1000-4000-8000-100000000000".replace(/[018]/g, (c) => (c ^ (crypto.getRandomValues(new Uint8Array(1))[0] & (15 >> (c / 4)))).toString(16)));
+  // Picture names like the Stream Deck software makes them: 26 characters and a Z.
+  const imageName = () => Array.from(crypto.getRandomValues(new Uint8Array(26)), (b) => "0123456789ABCDEFGHIJKLMNOPQRSTUV"[b % 32]).join("") + "Z";
+
+  async function png(look) {
+    const canvas = document.createElement("canvas");
+    canvas.width = canvas.height = SIZE;
+    await draw(canvas, look);
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
+    return new Uint8Array(await blob.arrayBuffer());
+  }
+
+  async function buildProfile(model) {
+    const enc = new TextEncoder();
+    const json = (value) => enc.encode(JSON.stringify(value));
+    const profileId = uuid().toUpperCase();
+    const pageId = uuid();
+    const blankId = uuid();
+    const base = `Profiles/${profileId}.sdProfile/`;
+    const page = `${base}Profiles/${pageId.toUpperCase()}/`;
+    const blank = `${base}Profiles/${blankId.toUpperCase()}/`;
+    const files = [];
+    const actions = {};
+    for (const [i, key] of keys.entries()) {
+      if (!key.path) continue;                     // a preset key without a preset yet
+      const image = `${imageName()}.png`;
+      files.push({ name: `${page}Images/${image}`, data: await png(key.look) });
+      actions[`${i % 8},${Math.floor(i / 8)}`] = {
+        ActionID: uuid(), LinkedTitle: true, Name: "Website", Resources: null,
+        Settings: { openInBrowser: false, path: fullUrl(key.path) },
+        State: 0, States: [{ Image: `Images/${image}`, Title: "" }],
+        UUID: "com.elgato.streamdeck.system.website",
+      };
+    }
+    return zip([
+      { name: "package.json", data: json({ AppVersion: "7.5.1.22901", DeviceModel: model, DeviceSettings: null,
+                                            FormatVersion: 1, OSType: "Windows", OSVersion: "10.0", RequiredPlugins: [] }) },
+      { name: "Profiles/" }, { name: base },
+      { name: `${base}manifest.json`, data: json({ Device: { Model: model, UUID: "" }, Name: "MTG Stream",
+          Pages: { Current: pageId, Default: blankId, Pages: [pageId] }, Version: "3.0" }) },
+      { name: `${base}Profiles/` }, { name: page }, { name: `${page}Images/` },
+      { name: `${page}manifest.json`, data: json({ Controllers: [{ Actions: actions, Type: "Keypad" }], Icon: "", Name: "MTG" }) },
+      ...files,
+      { name: blank }, { name: `${blank}Images/` },
+      { name: `${blank}manifest.json`, data: json({ Controllers: [{ Actions: null, Type: "Keypad" }], Icon: "", Name: "" }) },
+    ]);
+  }
+
+  $("downloadProfile").addEventListener("click", async () => {
+    const button = $("downloadProfile");
+    button.disabled = true;
+    try {
+      const blob = await buildProfile($("profileDevice").value);
+      const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: "MTG Stream.streamDeckProfile" });
+      document.body.append(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+      toast("Profile downloaded: double-click it to add it to the Stream Deck software");
+    } catch (error) {
+      toast(`Could not make the profile: ${error.message}`, true);
+    } finally {
+      button.disabled = false;
+    }
   });
 
   async function load() {

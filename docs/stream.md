@@ -206,9 +206,17 @@ the control panel) has a ready-made layout for a Stream Deck XL (8 × 4 keys): t
 undo, the deck intro, the six mana colours, commander tax, storm, counters, dice, the turn tracker
 and your first four presets. Click a key for its address and its picture.
 
-![The Stream Deck page: 32 keys with their pictures, and the address of the chosen key](streamdeck.jpg)
+![The Stream Deck page: the 32 keys of a Stream Deck XL with their pictures, row by row](streamdeck.jpg)
 
-No plugin is needed:
+**The easy way:** press **⬇ Download Stream Deck profile** (choose Stream Deck Mobile / virtual or
+Stream Deck XL) and double-click the downloaded `MTG Stream.streamDeckProfile`. The Stream Deck
+software adds the profile **MTG Stream** with all keys set up: pictures, addresses and
+**GET request in background**. Your presets are on the last four keys; download the profile again
+after saving a new preset.
+
+![A ready-made profile to download, or one key at a time with the Website action](streamdeck-profile.jpg)
+
+Or set up a key yourself, no plugin needed:
 
 1. In the Stream Deck software, drag **Website** (under **System**) onto a key.
 2. Paste the key's address (**Copy address**), e.g. `http://localhost:8017/stream/sd/next-phase`.
