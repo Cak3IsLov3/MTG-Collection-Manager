@@ -201,8 +201,26 @@ sacrifice one, **+ / −** one more / less, **C** copy one, **D** double,
 
 ### Stream Deck
 
-Every button is a plain HTTP request, so a Stream Deck (with a plugin that can
-send web requests, e.g. "API Ninja" or "Web Requests") can trigger them:
+The **Stream Deck** page (<http://localhost:8017/stream/streamdeck>, or **Stream Deck** at the top of
+the control panel) has a ready-made layout for a Stream Deck XL (8 × 4 keys): turn, untap, attack,
+undo, the deck intro, the six mana colours, commander tax, storm, counters, dice, the turn tracker
+and your first four presets. Click a key for its address and its picture.
+
+![The Stream Deck page: 32 keys with their pictures, and the address of the chosen key](streamdeck.jpg)
+
+No plugin is needed:
+
+1. In the Stream Deck software, drag **Website** (under **System**) onto a key.
+2. Paste the key's address (**Copy address**), e.g. `http://localhost:8017/stream/sd/next-phase`.
+3. Tick **GET request in background**, so no browser window opens.
+4. **Download picture** and set it on the key (click the key picture > **Set from file**); leave the
+   title empty, the name is on the picture. **Download all pictures** gets all 32 at once.
+
+A preset has its own address: `http://localhost:8017/stream/sd/preset/<name>`. The `/stream/sd/...`
+addresses only work from your Stream Deck or this app, not from other websites.
+
+A plugin that can send other web requests (e.g. "API Ninja" or "Web Requests") can also use the
+API directly:
 
 | Button | Request |
 |---|---|
@@ -369,6 +387,9 @@ Handy for hotkeys or a Stream Deck.
 | POST   | `/stream/api/intro`             | none, or `{"name": "...", "commander": "...", "bracket": "...", "record": "..."}` | show the deck intro (of the deck in the control panel) |
 | DELETE | `/stream/api/tokens/{id}`       |                                       | remove |
 | POST   | `/stream/api/clear`             |                                       | clear everything |
+| GET    | `/stream/sd/{action}`           |                                       | Stream Deck: press a key (`next-phase`, `mana-R`, `storm`, ...; see `/stream/api/streamdeck`) |
+| GET    | `/stream/sd/preset/{name}`      |                                       | Stream Deck: load a preset |
+| GET    | `/stream/api/streamdeck`        |                                       | the Stream Deck keys in order, and your presets |
 | WS     | `/stream/ws`                    |                                       | state on connect and after every change; dice rolls, sacrifices, uses, attacks, the untap step, tallies, the spotlight and the deck intro arrive as `{"event": {...}}` |
 
 `POST /api/tokens` also accepts optional `power`, `toughness` and `keywords`

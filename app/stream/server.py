@@ -16,13 +16,14 @@ import secrets
 import tempfile
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 import uuid
 from pathlib import Path
 from typing import Any, Literal
 
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse, RedirectResponse
+from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi.responses import FileResponse, RedirectResponse, Response
 from pydantic import BaseModel, Field, field_validator
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -66,6 +67,25 @@ MAX_CASTS = 99
 MAX_STORM = 999
 TALLY_LIMITS = {"casts": MAX_CASTS, "storm": MAX_STORM}
 SPOTLIGHT_SECONDS = (2, 30)
+
+
+# Stream Deck: every action at a plain address (/stream/sd/<action>), so the Website action that
+# comes with the Stream Deck software can press it ("GET request in background"), no plugin needed.
+# In this order they fill a Stream Deck XL (8 × 4); the last four keys are your first four presets.
+STREAMDECK_ACTIONS = (
+    ("next-phase", "Next phase"), ("prev-phase", "Previous phase"), ("untap", "Untap all"),
+    ("attack-all", "Attack with all"), ("undo", "Undo"), ("intro", "Deck intro"),
+    ("spotlight-hide", "Hide spotlight"), ("new-game", "New game"),
+    ("mana-W", "White mana"), ("mana-U", "Blue mana"), ("mana-B", "Black mana"), ("mana-R", "Red mana"),
+    ("mana-G", "Green mana"), ("mana-C", "Colorless mana"), ("mana-empty", "Empty mana pool"), ("d20", "Roll a d20"),
+    ("commander", "Cast commander"), ("commander-back", "Commander cast back"), ("storm", "Spell for storm"),
+    ("storm-back", "Storm one back"), ("plus-counter", "+1/+1 counter"), ("minus-counter", "−1/−1 counter"),
+    ("coin", "Flip a coin"), ("d6", "Roll a d6"),
+    ("tracker-on", "Show turn tracker"), ("tracker-off", "Hide turn tracker"), ("2d6", "Roll 2d6"),
+    ("clear", "Clear the board"),
+)
+STREAMDECK_PRESET_KEYS = 4
+MANA_SYMBOLS = ("W", "U", "B", "R", "G", "C")
 
 
 def default_turn() -> dict:
@@ -1243,6 +1263,81 @@ def create_app(state_path: Path | str = DEFAULT_STATE_PATH) -> FastAPI:
     async def clear_tokens():
         store.clear()
         return await publish()
+
+    # ---- Stream Deck
+
+    @app.get("/streamdeck", include_in_schema=False)
+    def streamdeck_page():
+        return FileResponse(STATIC_DIR / "streamdeck.html", headers=no_cache)
+
+    @app.get("/api/streamdeck")
+    def streamdeck_actions():
+        """The Stream Deck keys in order, and the presets that can have a key of their own."""
+        return {"actions": [{"action": a, "label": label} for a, label in STREAMDECK_ACTIONS],
+                "presets": [p["name"] for p in presets.summary()], "preset_keys": STREAMDECK_PRESET_KEYS}
+
+    symbols: dict[str, bytes] = {}
+
+    @app.get("/api/symbol/{letter}.svg", include_in_schema=False)
+    def mana_symbol(letter: str):
+        """A mana symbol from Scryfall, served from here so the Stream Deck page can draw it into a key picture."""
+        if letter not in MANA_SYMBOLS:
+            raise HTTPException(404, "unknown symbol")
+        if letter not in symbols:
+            req = urllib.request.Request(f"https://svgs.scryfall.io/card-symbols/{letter}.svg",
+                                         headers={"User-Agent": USER_AGENT})
+            try:
+                with urllib.request.urlopen(req, timeout=10) as res:
+                    symbols[letter] = res.read(200_000)
+            except (urllib.error.URLError, OSError):
+                raise HTTPException(502, "Scryfall can't be reached")
+        return Response(symbols[letter], media_type="image/svg+xml", headers={"Cache-Control": "max-age=604800"})
+
+    def from_elsewhere(request: Request) -> bool:
+        """A web page on another site that tries to press a key for you (a Stream Deck sends neither header)."""
+        host = request.headers.get("host", "")
+        return any(urllib.parse.urlparse(value).netloc != host
+                   for value in (request.headers.get("origin"), request.headers.get("referer")) if value)
+
+    async def press(action: str):
+        if action in {"mana-" + m for m in MANA_SYMBOLS}:
+            return await add_counter(CounterIn(type=action[-1]))
+        if action in {"d20", "d6", "coin", "2d6"}:
+            return await roll(RollIn(kind="d6", count=2) if action == "2d6" else RollIn(kind=action))
+        simple = {
+            "next-phase": next_phase, "prev-phase": prev_phase, "untap": untap_all, "attack-all": attack_all,
+            "undo": undo, "spotlight-hide": end_spotlight, "mana-empty": empty_mana_pool, "clear": clear_tokens,
+        }
+        if action in simple:
+            return await simple[action]()
+        if action == "intro":
+            return await intro(None)
+        if action == "new-game":
+            return await set_turn(TurnPatch(on=True, number=1, phase="untap", casts=0, storm=0))
+        if action in ("tracker-on", "tracker-off"):
+            return await set_turn(TurnPatch(on=action == "tracker-on"))
+        if action in ("commander", "commander-back", "storm", "storm-back"):
+            name = "casts" if action.startswith("commander") else "storm"
+            return await tally(name, TallyIn(delta=-1 if action.endswith("-back") else 1))
+        if action in ("plus-counter", "minus-counter"):
+            return await add_counter(CounterIn(type="+1/+1" if action == "plus-counter" else "-1/-1"))
+        raise HTTPException(404, "unknown action")
+
+    @app.get("/sd/preset/{name}")
+    async def streamdeck_preset(name: str, request: Request):
+        """Stream Deck: load a preset (a plain GET, for the Website action)."""
+        if from_elsewhere(request):
+            raise HTTPException(403, "only from your own Stream Deck or this app")
+        await load_preset(name)
+        return {"ok": True, "action": f"preset/{name}"}
+
+    @app.get("/sd/{action}")
+    async def streamdeck_press(action: str, request: Request):
+        """Stream Deck: press one of the keys of STREAMDECK_ACTIONS (a plain GET, for the Website action)."""
+        if from_elsewhere(request):
+            raise HTTPException(403, "only from your own Stream Deck or this app")
+        await press(action)
+        return {"ok": True, "action": action}
 
     @app.websocket("/ws")
     async def ws_endpoint(ws: WebSocket):

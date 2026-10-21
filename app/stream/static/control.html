@@ -962,6 +962,7 @@
   </nav>
   <button id="undoBtn" type="button" title="Undo the last change (Ctrl+Z)">↶ Undo</button>
   <button id="helpBtn" class="icon" type="button" title="Keyboard shortcuts (?)">⌨</button>
+  <button id="sdBtn" type="button" title="Stream Deck: an address and a picture for every key">Stream Deck</button>
   <button id="copyUrl" class="primary" type="button">Copy overlay URL</button>
   <div id="status" class="status"><span class="dot"></span><span id="statusText">Connecting…</span></div>
   <div id="turnBox" class="turn-strip" hidden></div>
@@ -1199,7 +1200,7 @@
       <dt>?</dt><dd>This list</dd>
       <dt>Esc</dt><dd>Deselect / close</dd>
     </dl>
-    <p class="help-note">Stream Deck or other tools: see "API" in the README.</p>
+    <p class="help-note">Stream Deck: see the <a href="streamdeck">Stream Deck page</a>, with an address and a picture for every key.</p>
   </div>
 </div>
 
@@ -2488,6 +2489,8 @@
       } catch {}
     }, 250);
   });
+
+  $("sdBtn").addEventListener("click", () => { location.href = ROOT + "/streamdeck"; });
 
   fetch(ROOT + "/api/deck").then((r) => r.json()).then(renderDeck).catch(() => {});
 

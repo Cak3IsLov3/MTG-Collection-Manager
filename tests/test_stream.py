@@ -994,6 +994,68 @@ def test_deck_intro(client):
     assert event == {"type": "intro", **intro, "image_url": None}  # only Scryfall pictures
 
 
+# --- Stream Deck -----------------------------------------------------------------------------------
+
+
+def test_streamdeck_keys_fill_an_xl(client):
+    data = client.get("/api/streamdeck").json()
+    assert len(data["actions"]) + data["preset_keys"] == 32 and data["presets"] == []
+    page = client.get("/streamdeck")
+    assert page.status_code == 200 and "Stream Deck" in page.text
+    # Every key works.
+    for key in data["actions"]:
+        if key["action"] in ("undo", "intro"):
+            continue
+        assert client.get(f"/sd/{key['action']}").status_code == 200, key
+
+
+def test_streamdeck_keys_do_their_thing(client):
+    client.get("/sd/mana-R")
+    client.get("/sd/mana-R")
+    client.get("/sd/plus-counter")
+    names = sorted((t["name"], t["count"]) for t in tokens(client))
+    assert names == [("+1/+1", 1), ("R", 2)]
+    client.get("/sd/commander")
+    client.get("/sd/commander")
+    client.get("/sd/commander-back")
+    client.get("/sd/storm")
+    assert turn(client)["casts"] == 1 and turn(client)["storm"] == 1
+    client.get("/sd/tracker-on")
+    client.get("/sd/next-phase")
+    assert turn(client)["on"] and turn(client)["phase"] == "upkeep"
+    client.get("/sd/new-game")
+    assert turn(client) == {"on": True, "number": 1, "phase": "untap", "casts": 0, "storm": 0}
+    assert client.get("/sd/undo").status_code == 200
+    assert turn(client)["phase"] == "upkeep"
+    client.get("/sd/clear")
+    assert tokens(client) == []
+    assert client.get("/sd/launch-missiles").status_code == 404
+    assert client.get("/sd/intro").status_code == 404  # no deck yet
+
+
+def test_streamdeck_presets(client):
+    client.post("/api/tokens", json=token())
+    client.post("/api/presets", json={"name": "Krenko Goblins"})
+    client.post("/api/clear")
+    assert client.get("/api/streamdeck").json()["presets"] == ["Krenko Goblins"]
+    assert client.get("/sd/preset/Krenko%20Goblins").status_code == 200
+    assert [t["name"] for t in tokens(client)] == ["Treasure"]
+    assert client.get("/sd/preset/Nope").status_code == 404
+
+
+def test_streamdeck_keys_not_from_other_sites(client):
+    assert client.get("/sd/mana-G", headers={"Referer": "https://evil.example/page"}).status_code == 403
+    assert client.get("/sd/mana-G", headers={"Origin": "https://evil.example"}).status_code == 403
+    assert client.get("/sd/preset/x", headers={"Referer": "https://evil.example/"}).status_code == 403
+    assert tokens(client) == []
+    # This app's own page (the "Try it" button) may.
+    assert client.get("/sd/mana-G", headers={"Referer": "http://testserver/streamdeck"}).status_code == 200
+
+
+def test_mana_symbol_proxy_only_knows_mana(client):
+    assert client.get("/api/symbol/X.svg").status_code == 404
+
+
 # --- part of the MTG Collection Manager -----------------------------------------------------------
 
 

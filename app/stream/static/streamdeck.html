@@ -1,0 +1,367 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Stream Deck</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0e0f13;
+    --panel: #16181e;
+    --panel-2: #1d2027;
+    --panel-3: #252932;
+    --line: #2b2f39;
+    --line-2: #383d49;
+    --text: #eceef3;
+    --muted: #9599a8;
+    --accent: #e7b343;
+    --accent-2: #f3cc6e;
+    --radius: 14px;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 "Inter", "Segoe UI", system-ui, sans-serif; }
+  a { color: var(--accent-2); }
+  .app-nav { display: flex; align-items: center; gap: 4px; padding: 8px 20px; overflow-x: auto; white-space: nowrap;
+    background: var(--panel); border-bottom: 1px solid var(--line); font-size: 14px; }
+  .app-nav[hidden] { display: none; }
+  .app-nav .app-brand { color: var(--accent); font-weight: 700; margin-right: 14px; text-decoration: none; }
+  .app-nav a { color: var(--muted); text-decoration: none; padding: 4px 10px; border-radius: 6px; }
+  .app-nav a:hover { color: var(--text); }
+  .app-nav a.active { color: var(--text); background: var(--panel-3); }
+  main { max-width: 1120px; margin: 0 auto; padding: 22px 20px 60px; display: grid; gap: 18px; }
+  h1 { margin: 0; font-size: 24px; letter-spacing: -.01em; }
+  h1 span { color: var(--muted); font-weight: 600; }
+  h2 { margin: 0 0 10px; font-size: 13px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px 20px; }
+  .steps { margin: 0; padding-left: 20px; display: grid; gap: 4px; }
+  .steps b { color: var(--accent-2); }
+  .muted { color: var(--muted); }
+  button {
+    font: inherit; font-size: 14px; font-weight: 600; color: var(--text); cursor: pointer;
+    padding: 7px 13px; border-radius: 9px; border: 1px solid var(--line-2); background: var(--panel-3);
+  }
+  button:hover { border-color: var(--accent); }
+  button.primary { color: #1a1406; border-color: transparent; background: linear-gradient(180deg, #f8d988, #e7b343); }
+  .head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .head .spacer { flex: 1; }
+
+  /* The Stream Deck XL: 8 × 4 keys */
+  .deck {
+    display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 12px;
+    padding: 18px; border-radius: 22px; background: #08090c; border: 1px solid var(--line);
+    box-shadow: 0 0 0 6px #121318, 0 18px 40px rgba(0, 0, 0, .5);
+  }
+  .key {
+    padding: 0; border: 0; background: none; border-radius: 16px; aspect-ratio: 1; cursor: pointer;
+    transition: transform .12s, box-shadow .12s;
+  }
+  .key canvas { width: 100%; height: 100%; display: block; border-radius: 16px; }
+  .key:hover { transform: translateY(-2px); }
+  .key.on { box-shadow: 0 0 0 3px var(--accent), 0 0 22px rgba(231, 179, 67, .45); }
+  @media (max-width: 760px) { .deck { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+
+  .detail { display: grid; grid-template-columns: 96px 1fr; gap: 16px; align-items: center; }
+  .detail[hidden] { display: none; }
+  .detail canvas { width: 96px; height: 96px; border-radius: 14px; }
+  .detail h3 { margin: 0 0 6px; font-size: 18px; }
+  .url { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .url code {
+    flex: 1; min-width: 240px; padding: 7px 10px; border-radius: 9px; background: #0b0c10; border: 1px solid var(--line-2);
+    font-size: 13px; overflow-x: auto; white-space: nowrap;
+  }
+  .presets { display: grid; gap: 8px; }
+  .presets .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .presets .row b { min-width: 140px; }
+  #toast {
+    position: fixed; left: 50%; bottom: 24px; transform: translate(-50%, 20px); opacity: 0; pointer-events: none;
+    padding: 10px 16px; border-radius: 10px; background: #23262e; border: 1px solid var(--line-2);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, .5); transition: opacity .2s, transform .2s; font-weight: 600;
+  }
+  #toast.show { opacity: 1; transform: translate(-50%, 0); }
+  #toast.error { border-color: #e0434b; }
+</style>
+</head>
+<body>
+<nav id="appNav" class="app-nav" aria-label="MTG Collection Manager" hidden>
+  <a class="app-brand" href="/">MTG Collection Manager</a>
+  <a href="/">Dashboard</a>
+  <a href="/collection">Collection</a>
+  <a href="/wishlist">Wishlist</a>
+  <a href="/deck">Decks</a>
+  <a href="/games">Games</a>
+  <a href="/table">Table</a>
+  <a class="active" href="/stream/control">Stream</a>
+</nav>
+<main>
+  <div class="head">
+    <h1>Stream Deck <span>· 32 keys, ready to use</span></h1>
+    <span class="spacer"></span>
+    <a id="backLink" href="control">← Control panel</a>
+  </div>
+
+  <section class="panel">
+    <h2>Setting up a key (no plugin needed)</h2>
+    <ol class="steps">
+      <li>In the Stream Deck software, drag <b>Website</b> (under <b>System</b>) onto a key.</li>
+      <li>Click a key below and press <b>Copy address</b>; paste it into <b>URL</b>.</li>
+      <li>Tick <b>GET request in background</b>, so no browser window opens.</li>
+      <li>Press <b>Download picture</b>, then click the key's picture in the Stream Deck software &gt; <b>Set from file</b>. Leave the title empty: the name is on the picture.</li>
+    </ol>
+    <p class="muted">The app has to be running. The keys only work from your Stream Deck or this computer, not from other websites.</p>
+  </section>
+
+  <section class="panel">
+    <div class="head" style="margin-bottom: 14px">
+      <h2 style="margin: 0">Your Stream Deck XL</h2>
+      <span class="spacer"></span>
+      <button id="downloadAll" type="button" title="All 32 pictures as PNG files (your browser may ask to allow several downloads)">Download all pictures</button>
+    </div>
+    <div id="deck" class="deck"></div>
+  </section>
+
+  <section id="detail" class="panel detail" hidden>
+    <canvas id="detailIcon" width="144" height="144"></canvas>
+    <div>
+      <h3 id="detailTitle"></h3>
+      <div class="url">
+        <code id="detailUrl"></code>
+        <button id="copyUrl" class="primary" type="button">Copy address</button>
+        <button id="tryKey" type="button" title="Press it now, as the Stream Deck would">Try it</button>
+        <button id="downloadKey" type="button">Download picture</button>
+      </div>
+      <p id="detailNote" class="muted" style="margin: 8px 0 0"></p>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>Presets</h2>
+    <p class="muted" style="margin-top: 0">The last four keys load your first four presets. Every preset has its own address too:</p>
+    <div id="presets" class="presets"></div>
+  </section>
+</main>
+<div id="toast"></div>
+
+<script>
+  // The app can live under a path (/stream); every address starts from there.
+  const ROOT = location.pathname.replace(/\/streamdeck\/?$/, "");
+  if (ROOT) document.getElementById("appNav").hidden = false;
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const SIZE = 144;  // Stream Deck XL key pictures are 144 × 144
+
+  // How each key looks: a symbol (or a mana symbol), a colour and a short name.
+  const LOOK = {
+    "next-phase": { glyph: "▶", color: "#f3cc6e", label: "Next phase" },
+    "prev-phase": { glyph: "◀", color: "#c3c7d1", label: "Prev phase" },
+    "untap": { glyph: "⟳", color: "#f3cc6e", label: "Untap all" },
+    "attack-all": { glyph: "⚔", color: "#ff7b6b", label: "Attack all", ring: "#e0434b" },
+    "undo": { glyph: "↶", color: "#c3c7d1", label: "Undo" },
+    "intro": { glyph: "★", color: "#f3cc6e", label: "Deck intro" },
+    "spotlight-hide": { glyph: "✕", color: "#c3c7d1", label: "Hide card" },
+    "new-game": { glyph: "⟲", color: "#9be8aa", label: "New game", ring: "#3fb950" },
+    "mana-W": { mana: "W", label: "White" }, "mana-U": { mana: "U", label: "Blue" },
+    "mana-B": { mana: "B", label: "Black" }, "mana-R": { mana: "R", label: "Red" },
+    "mana-G": { mana: "G", label: "Green" }, "mana-C": { mana: "C", label: "Colorless" },
+    "mana-empty": { glyph: "∅", color: "#c3c7d1", label: "Empty pool" },
+    "d20": { glyph: "d20", color: "#9fd0ff", label: "Roll d20", small: true },
+    "commander": { glyph: "♛", color: "#f3cc6e", label: "Commander", ring: "#e7b343" },
+    "commander-back": { glyph: "♛−", color: "#a58a4a", label: "Cmdr −1", small: true },
+    "storm": { glyph: "⚡", color: "#9fd0ff", label: "Storm +1", ring: "#3b74d6" },
+    "storm-back": { glyph: "⚡−", color: "#6d8fb8", label: "Storm −1", small: true },
+    "plus-counter": { glyph: "+1/+1", color: "#7be08f", label: "Counter", small: true, ring: "#23944a" },
+    "minus-counter": { glyph: "−1/−1", color: "#d39af0", label: "Counter", small: true, ring: "#8a2bb4" },
+    "coin": { glyph: "◐", color: "#f3cc6e", label: "Flip coin" },
+    "d6": { glyph: "d6", color: "#9fd0ff", label: "Roll d6", small: true },
+    "tracker-on": { glyph: "⏱", color: "#f3cc6e", label: "Tracker on" },
+    "tracker-off": { glyph: "⏱", color: "#6b7080", label: "Tracker off" },
+    "2d6": { glyph: "2d6", color: "#9fd0ff", label: "Roll 2d6", small: true },
+    "clear": { glyph: "🗑", color: "#ff7b6b", label: "Clear board", ring: "#e0434b" },
+  };
+
+  const symbols = {};
+  function symbol(letter) {
+    symbols[letter] ||= new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = () => resolve(null);
+      img.src = `${ROOT}/api/symbol/${letter}.svg`;  // from this server, so the canvas may be saved
+    });
+    return symbols[letter];
+  }
+
+  function roundRect(ctx, x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
+
+  function fitText(ctx, text, weight, size, maxWidth) {
+    do { ctx.font = `${weight} ${size}px Inter, "Segoe UI", "Segoe UI Symbol", sans-serif`; size -= 1; }
+    while (ctx.measureText(text).width > maxWidth && size > 9);
+  }
+
+  async function draw(canvas, look) {
+    const ctx = canvas.getContext("2d");
+    ctx.clearRect(0, 0, SIZE, SIZE);
+    const bg = ctx.createLinearGradient(0, 0, 0, SIZE);
+    bg.addColorStop(0, "#22252e");
+    bg.addColorStop(1, "#0e0f13");
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, SIZE, SIZE);
+    roundRect(ctx, 5, 5, SIZE - 10, SIZE - 10, 18);
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = look.ring || "rgba(231, 179, 67, .45)";
+    ctx.stroke();
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    if (look.mana) {
+      const img = await symbol(look.mana);
+      if (img) {
+        ctx.save();
+        ctx.shadowColor = "rgba(0, 0, 0, .6)";
+        ctx.shadowBlur = 10;
+        ctx.drawImage(img, 34, 16, 76, 76);
+        ctx.restore();
+      } else {
+        ctx.fillStyle = "#e8e6e1";
+        fitText(ctx, look.mana, 800, 56, 110);
+        ctx.fillText(look.mana, SIZE / 2, 56);
+      }
+    } else {
+      ctx.fillStyle = look.color || "#eceef3";
+      ctx.shadowColor = look.color || "transparent";
+      ctx.shadowBlur = 14;
+      fitText(ctx, look.glyph, 800, look.small ? 44 : 64, 116);
+      ctx.fillText(look.glyph, SIZE / 2, 58);
+      ctx.shadowBlur = 0;
+    }
+    ctx.fillStyle = "#eceef3";
+    fitText(ctx, look.label, 700, 20, 122);
+    ctx.fillText(look.label, SIZE / 2, 118);
+  }
+
+  let toastTimer;
+  function toast(text, isError = false) {
+    const t = $("toast");
+    t.textContent = text;
+    t.classList.toggle("error", isError);
+    t.classList.add("show");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => t.classList.remove("show"), 2200);
+  }
+
+  const fullUrl = (path) => `${location.origin}${ROOT}/sd/${path}`;
+  const fileName = (key) => `mtg-${key.path.replace(/[^a-z0-9-]+/gi, "-").toLowerCase()}.png`;
+
+  async function download(key) {
+    const canvas = document.createElement("canvas");
+    canvas.width = canvas.height = SIZE;
+    await draw(canvas, key.look);
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
+    const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: fileName(key) });
+    document.body.append(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  }
+
+  let keys = [];
+  let chosen = null;
+
+  function choose(key, button) {
+    chosen = key;
+    for (const b of document.querySelectorAll(".key")) b.classList.toggle("on", b === button);
+    $("detail").hidden = false;
+    $("detailTitle").textContent = key.title;
+    $("detailUrl").textContent = key.path ? fullUrl(key.path) : "Save a preset first (Add tokens > Deck presets)";
+    $("detailNote").textContent = key.note || "";
+    for (const id of ["copyUrl", "tryKey"]) $(id).disabled = !key.path;
+    draw($("detailIcon"), key.look);
+  }
+
+  $("copyUrl").addEventListener("click", async () => {
+    if (!chosen?.path) return;
+    try {
+      await navigator.clipboard.writeText(fullUrl(chosen.path));
+      toast("Address copied: paste it into the Website action");
+    } catch {
+      toast("Could not copy; select the address and copy it yourself", true);
+    }
+  });
+  $("tryKey").addEventListener("click", async () => {
+    if (!chosen?.path) return;
+    try {
+      const res = await fetch(`${ROOT}/sd/${chosen.path}`);
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) toast(`${chosen.title}: done`);
+      else toast(typeof data.detail === "string" ? data.detail : `Error ${res.status}`, true);
+    } catch {
+      toast("Server unreachable", true);
+    }
+  });
+  $("downloadKey").addEventListener("click", () => chosen && download(chosen));
+  $("downloadAll").addEventListener("click", async () => {
+    for (const key of keys) {
+      await download(key);
+      await new Promise((r) => setTimeout(r, 250));
+    }
+    toast(`${keys.length} pictures downloaded`);
+  });
+
+  async function load() {
+    const res = await fetch(`${ROOT}/api/streamdeck`);
+    const data = await res.json();
+    keys = data.actions.map((a) => ({ path: a.action, title: a.label, look: LOOK[a.action] || { glyph: "?", label: a.label } }));
+    for (let i = 0; i < data.preset_keys; i += 1) {
+      const name = data.presets[i];
+      keys.push({
+        path: name ? `preset/${encodeURIComponent(name)}` : null,
+        title: name ? `Load preset "${name}"` : `Preset ${i + 1}`,
+        note: name ? "Replaces the board with this preset (you can undo it)." : "",
+        look: { glyph: "▣", color: name ? "#f3cc6e" : "#4a4f5c", label: name || `Preset ${i + 1}` },
+      });
+    }
+    $("deck").replaceChildren(...keys.map((key) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "key";
+      button.title = key.title;
+      const canvas = document.createElement("canvas");
+      canvas.width = canvas.height = SIZE;
+      button.append(canvas);
+      draw(canvas, key.look);
+      button.addEventListener("click", () => choose(key, button));
+      return button;
+    }));
+    $("presets").replaceChildren(...(data.presets.length ? data.presets.map((name) => {
+      const row = document.createElement("div");
+      row.className = "row";
+      const copy = document.createElement("button");
+      copy.type = "button";
+      copy.textContent = "Copy address";
+      copy.addEventListener("click", async () => {
+        try { await navigator.clipboard.writeText(fullUrl(`preset/${encodeURIComponent(name)}`)); toast("Address copied"); }
+        catch { toast("Could not copy", true); }
+      });
+      const code = document.createElement("code");
+      code.textContent = fullUrl(`preset/${encodeURIComponent(name)}`);
+      const label = document.createElement("b");
+      label.textContent = name;
+      row.append(label, code, copy);
+      return row;
+    }) : [Object.assign(document.createElement("p"), { className: "muted", textContent: "No presets yet: save one under Add tokens > Deck presets." })]));
+  }
+
+  // Fonts first, so the names on the pictures use Inter.
+  (document.fonts ? document.fonts.load("700 20px Inter") : Promise.resolve()).finally(load);
+})();
+</script>
+</body>
+</html>
