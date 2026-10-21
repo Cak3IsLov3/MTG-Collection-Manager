@@ -47,6 +47,8 @@ async def update_collection_prices(session: Session, scryfall: ScryfallClient) -
         record_scryfall_price(session, card.id, data)
         if data.colors is not None:
             card.colors = data.colors
+        if data.identity is not None:
+            card.identity = data.identity
         if data.rarity:
             card.rarity = data.rarity
         updated += 1
@@ -230,8 +232,9 @@ async def run_weekly_summary() -> None:
 
 async def fill_missing_colors(session: Session, scryfall: ScryfallClient) -> int:
     """Fetch the colours of cards that were stored before colours were kept. Returns how many were filled in."""
-    # Also the rarity, which is kept since later still.
-    cards = list(session.exec(select(Card).where((Card.colors == None) | (Card.rarity == None))))  # noqa: E711
+    # Also the rarity and the colour identity, which are kept since later still.
+    cards = list(session.exec(select(Card).where(
+        (Card.colors == None) | (Card.rarity == None) | (Card.identity == None))))  # noqa: E711
     if not cards:
         return 0
     found, _ = await scryfall.get_collection([{"id": card.scryfall_id} for card in cards])
@@ -241,10 +244,13 @@ async def fill_missing_colors(session: Session, scryfall: ScryfallClient) -> int
         data = by_id.get(card.scryfall_id)
         if data is None:
             card.rarity = card.rarity or ""  # not looked up again
+            card.colors = card.colors if card.colors is not None else ""
+            card.identity = card.identity if card.identity is not None else ""
             session.add(card)
             continue
         if data.colors is not None:
             card.colors = data.colors
+        card.identity = data.identity if data.identity is not None else (card.identity or "")
         card.rarity = data.rarity or ""
         session.add(card)
         filled += 1

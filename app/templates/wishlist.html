@@ -73,7 +73,7 @@
     {% for row in rows %}
     <tr data-name="{{ row.card.name }}" data-current="{{ row.current_price if row.current_price is not none else '' }}"
         data-target="{{ row.entry.target_price }}" data-difference="{{ row.difference if row.difference is not none else '' }}"
-        data-colors="{{ '?' if row.card.colors is none else row.card.colors }}">
+        data-colors="{{ '?' if row.card.colors is none else row.card.colors }}" data-identity="{{ '?' if row.card.identity is none else row.card.identity }}">
       <td>{% if row.card.image_url %}<img class="thumb" src="{{ row.card.image_url }}" alt="" loading="lazy">{% endif %}</td>
       <td>
         <a href="/cards/{{ row.card.id }}">{{ row.card.name }}</a> {{ pips(row.card.colors) }}
@@ -237,7 +237,7 @@
     function filterWishlist() {
       let shown = 0;
       for (const row of wishlistRows) {
-        row.hidden = !colours.matches(row.dataset.colors);
+        row.hidden = !colours.matches(row.dataset.colors, row.dataset.identity);
         if (!row.hidden) shown += 1;
       }
       document.getElementById("wishlist-count").textContent =

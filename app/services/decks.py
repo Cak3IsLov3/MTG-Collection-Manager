@@ -981,9 +981,9 @@ async def fill_deck_colors(session: Session, scryfall: ScryfallClient) -> int:
         return 0
     entries = session.exec(select(DeckEntry).where(DeckEntry.deck_id.in_([deck.id for deck in pending]))).all()
     known: dict[str, str] = {}
-    for card in session.exec(select(Card).where(Card.colors != None)).all():  # noqa: E711
+    for card in session.exec(select(Card).where(Card.identity != None)).all():  # noqa: E711
         for key in _names(card.name):
-            known.setdefault(key, card.colors)
+            known.setdefault(key, card.identity)
     lookups: dict[str, dict] = {}
     for entry in entries:
         if not _names(entry.name) & known.keys():
@@ -991,9 +991,9 @@ async def fill_deck_colors(session: Session, scryfall: ScryfallClient) -> int:
     if lookups:
         found, _ = await scryfall.get_collection(list(lookups.values()))
         for data in found:
-            if data.colors is not None:
+            if data.identity is not None:
                 for key in _names(data.name):
-                    known.setdefault(key, data.colors)
+                    known.setdefault(key, data.identity)
     for deck in pending:
         colors = set()
         for entry in entries:

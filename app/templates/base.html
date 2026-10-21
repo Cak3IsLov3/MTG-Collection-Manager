@@ -111,7 +111,8 @@
   </script>
   <script>
     // The colour filter of _colour_filter.html: pressed buttons and a match mode, remembered under
-    // `storageKey`. matches(text) takes colour letters in WUBRG order ("" colourless, "?" unknown).
+    // `storageKey`. matches(text, identity) takes colour letters in WUBRG order ("" colourless, "?" unknown);
+    // "within" (fits in a deck of these colours) uses the colour identity when there is one.
     function colourFilter(prefix, storageKey, defaultMode, onChange) {
       const buttons = [...document.querySelectorAll(`#${prefix}-colors button`)];
       const mode = document.getElementById(`${prefix}-color-mode`);
@@ -144,9 +145,10 @@
 
       return {
         active: () => chosen().length > 0,
-        matches(text) {
+        matches(text, identity) {
           const picked = chosen();
           if (picked.length === 0) return true;
+          if (mode.value === "within" && identity !== undefined && identity !== "?") text = identity;
           if (text === "?") return false;  // colours not fetched yet
           const colors = new Set(text);
           const want = picked.filter((c) => c !== "C");

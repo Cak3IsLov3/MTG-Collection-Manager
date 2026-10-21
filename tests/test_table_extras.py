@@ -162,3 +162,20 @@ def test_commander_picture_follows_the_printing(client):
     client.put(f"/api/decks/{deck['id']}/commander", json={"commander": "Sol Ring"})
     page = client.get(f"/decks/{deck['id']}").text
     assert 'class="commander-art" src="https://img.example/id-sol-cmm-art.jpg"' in page
+
+
+def test_colourless_cards_are_colourless_but_keep_their_identity(session):
+    from app.scryfall import ScryfallCard
+    from app.services.collection import color_match
+
+    signet = ScryfallCard.from_json({"id": "id-signet", "name": "Azorius Signet", "set": "c21", "set_name": "C21",
+                                     "collector_number": "1", "prices": {}, "colors": [], "color_identity": ["U", "W"]})
+    assert (signet.colors, signet.identity) == ("", "WU")
+    # A double-faced card: the colours of both faces.
+    dfc = ScryfallCard.from_json({"id": "id-dfc", "name": "Bala Ged Recovery // Bala Ged Sanctuary", "set": "znr",
+                                  "set_name": "ZNR", "collector_number": "1", "prices": {}, "color_identity": ["G"],
+                                  "card_faces": [{"colors": ["G"]}, {"colors": []}]})
+    assert (dfc.colors, dfc.identity) == ("G", "G")
+    # Shown and filtered as colourless; "fits within" still goes by the identity.
+    assert color_match("", "C", "any", "WU") and not color_match("", "W", "any", "WU")
+    assert color_match("", "WU", "within", "WU") and not color_match("", "R", "within", "WU")

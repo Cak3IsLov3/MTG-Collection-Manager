@@ -217,7 +217,7 @@ def list_wishlist(
     them, the cards that fit `within` them, or the cards with `exact`ly them."""
     rows = wishlist.wishlist_rows(session)
     if colors:
-        rows = [row for row in rows if collection.color_match(row.card.colors, colors, color_match)]
+        rows = [row for row in rows if collection.color_match(row.card.colors, colors, color_match, row.card.identity)]
     return WishlistOut(
         total_cost=wishlist.wishlist_cost(rows),
         items=[WishlistItemOut.from_row(row) for row in rows],

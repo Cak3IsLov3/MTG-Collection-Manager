@@ -82,7 +82,8 @@ def _candidates(session: Session, deck: Deck) -> dict[str, Suggestion]:
         free = row.entry.quantity - used.get(row.entry.id, 0)
         if free <= 0 or card.name.casefold() in BASIC_LANDS or _names(card.name) & in_deck:
             continue
-        if not _fits(card.colors, deck.colors or "") or (card.type_line or "").startswith("Token"):
+        identity = card.identity if card.identity is not None else card.colors
+        if not _fits(identity, deck.colors or "") or (card.type_line or "").startswith("Token"):
             continue
         current = found.get(card.name)
         if current is None:

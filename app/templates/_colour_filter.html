@@ -22,4 +22,4 @@
 {% endmacro %}
 
 {# The colour identity of a card or deck as small pips; nothing when it is not known yet. #}
-{% macro pips(colors) %}{% if colors is not none %}<span class="pips" title="Colour identity">{% for letter in colors or "C" %}<span class="pip pip-{{ letter }}">{{ mana(letter) }}</span>{% endfor %}</span>{% endif %}{% endmacro %}
+{% macro pips(colors) %}{% if colors is not none %}<span class="pips" title="Colours">{% for letter in colors or "C" %}<span class="pip pip-{{ letter }}">{{ mana(letter) }}</span>{% endfor %}</span>{% endif %}{% endmacro %}

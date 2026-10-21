@@ -17,8 +17,10 @@ class Card(SQLModel, table=True):
     scryfall_id: str = Field(unique=True, index=True)
     collector_number: str | None = None
     image_url: str | None = None
-    # Colour identity as letters in WUBRG order; "" is colourless, None not fetched yet.
+    # The colours of the card itself as letters in WUBRG order; "" is colourless, None not fetched yet.
     colors: str | None = None
+    # Colour identity (also the mana symbols in its rules text), for Commander: does it fit a deck.
+    identity: str | None = None
     rarity: str | None = None  # "common" .. "mythic"; None: not looked up yet
     # For the deck suggestions: type line, mana value and what the card does ("ramp,draw"),
     # from Scryfall; type_line None: not looked up yet.
@@ -194,7 +196,7 @@ class DeckEntry(SQLModel, table=True):
     # The tokens the card makes, as JSON: [{"id": Scryfall id, "name": "Treasure", "count": 3}], count
     # being about how many you need of it for this card; None: not looked up yet.
     token_parts: str | None = None
-    # Colour identity of the card, letters in WUBRG order ("" colourless); None: not looked up yet.
+    # The colours of the card itself, letters in WUBRG order ("" colourless); None: not looked up yet.
     colors: str | None = None
     image_url: str | None = None
 

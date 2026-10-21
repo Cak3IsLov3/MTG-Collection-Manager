@@ -26,7 +26,7 @@ def add_missing_columns(target=None) -> None:
     if target.dialect.name != "sqlite":
         return
     added = {
-        "card": {"colors": "VARCHAR", "rarity": "VARCHAR", "type_line": "VARCHAR", "cmc": "FLOAT", "roles": "VARCHAR"},
+        "card": {"colors": "VARCHAR", "identity": "VARCHAR", "rarity": "VARCHAR", "type_line": "VARCHAR", "cmc": "FLOAT", "roles": "VARCHAR"},
         # Before this column existed only an import could tell, so existing cards count as imported.
         "collectionentry": {"imported": "BOOLEAN NOT NULL DEFAULT 1", "unsorted": "INTEGER NOT NULL DEFAULT 0",
                             "purchase_price": "FLOAT"},
@@ -76,6 +76,15 @@ def run_data_migrations(target=None) -> None:
             if "deck" in tables:
                 connection.exec_driver_sql("UPDATE deck SET commander_image = NULL WHERE commander IS NOT NULL AND commander != ''")
             connection.exec_driver_sql("PRAGMA user_version = 2")
+            version = 2
+        if version < 3:
+            # Colourless cards (Signets, lands) were shown in the colours of their identity: look the
+            # colours of every card up again, now kept apart from the identity.
+            for table in ("card", "deckentry"):
+                columns = {row[1] for row in connection.exec_driver_sql(f"PRAGMA table_info({table})")} if table in tables else set()
+                if "colors" in columns:
+                    connection.exec_driver_sql(f"UPDATE {table} SET colors = NULL")
+            connection.exec_driver_sql("PRAGMA user_version = 3")
 
 
 def init_db() -> None:

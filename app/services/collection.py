@@ -203,12 +203,15 @@ def _fold(text: str) -> str:
 COLOR_MATCHES = ("any", "within", "exact")
 
 
-def color_match(colors: str | None, wanted: str, mode: str = "any") -> bool:
-    """Does a card with colour identity `colors` match the chosen colours (letters from WUBRG, C = colourless)?
+def color_match(colors: str | None, wanted: str, mode: str = "any", identity: str | None = None) -> bool:
+    """Does a card with colours `colors` match the chosen colours (letters from WUBRG, C = colourless)?
 
     any: the card has one of the colours (a colourless card only when C is chosen);
-    within: the card fits in a deck of these colours, so colourless cards always do;
+    within: the card fits in a deck of these colours, by its colour identity when given (an Azorius
+    Signet is colourless, but only fits a deck with white and blue), so colourless cards always do;
     exact: the card has exactly these colours."""
+    if mode == "within" and identity is not None:
+        colors = identity
     if colors is None:  # colours not fetched yet
         return False
     have = set(colors)
@@ -224,7 +227,7 @@ def color_match(colors: str | None, wanted: str, mode: str = "any") -> bool:
 def filter_colors(rows: list[CollectionRow], wanted: str | None, mode: str = "any") -> list[CollectionRow]:
     if not wanted:
         return rows
-    return [row for row in rows if color_match(row.card.colors, wanted, mode)]
+    return [row for row in rows if color_match(row.card.colors, wanted, mode, row.card.identity)]
 
 
 def search_rows(rows: list[CollectionRow], query: str | None) -> list[CollectionRow]:

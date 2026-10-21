@@ -79,8 +79,10 @@ class ScryfallCard:
     # Filled in when this printing has no price and the price of another printing is used instead.
     eur_from_set: str | None = None
     eur_foil_from_set: str | None = None
-    # Colour identity as letters in WUBRG order; "" is colourless.
+    # The colours of the card itself as letters in WUBRG order; "" is colourless (a Signet, a land).
     colors: str | None = None
+    # Colour identity: also the mana symbols in its rules text (Azorius Signet: "WU"). For Commander.
+    identity: str | None = None
     type_line: str = ""  # e.g. "Legendary Creature — Robot"
     cmc: float | None = None  # mana value
     oracle_text: str = ""  # rules text; of both faces for a double-faced card
@@ -97,6 +99,9 @@ class ScryfallCard:
         )
         prices = data.get("prices") or {}
         identity = data.get("color_identity")
+        # A double-faced card has its colours per face.
+        faces = [f.get("colors") for f in data.get("card_faces") or [] if f.get("colors") is not None]
+        colors = data.get("colors") if data.get("colors") is not None else (sum(faces, []) if faces else identity)
         return cls(
             scryfall_id=data["id"],
             name=data["name"],
@@ -107,7 +112,8 @@ class ScryfallCard:
             price_eur=_to_float(prices.get("eur")),
             price_eur_foil=_to_float(prices.get("eur_foil")),
             cardmarket_url=(data.get("purchase_uris") or {}).get("cardmarket"),
-            colors=None if identity is None else "".join(c for c in "WUBRG" if c in identity),
+            colors=None if colors is None else "".join(c for c in "WUBRG" if c in colors),
+            identity=None if identity is None else "".join(c for c in "WUBRG" if c in identity),
             rarity=data.get("rarity") or "",
             type_line=data.get("type_line") or "",
             cmc=data.get("cmc"),
