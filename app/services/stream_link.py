@@ -1,14 +1,15 @@
 """From a saved deck to the stream overlay: the tokens it makes, ready to put on the board."""
 
 import asyncio
+import datetime as dt
 
 from sqlmodel import Session, select
 
-from app.models import Card, Deck, DeckEntry
+from app.models import Card, Deck, DeckEntry, Game, utcnow
 from app.scryfall import name_key
 from app.services.deck_insights import token_suggestions
 from app.services.decks import BRACKETS, deck_tokens
-from app.services.games import deck_plays
+from app.services.games import deck_plays, log_game, tonight
 from app.stream import server
 
 
@@ -37,6 +38,29 @@ def deck_intro(session: Session, deck: Deck) -> dict:
         "bracket": f"Bracket {deck.bracket} · {BRACKETS[deck.bracket]}" if deck.bracket in BRACKETS else None,
         "record": record,
     }
+
+
+RESULT_REPEAT = dt.timedelta(minutes=2)
+
+
+def record_result(result: str, deck: dict) -> dict:
+    """The stream says the game is over: log it for the saved deck in the control panel, on tonight's
+    date. Pressed again within two minutes (a double press), it is not logged twice."""
+    from app.database import engine
+
+    if deck.get("source") != "collection" or not deck.get("deck_id"):
+        return {"logged": False, "note": "Pick one of your saved decks to log the game too"}
+    with Session(engine) as session:
+        saved = session.get(Deck, deck["deck_id"])
+        if saved is None:
+            return {"logged": False, "note": "That deck is no longer saved"}
+        last = session.exec(select(Game).where(Game.deck_id == saved.id).order_by(Game.created_at.desc())).first()
+        created = last.created_at.replace(tzinfo=dt.UTC) if last and last.created_at.tzinfo is None else (last.created_at if last else None)
+        if created and utcnow() - created < RESULT_REPEAT and last.played_on >= tonight():
+            return {"logged": False, "record": deck_intro(session, saved)["record"], "note": "Already logged a moment ago"}
+        log_game(session, saved, result, played_on=tonight())
+        session.commit()
+        return {"logged": True, "record": deck_intro(session, saved)["record"]}
 
 
 def spotlight_cards(session: Session, entries: list[DeckEntry]) -> list[dict]:

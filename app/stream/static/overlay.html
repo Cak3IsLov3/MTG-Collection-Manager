@@ -532,6 +532,32 @@
   .intro .fact.bracket { border-color: rgba(231, 179, 67, .7); color: #f3cc6e; }
   .intro .fact.record { border-color: rgba(123, 224, 143, .6); color: #9be8aa; }
 
+  /* ---- the end of the game: Victory!, GG or Draw over the whole screen */
+  .result-screen {
+    position: fixed; inset: 0; z-index: 40; pointer-events: none;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1.6vh;
+    background: radial-gradient(ellipse at center, rgba(0, 0, 0, .25) 0%, rgba(0, 0, 0, .7) 75%);
+  }
+  .result-screen.win { background: radial-gradient(ellipse at center, rgba(231, 179, 67, .22) 0%, rgba(0, 0, 0, .65) 70%); }
+  .result-screen .big {
+    font-family: "Cinzel", Georgia, serif; font-weight: 700; line-height: 1; letter-spacing: .06em;
+    font-size: 17vh; text-transform: uppercase;
+  }
+  .result-screen.win .big {
+    background: linear-gradient(180deg, #fff3c4 0%, #f3cc6e 45%, #c98d1e 100%);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+    filter: drop-shadow(0 0 3vh rgba(231, 179, 67, .7)) drop-shadow(0 .6vh 1.2vh rgba(0, 0, 0, .8));
+  }
+  .result-screen.loss .big { color: #d9dbe2; text-shadow: 0 0 3vh rgba(160, 170, 200, .45), 0 .6vh 1.4vh rgba(0, 0, 0, .8); }
+  .result-screen.draw .big { color: #b9d0ff; text-shadow: 0 0 3vh rgba(110, 150, 230, .5), 0 .6vh 1.4vh rgba(0, 0, 0, .8); }
+  .result-screen .line {
+    padding: .35em 1.1em .4em; border-radius: 999px; font-size: 3.2vh; font-weight: 700; color: #fff;
+    background: rgba(12, 12, 16, .82); border: 1px solid rgba(255, 255, 255, .2); box-shadow: 0 8px 24px rgba(0, 0, 0, .5);
+  }
+  .result-screen.win .line { border-color: rgba(231, 179, 67, .75); color: #ffe9b0; }
+  .result-screen .line .rec { margin-left: .7em; color: #9be8aa; }
+  .confetti { position: fixed; top: -3vh; z-index: 41; width: 1.1vh; height: 1.8vh; border-radius: .2vh; pointer-events: none; }
+
   /* ---- turn tracker: the phases of the turn, the current one lit up */
   #phases {
     position: fixed;
@@ -1502,6 +1528,49 @@
     setTimeout(() => bar.remove(), 9500);
   }
 
+  // ---- The end of the game: Victory! with confetti, a calm GG, or Draw.
+  let resultEl = null;
+  const CONFETTI = ["#f8e7b9", "#2f8fd8", "#a69f9d", "#e0443c", "#2fa36a", "#f3cc6e", "#ffffff"];
+  function onResult(ev) {
+    if (resultEl) resultEl.remove();
+    const make = (tag, cls, text) => Object.assign(document.createElement(tag), { className: cls, textContent: text || "" });
+    const screen = make("div", `result-screen ${ev.result}`);
+    const words = { win: "Victory!", loss: "GG", draw: "Draw" };
+    const sub = { win: "", loss: "Well played", draw: "Nobody won this one" };
+    screen.append(make("div", "big", words[ev.result] || "GG"));
+    if (ev.deck || sub[ev.result]) {
+      const line = make("div", "line", [sub[ev.result], ev.deck].filter(Boolean).join(" · "));
+      if (ev.record) line.append(make("span", "rec", ev.record));
+      screen.append(line);
+    }
+    document.body.append(screen);
+    resultEl = screen;
+    const duration = ev.result === "win" ? 7000 : 5000;
+    screen.animate([
+      { opacity: 0 }, { opacity: 1, offset: .08 }, { opacity: 1, offset: .88 }, { opacity: 0 },
+    ], { duration, easing: "ease-out" }).onfinish = () => { screen.remove(); if (resultEl === screen) resultEl = null; };
+    screen.firstChild.animate([
+      { transform: "scale(.55)", opacity: 0 }, { transform: "scale(1.08)", opacity: 1, offset: .6 }, { transform: "scale(1)", opacity: 1 },
+    ], { duration: 700, easing: "cubic-bezier(.2, .9, .3, 1.2)" });
+    setTimeout(() => screen.remove(), duration + 500);
+    if (ev.result !== "win") return;
+    for (let i = 0; i < 160; i += 1) {
+      const bit = make("div", "confetti");
+      bit.style.left = `${Math.random() * 100}vw`;
+      bit.style.background = CONFETTI[i % CONFETTI.length];
+      document.body.append(bit);
+      const fall = 2600 + Math.random() * 2600;
+      const drift = (Math.random() - .5) * 30;
+      const spin = (Math.random() - .5) * 1440;
+      bit.animate([
+        { transform: "translate(0, 0) rotate(0deg)", opacity: 1 },
+        { transform: `translate(${drift}vw, 108vh) rotate(${spin}deg)`, opacity: .9 },
+      ], { duration: fall, delay: Math.random() * 900, easing: "cubic-bezier(.25, .5, .45, 1)", fill: "backwards" })
+        .onfinish = () => bit.remove();
+      setTimeout(() => bit.remove(), fall + 1500);
+    }
+  }
+
   function onPhase(ev) {
     if (ev.phase === "combat" && ev.on && phasesPos !== "off") showBanner("⚔ Combat", "attack");
   }
@@ -1561,6 +1630,7 @@
           if (data.event.type === "phase") onPhase(data.event);
           if (data.event.type === "spotlight") onSpotlight(data.event);
           if (data.event.type === "intro") onIntro(data.event);
+          if (data.event.type === "result") onResult(data.event);
           return;
         }
         render(data);

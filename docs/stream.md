@@ -181,6 +181,19 @@ The **Show on stream** block on the Board tab:
   other card comes from Scryfall) and press **★ Show**: it appears big in the middle of the stream
   for 5 to 15 seconds. **Hide** takes it away sooner.
 
+## Game over: Victory!, GG or Draw
+
+Under **Deck intro & result** on the Board tab: **🏆 I won** shows "Victory!" in gold with confetti
+over the whole stream, **I lost** a calm "GG · Well played", **Draw** shows "Draw". Under it the deck
+and its record after this game.
+
+For a deck from your collection the game also goes in the game log, on the date of tonight's game
+night (until six in the morning it is still the same night). Pressed twice within two minutes (a
+double press on the Stream Deck), it is logged once. Opponents, notes and the like you add on the
+**Games** page afterwards.
+
+![Victory! with confetti on stream, with the deck and its record](stream-victory.jpg)
+
 ## Deck presets
 
 Put a deck's tokens on the board (with your layout), type a name under
@@ -203,8 +216,8 @@ sacrifice one, **+ / −** one more / less, **C** copy one, **D** double,
 
 The **Stream Deck** page (<http://localhost:8017/stream/streamdeck>, or **Stream Deck** at the top of
 the control panel) has a ready-made layout for a Stream Deck XL (8 × 4 keys): turn, untap, attack,
-undo, the deck intro, the six mana colours, commander tax, storm, counters, dice, the turn tracker
-and your first four presets. Click a key for its address and its picture.
+undo, the deck intro, the six mana colours, commander tax, storm, counters, dice, the turn tracker,
+I won / I lost and your first four presets. Click a key for its address and its picture.
 
 ![The Stream Deck page: the 32 keys of a Stream Deck XL with their pictures, row by row](streamdeck.jpg)
 
@@ -243,6 +256,7 @@ API directly:
 | Cast commander | `POST http://localhost:8017/stream/api/tally/casts` |
 | Spell for storm | `POST http://localhost:8017/stream/api/tally/storm` |
 | Deck intro | `POST http://localhost:8017/stream/api/intro` |
+| I won | `POST http://localhost:8017/stream/api/result` with `{"result": "win"}` |
 
 ## Mana pool
 
@@ -392,6 +406,7 @@ Handy for hotkeys or a Stream Deck.
 | POST   | `/stream/api/tally/storm`       | none, or `{"delta": -1}`              | one spell more for storm (or back); 0 again every new turn |
 | POST   | `/stream/api/spotlight`         | `{"name": "...", "image_url": "...", "seconds": 7}` | show a card big on stream (2–30 seconds) |
 | DELETE | `/stream/api/spotlight`         |                                       | take the spotlight card away |
+| POST   | `/stream/api/result`            | `{"result": "win"}` / `"loss"` / `"draw"`, optional `"log": false` | Victory!, GG or Draw on stream; logs the game of a saved deck |
 | POST   | `/stream/api/intro`             | none, or `{"name": "...", "commander": "...", "bracket": "...", "record": "..."}` | show the deck intro (of the deck in the control panel) |
 | DELETE | `/stream/api/tokens/{id}`       |                                       | remove |
 | POST   | `/stream/api/clear`             |                                       | clear everything |

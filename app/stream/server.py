@@ -81,9 +81,11 @@ STREAMDECK_ACTIONS = (
     ("commander", "Cast commander"), ("commander-back", "Commander cast back"), ("storm", "Spell for storm"),
     ("storm-back", "Storm one back"), ("plus-counter", "+1/+1 counter"), ("minus-counter", "−1/−1 counter"),
     ("coin", "Flip a coin"), ("d6", "Roll a d6"),
-    ("tracker-on", "Show turn tracker"), ("tracker-off", "Hide turn tracker"), ("2d6", "Roll 2d6"),
+    ("tracker", "Show or hide the turn tracker"), ("win", "I won"), ("loss", "I lost"),
     ("clear", "Clear the board"),
 )
+# Still pressable, though not on the ready-made layout (keys set up earlier keep working).
+STREAMDECK_EXTRA = ("tracker-on", "tracker-off", "2d6", "draw")
 STREAMDECK_PRESET_KEYS = 4
 MANA_SYMBOLS = ("W", "U", "B", "R", "G", "C")
 
@@ -265,6 +267,12 @@ class TurnPatch(BaseModel):
     number: int | None = Field(default=None, ge=1, le=MAX_TURN)
     casts: int | None = Field(default=None, ge=0, le=MAX_CASTS)
     storm: int | None = Field(default=None, ge=0, le=MAX_STORM)
+
+
+class ResultIn(BaseModel):
+    """How the game ended: shown big on stream and, for a deck from the collection, put in the game log."""
+    result: Literal["win", "loss", "draw"]
+    log: bool = True
 
 
 class TallyIn(BaseModel):
@@ -953,6 +961,9 @@ def create_app(state_path: Path | str = DEFAULT_STATE_PATH) -> FastAPI:
     app.state.store = store
     app.state.hub = hub
     app.state.decks = decks
+    # Set by the collection manager: result_hook(result, deck) logs the game of a saved deck and
+    # returns {"logged": bool, "record": "5 W · 3 L", "note": "..."}.
+    app.state.result_hook = None
 
     async def publish() -> dict:
         state = store.snapshot()
@@ -1154,6 +1165,18 @@ def create_app(state_path: Path | str = DEFAULT_STATE_PATH) -> FastAPI:
         await hub.broadcast({"event": event})
         return event
 
+    @app.post("/api/result")
+    async def game_result(body: ResultIn):
+        """The game is over: Victory!, GG or Draw on stream, and the game in the log."""
+        deck = decks.deck or {}
+        info = {}
+        if body.log and app.state.result_hook is not None:
+            info = await asyncio.to_thread(app.state.result_hook, body.result, deck) or {}
+        event = {"type": "result", "result": body.result, "deck": deck.get("name"),
+                 "record": info.get("record"), "logged": bool(info.get("logged")), "note": info.get("note")}
+        await hub.broadcast({"event": event})
+        return event
+
     @app.post("/api/untap")
     async def untap_all():
         tapped = sum(1 for t in store.tokens if t.tapped)
@@ -1316,6 +1339,10 @@ def create_app(state_path: Path | str = DEFAULT_STATE_PATH) -> FastAPI:
             return await set_turn(TurnPatch(on=True, number=1, phase="untap", casts=0, storm=0))
         if action in ("tracker-on", "tracker-off"):
             return await set_turn(TurnPatch(on=action == "tracker-on"))
+        if action == "tracker":
+            return await set_turn(TurnPatch(on=not store.turn["on"]))
+        if action in ("win", "loss", "draw"):
+            return await game_result(ResultIn(result=action))
         if action in ("commander", "commander-back", "storm", "storm-back"):
             name = "casts" if action.startswith("commander") else "storm"
             return await tally(name, TallyIn(delta=-1 if action.endswith("-back") else 1))

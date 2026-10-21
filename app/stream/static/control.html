@@ -653,6 +653,8 @@
   .show-bar input { flex: 1; min-width: 150px; }
   .show-bar input:focus, .show-bar select:focus { outline: none; border-color: var(--accent); }
   .show-bar .note { color: var(--muted); font-size: 13px; }
+  .result-row { margin-top: 4px; }
+  .result-btn.win { color: #1a1406; border-color: transparent; background: linear-gradient(180deg, #f8d988, #e7b343); }
   .show-bar .tally-btn b { margin-left: 4px; color: var(--accent-2, #f3cc6e); font-variant-numeric: tabular-nums; }
 
   /* ---- stacks: actions, counters pill, "more" menu */
@@ -1037,12 +1039,17 @@
     </div>
     <div class="quick show-bar">
       <div class="qgroup">
-        <span class="qlabel">Deck intro</span>
+        <span class="qlabel">Deck intro &amp; result</span>
         <div class="qrow">
           <button id="introBtn" class="primary" type="button" disabled
                   title="A bar with the commander, the deck name, its bracket and record slides in for a few seconds">▶ Show deck intro</button>
         </div>
         <span id="introDeck" class="note">Pick a deck under Add tokens first.</span>
+        <div class="qrow result-row">
+          <button type="button" class="result-btn win" data-result="win" title="Victory! with confetti on stream; the win goes in the game log">🏆 I won</button>
+          <button type="button" class="result-btn" data-result="loss" title="GG on stream; the loss goes in the game log">I lost</button>
+          <button type="button" class="result-btn" data-result="draw" title="Draw on stream; the draw goes in the game log">Draw</button>
+        </div>
       </div>
       <div class="qgroup">
         <span class="qlabel">Commander tax &amp; storm</span>
@@ -2418,6 +2425,23 @@
     $("introDeck").textContent = deck ? deck.name : "Pick a deck under Add tokens first.";
     const cards = (deck && deck.spotlight) || [];
     $("spotList").replaceChildren(...cards.map((c) => el("option", { value: c.name })));
+  }
+
+  // The game is over: on stream, and in the game log for a deck from the collection.
+  for (const button of document.querySelectorAll(".result-btn")) {
+    button.addEventListener("click", async () => {
+      try {
+        const res = await fetch(ROOT + "/api/result", { method: "POST", headers: { "Content-Type": "application/json" },
+                                                       body: JSON.stringify({ result: button.dataset.result }) });
+        const data = await res.json();
+        if (!res.ok) throw new Error(typeof data.detail === "string" ? data.detail : res.status);
+        const word = { win: "Win", loss: "Loss", draw: "Draw" }[data.result];
+        toast(data.logged ? `${word} logged for ${data.deck}${data.record ? ` (${data.record})` : ""}`
+                          : `${word} shown on stream${data.note ? `. ${data.note}` : ""}`);
+      } catch (error) {
+        toast(`Could not show the result: ${error.message}`, true);
+      }
+    });
   }
 
   $("introBtn").addEventListener("click", async () => {

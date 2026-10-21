@@ -994,6 +994,17 @@ def test_deck_intro(client):
     assert event == {"type": "intro", **intro, "image_url": None}  # only Scryfall pictures
 
 
+def test_game_result_on_stream_only(client):
+    with client.websocket_connect("/ws") as ws:
+        ws.receive_json()
+        assert client.post("/api/result", json={"result": "win"}).status_code == 200
+        event = ws.receive_json()["event"]
+    assert event == {"type": "result", "result": "win", "deck": None, "record": None, "logged": False, "note": None}
+    assert client.post("/api/result", json={"result": "maybe"}).status_code == 422
+    assert client.get("/sd/loss").status_code == 200 and client.get("/sd/tracker").status_code == 200
+    assert turn(client)["on"]
+
+
 # --- Stream Deck -----------------------------------------------------------------------------------
 
 
@@ -1124,6 +1135,33 @@ def test_deck_tokens_to_the_stream(monkeypatch):
             # Play opens the stream screen with the deck's tokens; the life counter has the deck chosen.
             assert f'action="/decks/{deck['id']}/stream"' in page and "▶ Play" in page and f'href="/table?deck={deck['id']}"' in page
             assert f'value="{deck["id"]}" data-commander="" selected' in c.get(f"/table?deck={deck['id']}").text
+    finally:
+        manager.dependency_overrides.clear()
+        stream_app.state.decks.save(None)
+
+
+def test_victory_logs_the_game():
+    from fastapi.testclient import TestClient as AppClient
+
+    from app.deps import get_scryfall
+    from app.main import app as manager, stream_app
+    from app.scryfall import ScryfallClient
+    from tests.conftest import FakeScryfall
+
+    manager.dependency_overrides[get_scryfall] = lambda: ScryfallClient(transport=httpx.MockTransport(FakeScryfall()), min_interval=0)
+    try:
+        with AppClient(manager) as client, TestClient(stream_app) as stream:
+            deck = client.post("/api/decks", json={"name": "Ramp", "decklist": "1 Sol Ring"}).json()
+            assert stream.post("/api/result", json={"result": "win"}).json()["note"].startswith("Pick one of your saved decks")
+            stream_app.state.decks.save({"source": "collection", "deck_id": deck["id"], "name": "Ramp", "tokens": []})
+            first = stream.post("/api/result", json={"result": "win"}).json()
+            assert first["logged"] and first["deck"] == "Ramp" and first["record"] == "1 W · 0 L"
+            again = stream.get("/sd/win").json()  # a double press on the Stream Deck
+            assert again["ok"]
+            assert stream.post("/api/result", json={"result": "win"}).json()["note"] == "Already logged a moment ago"
+            assert stream.post("/api/result", json={"result": "loss", "log": False}).json()["logged"] is False
+            games = client.get("/api/games").json()
+            assert [(g["deck_name"], g["result"]) for g in games] == [("Ramp", "win")]
     finally:
         manager.dependency_overrides.clear()
         stream_app.state.decks.save(None)
