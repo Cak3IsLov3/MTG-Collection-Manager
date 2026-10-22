@@ -221,6 +221,10 @@ class DeckToken(SQLModel, table=True):
     quantity: int = 1
     scryfall_id: str | None = None
     image_url: str | None = None  # None: not looked up yet; "": none found
+    # The other side of a double-faced token (a Soldier on one side, a Treasure on the other); "": it has one side.
+    back_image_url: str | None = None
+    # Two tokens on one picture (the Roles of Wilds of Eldraine): the second upside down in the bottom half.
+    flip: bool | None = None
 
 
 class DeckBasicLand(SQLModel, table=True):

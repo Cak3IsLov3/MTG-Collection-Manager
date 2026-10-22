@@ -143,7 +143,7 @@ async def fill_card_info(session: Session, scryfall: ScryfallClient, deck_id: in
     if deck_id is not None:
         statement = statement.where(DeckEntry.deck_id == deck_id)
     entries = list(session.exec(statement))
-    token_statement = select(DeckToken).where(DeckToken.image_url == None)  # noqa: E711
+    token_statement = select(DeckToken).where(or_(DeckToken.image_url == None, DeckToken.back_image_url == None, DeckToken.flip == None))  # noqa: E711
     if deck_id is not None:
         token_statement = token_statement.where(DeckToken.deck_id == deck_id)
     tokens = list(session.exec(token_statement))
@@ -177,7 +177,9 @@ async def fill_card_info(session: Session, scryfall: ScryfallClient, deck_id: in
             # A plain token of that name, not one face of a double-faced token.
             exact = [r for r in results if name_key(r.get("name", "")) == name_key(token.name)] or results
             data = ScryfallCard.from_json(exact[0]) if exact else None
-        token.image_url = (data.image_url if data else None) or ""
+        token.image_url = (data.image_url if data else None) or token.image_url or ""
+        token.back_image_url = (data.back_image_url if data else None) or ""
+        token.flip = bool(data and data.flip)
         if data is not None and name_key(data.name) == name_key(token.name):
             token.name = data.name  # Scryfall's spelling: "cat beast" -> "Cat Beast"
         session.add(token)
@@ -307,6 +309,8 @@ class TokenSuggestion:
     made_by: list[str] = field(default_factory=list)
     have: DeckToken | None = None  # the same token in the deck's token list
     image_url: str | None = None
+    back_image_url: str | None = None  # the other side, for a double-faced token
+    flip: bool = False  # two tokens on one picture
 
     @property
     def status(self) -> str:
@@ -318,6 +322,8 @@ class TokenSuggestion:
 
 MAX_TOKENS = 20
 _token_images: dict[str, str] = {}
+_token_backs: dict[str, str] = {}
+_token_flips: set[str] = set()
 
 
 def token_suggestions(session: Session, deck: Deck, include_standard: bool = False) -> list[TokenSuggestion]:
@@ -344,8 +350,12 @@ def token_suggestions(session: Session, deck: Deck, include_standard: bool = Fal
         if suggestion.have and suggestion.have.scryfall_id and suggestion.have.image_url:
             # The version you chose for your list.
             suggestion.scryfall_id, suggestion.image_url = suggestion.have.scryfall_id, suggestion.have.image_url
+            suggestion.back_image_url = suggestion.have.back_image_url or None
+            suggestion.flip = bool(suggestion.have.flip)
         else:
             suggestion.image_url = _token_images.get(suggestion.scryfall_id) or None
+            suggestion.back_image_url = _token_backs.get(suggestion.scryfall_id) or None
+            suggestion.flip = suggestion.scryfall_id in _token_flips
     order = {"missing": 0, "short": 1, "ok": 2}
     return sorted(found.values(), key=lambda s: (order[s.status], name_key(s.name)))
 
@@ -357,8 +367,13 @@ async def fill_token_images(scryfall: ScryfallClient, suggestions: list[TokenSug
         found, _ = await scryfall.get_collection([{"id": token_id} for token_id in todo])
         for data in found:
             _token_images[data.scryfall_id] = data.image_url or ""
+            _token_backs[data.scryfall_id] = data.back_image_url or ""
+            if data.flip:
+                _token_flips.add(data.scryfall_id)
     for suggestion in suggestions:
         suggestion.image_url = suggestion.image_url or _token_images.get(suggestion.scryfall_id) or None
+        suggestion.back_image_url = suggestion.back_image_url or _token_backs.get(suggestion.scryfall_id) or None
+        suggestion.flip = suggestion.flip or suggestion.scryfall_id in _token_flips
 
 
 def apply_token_suggestions(session: Session, deck: Deck, scryfall_id: str | None = None) -> int:
@@ -374,6 +389,8 @@ def apply_token_suggestions(session: Session, deck: Deck, scryfall_id: str | Non
         token = suggestion.have or DeckToken(
             deck_id=deck.id, name=suggestion.name, scryfall_id=suggestion.scryfall_id,
             image_url=_token_images.get(suggestion.scryfall_id) or None,
+            back_image_url=_token_backs.get(suggestion.scryfall_id),
+            flip=suggestion.scryfall_id in _token_flips,
         )
         token.quantity = max(token.quantity if suggestion.have else 0, suggestion.needed)
         session.add(token)
@@ -432,6 +449,8 @@ async def choose_token_version(session: Session, scryfall: ScryfallClient, deck:
         raise ValueError("That token is not in this deck")
     card = await scryfall.get_by_id(scryfall_id)
     token.scryfall_id, token.image_url = card.scryfall_id, card.image_url or ""
+    token.back_image_url = card.back_image_url or ""
+    token.flip = card.flip
     if name_key(card.name) == name_key(token.name):
         token.name = card.name
     session.add(token)

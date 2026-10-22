@@ -136,9 +136,55 @@ def test_new_columns_reach_a_database_from_before():
     with old.begin() as connection:
         connection.exec_driver_sql("CREATE TABLE deckentry (id INTEGER PRIMARY KEY, deck_id INTEGER, name VARCHAR, quantity INTEGER)")
         connection.exec_driver_sql("CREATE TABLE game (id INTEGER PRIMARY KEY, played_on DATE, deck_name VARCHAR, result VARCHAR)")
+        connection.exec_driver_sql("CREATE TABLE decktoken (id INTEGER PRIMARY KEY, deck_id INTEGER, name VARCHAR, quantity INTEGER, scryfall_id VARCHAR, image_url VARCHAR)")
         connection.exec_driver_sql("INSERT INTO deckentry (deck_id, name, quantity) VALUES (1, 'Sol Ring', 1)")
         connection.exec_driver_sql("INSERT INTO game (played_on, deck_name, result) VALUES ('2026-10-01', 'Kess', 'win')")
     add_missing_columns(old)
     with old.begin() as connection:
         assert connection.exec_driver_sql("SELECT name, mana_cost, produces FROM deckentry").all() == [("Sol Ring", None, None)]
         assert connection.exec_driver_sql("SELECT result, win_method, went_first FROM game").all() == [("win", None, None)]
+        assert connection.exec_driver_sql("SELECT back_image_url FROM decktoken").all() == []
+
+
+# --- tokens with two sides ----------------------------------------------------------------
+
+
+def test_both_sides_of_a_double_faced_token(client, session):
+    from app.scryfall import ScryfallCard
+    from app.services.decks import deck_tokens
+
+    deck = client.post("/api/decks", json={"name": "Wolves", "decklist": "1 Sol Ring"}).json()
+    client.post(f"/decks/{deck['id']}/tokens", data={"name": "Wolf // Rabbit", "quantity": "2"})
+    client.post(f"/decks/{deck['id']}/tokens", data={"name": "Cat Beast", "quantity": "1"})
+    page = client.get(f"/decks/{deck['id']}").text
+    assert "https://img.example/wolf-front.jpg" in page and "https://img.example/wolf-back.jpg" in page
+    assert "two-sided" in page and 'id="tokens-top"' in page
+    tokens = {t.name: t for t in deck_tokens(session, session.get(Deck, deck["id"]))}
+    assert tokens["Wolf // Rabbit"].back_image_url == "https://img.example/wolf-back.jpg"
+    assert tokens["Cat Beast"].back_image_url == ""  # one side
+
+    sheet = client.get(f"/decks/{deck['id']}/tokens/print").text
+    assert sheet.count("wolf-front.jpg") == 2 and sheet.count("wolf-back.jpg") == 2  # two of each side
+    assert "id-cat-beast" in sheet
+
+    card = ScryfallCard.from_json({"id": "x", "name": "Plain", "image_uris": {"normal": "front"},
+                                   "card_faces": [{"image_uris": {"normal": "a"}}, {"image_uris": {"normal": "b"}}]})
+    assert card.back_image_url is None  # a card with one picture for both faces has no other side
+
+
+def test_two_tokens_on_one_picture_are_split(client, session):
+    """The Roles of Wilds of Eldraine: Monster on top, Sorcerer upside down below it, on one picture."""
+    from app.services.decks import deck_tokens
+
+    deck = client.post("/api/decks", json={"name": "Roles", "decklist": "1 Sol Ring"}).json()
+    client.post(f"/decks/{deck['id']}/tokens", data={"name": "Monster // Sorcerer", "quantity": "2"})
+    page = client.get(f"/decks/{deck['id']}").text
+    assert 'class="half top"' in page and 'class="half bottom"' in page
+    assert 'title="Monster"' in page and 'title="Sorcerer"' in page
+    [token] = deck_tokens(session, session.get(Deck, deck["id"]))
+    assert token.flip is True and token.back_image_url == ""
+
+    both = client.get(f"/decks/{deck['id']}/tokens/print").text
+    assert both.count("half top") == 2 and both.count("half bottom") == 2  # two of each, cut in two
+    only_top = client.get(f"/decks/{deck['id']}/tokens/print?top=true").text
+    assert only_top.count("half top") == 2 and "half bottom" not in only_top

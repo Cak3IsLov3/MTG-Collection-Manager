@@ -93,6 +93,9 @@ class ScryfallCard:
     token_parts: list[tuple[str, str]] = field(default_factory=list)
     mana_cost: str = ""  # "{1}{U}{U}"; the faces apart for a split or double-faced card: "{R} // {1}{U}"
     produced_mana: str = ""  # the mana it can make, letters of WUBRGC ("" for most spells)
+    back_image_url: str | None = None  # the picture of the other side of a double-faced card or token
+    # Two tokens on one picture (Monster // Sorcerer): the second one upside down in the bottom half.
+    flip: bool = False
 
     @classmethod
     def from_json(cls, data: dict) -> "ScryfallCard":
@@ -101,6 +104,8 @@ class ScryfallCard:
             (f["image_uris"] for f in data.get("card_faces") or [] if f.get("image_uris")), {}
         )
         prices = data.get("prices") or {}
+        sides = [f["image_uris"] for f in data.get("card_faces") or [] if f.get("image_uris")]
+        back = sides[1] if not data.get("image_uris") and len(sides) > 1 else {}
         identity = data.get("color_identity")
         # A double-faced card has its colours per face.
         faces = [f.get("colors") for f in data.get("card_faces") or [] if f.get("colors") is not None]
@@ -125,6 +130,8 @@ class ScryfallCard:
             mana_cost=data["mana_cost"] if "mana_cost" in data and not data.get("card_faces") else " // ".join(
                 face.get("mana_cost") or "" for face in data.get("card_faces") or [data]),
             produced_mana="".join(c for c in "WUBRGC" if c in (data.get("produced_mana") or [])),
+            back_image_url=back.get("normal") or back.get("large") or back.get("small"),
+            flip=data.get("layout") == "flip" and bool(data.get("image_uris")),
             token_parts=[
                 (part["id"], part["name"]) for part in data.get("all_parts") or []
                 if (part.get("component") == "token" or (part.get("type_line") or "").startswith("Emblem"))

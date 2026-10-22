@@ -48,6 +48,7 @@ def add_missing_columns(target=None) -> None:
             "mana_cost": "VARCHAR",
             "produces": "VARCHAR",
         },
+        "decktoken": {"back_image_url": "VARCHAR", "flip": "BOOLEAN"},
         "game": {"opponents": "VARCHAR", "winner": "VARCHAR", "opponent_commanders": "VARCHAR",
                  "win_method": "VARCHAR", "went_first": "BOOLEAN"},
         "pricesnapshot": {"eur_from_set": "VARCHAR", "eur_foil_from_set": "VARCHAR"},

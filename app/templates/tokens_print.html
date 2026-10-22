@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Tokens · {{ deck.name }} · MTG Collection Manager{% endblock %}
+
+{% block content %}
+<div class="toolbar no-print">
+  <h1>Tokens <span class="muted">· {{ deck.name }}</span></h1>
+  <div class="actions">
+    {% if top %}
+    <a href="/decks/{{ deck.id }}/tokens/print">Both tokens of a picture</a>
+    {% else %}
+    <a href="/decks/{{ deck.id }}/tokens/print?top=true">Only the top token of a picture</a>
+    {% endif %}
+    <a href="/decks/{{ deck.id }}">← Back to the deck</a>
+    {% if sheet %}<button type="button" onclick="window.print()">Print</button>{% endif %}
+  </div>
+</div>
+<p class="muted no-print">
+  {% if sheet %}{{ sheet | length }} piece{{ 's' if sheet | length != 1 }}, as many of each as your token list says, at real card width (63 mm).
+  A picture with two tokens on it (Monster // Sorcerer) is cut in two: each token is 63 × 44 mm, the second one turned the right way up{% if top %}; here only the top one{% endif %}.
+  Other tokens are 63 × 88 mm. For play-testing at home; these are not real tokens.{% else %}This deck has no tokens with a picture yet: open the deck page first, or add tokens to its list.{% endif %}
+</p>
+<div class="proxy-sheet token-sheet">
+  {% for name, image, part in sheet %}
+  <div class="proxy {{ 'half ' ~ part if part != 'whole' }}"><img src="{{ image }}" alt="{{ name }}"></div>
+  {% endfor %}
+</div>
+{% endblock %}

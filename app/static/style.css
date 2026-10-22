@@ -907,3 +907,20 @@ i.mana-C { background-image: url("https://svgs.scryfall.io/card-symbols/C.svg");
 .curve-col.empty .curve-top { opacity: .5; }
 .curve-fan img { height: 44px; }
 .curve-fan { height: 78px; }
+/* Two-sided tokens: every side its own picture; two tokens on one picture cut in two */
+.token-tools { display: flex; align-items: center; gap: 12px; margin-left: auto; }
+.token-faces { display: flex; gap: 6px; }
+.token-card.two-sided { width: 266px; }
+.token-card.two-sided.suggested { width: 290px; }
+.token-faces .half { position: relative; width: 130px; aspect-ratio: 63 / 44; overflow: hidden; border-radius: 6px; align-self: flex-start; }
+.token-faces .half img { position: absolute; left: 0; top: 0; width: 100%; height: 200%; border-radius: 0; aspect-ratio: auto; }
+.token-faces .half.bottom { transform: rotate(180deg); }
+.token-faces .half.bottom img { top: -100%; }
+.token-card.flip { width: 130px; }
+.token-card.flip .token-faces { flex-direction: column; gap: 4px; }
+.token-card.flip.suggested { width: 144px; }
+.token-grid.top-only .half.bottom { display: none; }
+.proxy.half { height: 44mm; position: relative; }
+.proxy.half img { position: absolute; left: 0; top: 0; width: 100%; height: 200%; object-fit: cover; }
+.proxy.half.bottom { transform: rotate(180deg); }
+.proxy.half.bottom img { top: -100%; }

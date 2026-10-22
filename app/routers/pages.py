@@ -988,6 +988,35 @@ async def saved_deck_proxies(
                   everything=all)
 
 
+@router.get("/decks/{deck_id}/tokens/print")
+async def saved_deck_tokens_print(
+    deck_id: int, request: Request, top: bool = False, session: Session = Depends(get_session),
+    scryfall: ScryfallClient = Depends(get_scryfall),
+):
+    """A printable sheet of the tokens of a deck: every side of a double-faced token on its own, and a
+    picture with two tokens on it (the Roles) cut in two, or with `top` only the top token of those."""
+    deck = session.get(Deck, deck_id)
+    if deck is None:
+        raise HTTPException(status_code=404, detail="Deck not found")
+    try:
+        await deck_insights.fill_card_info(session, scryfall, deck.id)
+    except ScryfallError:
+        session.rollback()
+    sheet = []  # (name, picture, which part of the picture: "whole", "top" or "bottom")
+    for token in decks.deck_tokens(session, deck):
+        copies = max(1, token.quantity)
+        if token.flip and token.image_url:
+            names = token.name.split(" // ")
+            sheet += [(names[0], token.image_url, "top")] * copies
+            if not top:
+                sheet += [(names[-1], token.image_url, "bottom")] * copies
+            continue
+        for name, image in ((token.name, token.image_url), (f"{token.name} (back)", token.back_image_url)):
+            if image:
+                sheet += [(name, image, "whole")] * copies
+    return render(request, "tokens_print.html", deck=deck, sheet=sheet, top=top)
+
+
 @router.post("/deck/sync")
 async def decks_sync_all(session: Session = Depends(get_session)):
     """The "Sync all with Archidekt" button on the decks page."""

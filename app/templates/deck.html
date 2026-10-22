@@ -419,12 +419,30 @@
 <div class="panel tokens-panel" data-tab-panel="lands" style="order: 2">
   <div class="toolbar panel-head">
     <h2>Tokens{% if deck_token_list %} <span class="muted">· {{ deck_token_list | sum(attribute='quantity') }} to bring</span>{% endif %}{% if to_do %} <span class="muted">· {{ to_do | length }} not (enough) in your list</span>{% endif %}</h2>
+    <span class="token-tools">
+      <label class="check muted" title="Two tokens on one picture (Monster // Sorcerer): show only the top one"><input type="checkbox" id="tokens-top">&nbsp;Top token only</label>
+      {% if deck_token_list %}<a class="button-link small" href="/decks/{{ deck.id }}/tokens/print" title="A sheet to print: every token on its own, a picture with two tokens cut in two">Print tokens</a>{% endif %}
+    </span>
     {% if to_do %}
     <form class="inline" method="post" action="/decks/{{ deck.id }}/tokens/suggested" data-keep-scroll>
       <button class="small" title="Add the missing tokens and raise the ones you have too few of">Take over all {{ to_do | length }}</button>
     </form>
     {% endif %}
   </div>
+
+  {# The pictures of a token: one, both sides of a double-faced one, or the two tokens of a flip picture apart (the second is upside down in the bottom half, turned the right way up here). #}
+  {% macro faces(t) %}
+  <div class="token-faces">
+    {% if t.flip and t.image_url %}
+    {% set names = t.name.split(' // ') %}
+    <div class="half top" title="{{ names[0] }}"><img src="{{ t.image_url }}" alt="{{ names[0] }}" loading="lazy"></div>
+    <div class="half bottom" title="{{ names[1] if names | length > 1 else t.name }}"><img src="{{ t.image_url }}" alt="{{ names[1] if names | length > 1 else t.name }}" loading="lazy"></div>
+    {% else %}
+    {% if t.image_url %}<img src="{{ t.image_url }}" alt="{{ t.name }}{{ ' (front)' if t.back_image_url }}" loading="lazy">{% else %}<div class="token-blank">{{ t.name }}</div>{% endif %}
+    {% if t.back_image_url %}<img src="{{ t.back_image_url }}" alt="{{ t.name }} (back)" loading="lazy">{% endif %}
+    {% endif %}
+  </div>
+  {% endmacro %}
 
   {% macro made_by(t) %}<div class="muted small" title="{{ t.made_by | join(', ') }}">made by {{ t.made_by[:3] | join(', ') }}{% if t.made_by | length > 3 %} and {{ t.made_by | length - 3 }} more{% endif %}</div>{% endmacro %}
 
@@ -433,8 +451,8 @@
     {% for token in deck_token_list %}
     {% set need = need_by_name.get(token.name | lower) %}
     {% set state = 'short' if need and need.status == 'short' and need.have and need.have.id == token.id else '' %}
-    <div class="token-card {{ state }}">
-      {% if token.image_url %}<img src="{{ token.image_url }}" alt="{{ token.name }}" loading="lazy">{% else %}<div class="token-blank">{{ token.name }}</div>{% endif %}
+    <div class="token-card {{ state }} {{ 'two-sided' if token.back_image_url or token.flip }} {{ 'flip' if token.flip }}">
+      {{ faces(token) }}
       <label class="check"><input type="checkbox" class="token-packed" data-token="{{ token.id }}">&nbsp;{{ token.name }}</label>
       <div class="token-amounts">
         <form class="inline token-qty" method="post" action="/decks/{{ deck.id }}/tokens/{{ token.id }}/quantity" data-keep-scroll>
@@ -462,8 +480,8 @@
     </div>
     {% endfor %}
     {% for t in not_listed %}
-    <div class="token-card suggested missing">
-      {% if t.image_url %}<img src="{{ t.image_url }}" alt="{{ t.name }}" loading="lazy">{% else %}<div class="token-blank">{{ t.name }}</div>{% endif %}
+    <div class="token-card suggested missing {{ 'two-sided' if t.back_image_url or t.flip }} {{ 'flip' if t.flip }}">
+      {{ faces(t) }}
       <div><strong>{{ t.name }}</strong> <span class="badge">not in your list</span></div>
       <div class="token-need short">need about {{ t.needed }}</div>
       {{ made_by(t) }}
@@ -941,6 +959,19 @@
 {% endif %}
 {% if deck %}
 <script>
+  // Tokens: of a picture with two tokens on it show only the top one; remembered in this browser.
+  (() => {
+    const box = document.getElementById("tokens-top");
+    if (!box) return;
+    const grid = document.querySelector(".token-grid");
+    const apply = () => grid && grid.classList.toggle("top-only", box.checked);
+    try { box.checked = localStorage.getItem("tokens-top") === "1"; } catch (error) {}
+    apply();
+    box.addEventListener("change", () => {
+      apply();
+      try { localStorage.setItem("tokens-top", box.checked ? "1" : "0"); } catch (error) {}
+    });
+  })();
   // Packing the tokens: the ticks are kept per deck in this browser.
   const packedKey = "tokens-packed-{{ deck.id }}";
   const packed = new Set((() => { try { return JSON.parse(localStorage.getItem(packedKey) || "[]"); } catch (error) { return []; } })());
