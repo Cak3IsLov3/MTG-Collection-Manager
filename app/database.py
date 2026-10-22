@@ -29,7 +29,7 @@ def add_missing_columns(target=None) -> None:
         "card": {"colors": "VARCHAR", "identity": "VARCHAR", "rarity": "VARCHAR", "type_line": "VARCHAR", "cmc": "FLOAT", "roles": "VARCHAR"},
         # Before this column existed only an import could tell, so existing cards count as imported.
         "collectionentry": {"imported": "BOOLEAN NOT NULL DEFAULT 1", "unsorted": "INTEGER NOT NULL DEFAULT 0",
-                            "purchase_price": "FLOAT"},
+                            "purchase_price": "FLOAT", "purchase_prices": "VARCHAR"},
         "deck": {"bracket": "INTEGER", "archidekt_id": "INTEGER", "synced_at": "DATETIME", "colors": "VARCHAR", "uses_tokens": "BOOLEAN",
                  "commander": "VARCHAR", "commander_image": "VARCHAR", "combos": "VARCHAR", "combos_key": "VARCHAR"},
         "deckentry": {

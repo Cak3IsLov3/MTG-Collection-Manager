@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_colour_filter.html" import colour_filter, pips %}
+{% from "_colour_filter.html" import colour_gradient, colour_filter, pips %}
 {% block title %}{{ deck.name if deck else 'Decks' }} · MTG Collection Manager{% endblock %}
 
 {% macro printing_name(p) %}{{ p.card.set_name }} ({{ p.card.set_code | upper }}{% if p.card.collector_number %} #{{ p.card.collector_number }}{% endif %}){% endmacro %}
@@ -153,7 +153,7 @@
         data-card-names="{{ (card_names | default({})).get(s.deck.id, []) | join('|') }}"
         data-tokens="{{ 1 if s.uses_tokens else 0 }}"
         {% set p = (plays | default({})).get(s.deck.id) %}data-played="{{ p.played if p else 0 }}">
-      <td class="deck-name-cell">{% if s.deck.commander_image %}<img class="thumb commander-thumb" src="{{ s.deck.commander_image }}" alt="" loading="lazy" title="{{ s.deck.commander }}">{% else %}<span class="commander-thumb empty"></span>{% endif %}
+      <td class="deck-name-cell" style="--deck-colours: linear-gradient(180deg, {{ colour_gradient(s.deck.colors) }})">{% if s.deck.commander_image %}<img class="thumb commander-thumb" src="{{ s.deck.commander_image }}" alt="" loading="lazy" title="{{ s.deck.commander }}">{% else %}<span class="commander-thumb empty"></span>{% endif %}
         <div><a href="/decks/{{ s.deck.id }}">{{ s.deck.name }}</a>
         {{ pips(s.deck.colors) }}
         <div class="muted small deck-hit" hidden></div>{% if s.deck.archidekt_id %} <span class="badge linked" title="Follows its deck on Archidekt">↻ Archidekt</span>{% endif %}

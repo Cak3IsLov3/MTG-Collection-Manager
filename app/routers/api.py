@@ -181,8 +181,8 @@ async def update_collection_entry(
     Changing the finish can merge the entry into an existing one for the same
     printing; the response is the entry that holds the copies afterwards.
     """
-    if not payload.model_fields_set & {"quantity", "is_foil", "purchase_price"}:
-        raise HTTPException(status_code=400, detail="Send a quantity, is_foil or purchase_price")
+    if not payload.model_fields_set & {"quantity", "is_foil", "purchase_price", "purchase_prices"}:
+        raise HTTPException(status_code=400, detail="Send a quantity, is_foil, purchase_price or purchase_prices")
     entry = session.get(CollectionEntry, entry_id)
     if entry is None:
         raise HTTPException(status_code=404, detail="Collection entry not found")
@@ -190,6 +190,11 @@ async def update_collection_entry(
         collection.set_quantity(session, entry, payload.quantity)
     if "purchase_price" in payload.model_fields_set:
         collection.set_purchase_price(session, entry, payload.purchase_price)
+    if payload.purchase_prices is not None:
+        try:
+            collection.set_purchase_prices(session, entry, payload.purchase_prices)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
     if payload.is_foil is not None:
         entry = await collection.change_finish(session, scryfall, entry, payload.is_foil)
     stats.record_daily_total(session)

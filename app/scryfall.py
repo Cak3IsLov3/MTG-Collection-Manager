@@ -180,6 +180,23 @@ class ScryfallClient:
     async def aclose(self) -> None:
         await self._client.aclose()
 
+    async def set_icons(self) -> dict[str, str]:
+        """Every set code with the address of its symbol (promo sets use the one of their main set)."""
+        data = await self._request("GET", "/sets")
+        return {s["code"]: s["icon_svg_uri"] for s in data.get("data", []) if s.get("code") and s.get("icon_svg_uri")}
+
+    async def fetch_svg(self, url: str) -> bytes:
+        """A symbol picture from svgs.scryfall.io."""
+        if not url.startswith("https://svgs.scryfall.io/"):
+            raise ScryfallError("Not a Scryfall symbol")
+        try:
+            response = await self._client.get(url, headers={"Accept": "image/svg+xml"})
+        except httpx.HTTPError as exc:
+            raise ScryfallError(f"Scryfall request failed: {exc}") from exc
+        if response.status_code >= 400:
+            raise ScryfallError(f"Scryfall returned HTTP {response.status_code}")
+        return response.content[:300_000]
+
     async def _request(self, method: str, path: str, **kwargs) -> dict:
         for attempt in range(MAX_RETRIES + 1):
             await (self._slow_limiter if path in SLOW_PATHS else self._limiter).wait()

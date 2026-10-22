@@ -1,17 +1,39 @@
 {% extends "base.html" %}
+{% from "_colour_filter.html" import set_icon %}
 {% block title %}{{ card.name }} · MTG Collection Manager{% endblock %}
 
 {% block content %}
+{% set foil = owned | selectattr('entry.is_foil') | list %}
+<div class="card-banner{{ ' with-art' if card.image_url }}"{% if card.image_url %} style="--art: url('{{ card.image_url | replace('/normal/', '/art_crop/') }}')"{% endif %}>
+  <div class="card-banner-text">
+    <span class="kicker">{{ set_icon(card) }} {{ card.set_name }} · {{ card.set_code | upper }}{% if card.collector_number %} #{{ card.collector_number }}{% endif %}{% if card.rarity %} · <span class="rarity-{{ card.rarity }}">{{ card.rarity | capitalize }}</span>{% endif %}</span>
+    <h1>{{ card.name }}</h1>
+    <span class="card-banner-links">
+      {% if owned %}<span class="badge">{{ owned | sum(attribute='entry.quantity') }} owned{{ ' · foil' if foil }}</span>{% endif %}
+      <a href="https://scryfall.com/card/{{ card.scryfall_id }}" target="_blank" rel="noopener">Scryfall ↗</a>
+    </span>
+  </div>
+</div>
+
 <div class="card-detail">
   <div>
-    {% if card.image_url %}{% set foil = owned | selectattr('entry.is_foil') | list %}<span class="card-art{{ ' foil-art' if foil }}"{% if foil %} title="You own it in foil"{% endif %}><img src="{{ card.image_url }}" alt="{{ card.name }}"></span>{% endif %}
+    {% if card.image_url %}<span class="card-art{{ ' foil-art' if foil }}"{% if foil %} title="You own it in foil"{% endif %}><img src="{{ card.image_url }}" alt="{{ card.name }}"></span>{% endif %}
   </div>
   <div>
-    <h1>{{ card.name }}</h1>
-    <p class="muted">
-      <span class="set-mark rarity-{{ card.rarity or 'unknown' }}"></span>{{ card.set_name }} (<span class="rarity-{{ card.rarity or 'unknown' }}">{{ card.set_code | upper }}</span>{% if card.collector_number %} #{{ card.collector_number }}{% endif %}){% if card.rarity %} · <span class="rarity-{{ card.rarity }}">{{ card.rarity | capitalize }}</span>{% endif %}
-      · <a href="https://scryfall.com/card/{{ card.scryfall_id }}" target="_blank" rel="noopener">Scryfall ↗</a>
-    </p>
+    {% if versions | length > 1 %}
+    <div class="panel">
+      <h2>Your versions <span class="muted">· {{ versions | length }}</span></h2>
+      <div class="versions-row">
+        {% for v in versions %}
+        <a class="version-card{{ ' current' if v.card.id == card.id }}" href="/cards/{{ v.card.id }}" title="{{ v.card.set_name }} ({{ v.card.set_code | upper }}{% if v.card.collector_number %} #{{ v.card.collector_number }}{% endif %})">
+          <span class="version-art{{ ' foil-art' if v.entry.is_foil }}">{% if v.card.image_url %}<img src="{{ v.card.image_url | replace('/normal/', '/small/') }}" alt="" loading="lazy">{% endif %}</span>
+          <span class="version-set">{{ set_icon(v.card) }} {{ v.card.set_code | upper }}</span>
+          <span class="version-price">{{ v.unit_price | eur }}</span>
+        </a>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
 
     <div class="panel">
       <h2>Price history</h2>
@@ -52,22 +74,45 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script>
   const history = {{ history | tojson }};
+  const canvas = document.getElementById("price-chart");
+  // A soft fill under each line, fading out downwards.
+  const fill = (colour) => (context) => {
+    const { ctx, chartArea } = context.chart;
+    if (!chartArea) return "transparent";
+    const gradient = ctx.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
+    gradient.addColorStop(0, colour + "55");
+    gradient.addColorStop(1, colour + "00");
+    return gradient;
+  };
   const series = [
-    { label: "Scryfall (non-foil)", data: history.scryfall, borderColor: "#5aa2ff" },
-    { label: "Scryfall (foil)", data: history.scryfall_foil, borderColor: "#e7b343" },
-    { label: "Cardmarket (from)", data: history.cardmarket, borderColor: "#3fb950" },
+    { label: "Scryfall (non-foil)", data: history.scryfall, colour: "#5aa2ff" },
+    { label: "Scryfall (foil)", data: history.scryfall_foil, colour: "#e7b343" },
+    { label: "Cardmarket (from)", data: history.cardmarket, colour: "#3fb950" },
   ].filter((s) => s.data.some((v) => v !== null));
-  new Chart(document.getElementById("price-chart"), {
+  new Chart(canvas, {
     type: "line",
-    data: { labels: history.labels, datasets: series.map((s) => ({ ...s, tension: 0.25, spanGaps: true })) },
+    data: {
+      labels: history.labels,
+      datasets: series.map((s) => ({
+        label: s.label, data: s.data, borderColor: s.colour, backgroundColor: fill(s.colour), fill: true,
+        tension: 0.3, spanGaps: true, borderWidth: 2.5, pointRadius: 0, pointHoverRadius: 5,
+        pointHoverBackgroundColor: s.colour, pointHoverBorderColor: "#0e0f13", pointHoverBorderWidth: 2,
+      })),
+    },
     options: {
       maintainAspectRatio: false,
       interaction: { mode: "index", intersect: false },
       scales: {
-        x: { ticks: { color: "#9599a8" }, grid: { color: "#2b2f39" } },
-        y: { ticks: { color: "#9599a8", callback: (v) => "€" + v }, grid: { color: "#2b2f39" } },
+        x: { ticks: { color: "#9599a8", maxTicksLimit: 8 }, grid: { display: false } },
+        y: { ticks: { color: "#9599a8", callback: (v) => "€" + v }, grid: { color: "rgba(255, 255, 255, .06)" }, border: { display: false } },
       },
-      plugins: { legend: { labels: { color: "#eceef3" } } },
+      plugins: {
+        legend: { labels: { color: "#eceef3", usePointStyle: true, pointStyle: "line" } },
+        tooltip: {
+          backgroundColor: "#16181e", borderColor: "#383d49", borderWidth: 1, padding: 10, titleColor: "#eceef3",
+          bodyColor: "#c3c7d1", callbacks: { label: (item) => ` ${item.dataset.label}: €${item.parsed.y.toFixed(2)}` },
+        },
+      },
     },
   });
 </script>

@@ -40,8 +40,12 @@ class CollectionEntry(SQLModel, table=True):
     # Copies from an import that wait for you to sort them into decks: the app does not hand
     # them out to decks on its own until you put them in a deck or let it decide.
     unsorted: int = 0
-    # What you paid per copy, in euro, when you filled it in (or the CSV had it).
+    # What you paid per copy, in euro, when you filled it in (or the CSV had it): the average when
+    # the copies were bought for different prices.
     purchase_price: float | None = None
+    # The price of every copy you know it of, as JSON ("[2.5, 1.8, 3.0]"), when they differ or some
+    # are not known; None: purchase_price goes for every copy.
+    purchase_prices: str | None = None
 
 
 class WishlistEntry(SQLModel, table=True):

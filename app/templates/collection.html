@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_colour_filter.html" import colour_filter, pips %}
+{% from "_colour_filter.html" import set_icon, colour_filter, pips %}
 {% from "_empty.html" import empty %}
 {% block title %}Collection · MTG Collection Manager{% endblock %}
 
@@ -100,14 +100,17 @@
   </div>
   <p id="collection-empty" class="muted" hidden>No cards match your search.</p>
   <table id="collection-table">
+    {# Fixed column widths: the browser does not have to measure thousands of rows to lay the table out. #}
+    <colgroup><col class="c-thumb"><col class="c-card"><col class="c-set"><col class="c-qty"><col class="c-price"><col class="c-total"><col class="c-paid"><col class="c-actions"></colgroup>
     <thead>
     <tr>
-      <th></th><th>Card</th><th>Set</th><th class="num">Qty</th>
+      <th></th><th>Card</th><th class="set-cell">Set</th><th class="num">Qty</th>
       <th class="num">Price</th><th class="num">Total</th><th class="num" title="What you paid per copy; click a field to fill it in">Paid</th><th></th>
     </tr>
     </thead>
+    {% filter squeeze %}
     {% for name, group in rows | groupby("card.name") %}
-    <tbody class="card-group" data-name="{{ name }}">
+    <tbody class="card-group" data-name="{{ name }}"{% if loop.index > 150 %} hidden{% endif %}>
     {% if group | length > 1 %}
     {% set first = group | selectattr("card.image_url") | first %}
     {% set prices = group | map(attribute="unit_price") | reject("none") | list %}
@@ -115,7 +118,7 @@
     {% for row in group %}{% set group_used.copies = group_used.copies + (usage.get(row.entry.id, []) | sum(attribute=1)) %}{% set group_used.new = group_used.new + waiting.get(row.entry.id, 0) %}{% endfor %}
     {% set group_qty = group | map(attribute="entry.quantity") | sum %}
     <tr class="group-row">
-      <td>{% if first %}<img class="thumb" src="{{ first.card.image_url }}" alt="" loading="lazy">{% endif %}</td>
+      <td>{% if first %}<img class="thumb" src="{{ first.card.image_url | replace('/normal/', '/small/') }}" alt="" loading="lazy">{% endif %}</td>
       <td>
         <button type="button" class="link group-toggle" aria-expanded="false" title="Show or hide the versions of {{ name }}">
           <span class="group-arrow">▸</span> <strong>{{ name }}</strong></button>
@@ -124,8 +127,7 @@
         {% if group_used.copies %}<span class="badge group-in-decks">{{ group_used.copies }} in decks · {{ group_qty - group_used.copies }} free</span>{% endif %}
         {% if group_used.new %}<span class="badge new">{{ group_used.new }} new</span>{% endif %}
       </td>
-      {% set set_count = group | map(attribute="card.set_code") | unique | list | length %}
-      <td class="muted">{{ set_count }} set{{ 's' if set_count != 1 }}</td>
+      <td class="set-cell">{% for code, printings in group | groupby("card.set_code") %}{{ set_icon(printings[0].card) }}{% endfor %}</td>
       <td class="num group-qty">{{ group_qty }}</td>
       <td class="num muted">{% if prices %}{{ prices | min | eur }}{% if prices | max != prices | min %} – {{ prices | max | eur }}{% endif %}{% endif %}</td>
       <td class="num group-total"></td>
@@ -141,7 +143,7 @@
     <tr data-search="{{ row.card.name }} {{ row.card.set_name }} {{ row.card.set_code }} #{{ row.card.collector_number or '' }}{% for deck, count in used %} {{ deck.name }}{% endfor %}{% for deck, count, _ in needs %} {{ deck.name }}{% endfor %}" data-foil="{{ 1 if row.entry.is_foil else 0 }}" data-qty="{{ row.entry.quantity }}" data-used="{{ in_decks }}" data-wanted="{{ needs | length }}" data-waiting="{{ new }}" data-colors="{{ '?' if row.card.colors is none else row.card.colors }}" data-identity="{{ '?' if row.card.identity is none else row.card.identity }}"
         data-price="{{ row.unit_price if row.unit_price is not none else '' }}" data-basic="{{ 1 if row.card.name in basic_lands else 0 }}"
         class="{{ 'version' if group | length > 1 }}">
-      <td>{% if row.card.image_url %}{% if row.entry.is_foil %}<span class="foil-art thumb-foil">{% endif %}<img class="thumb" src="{{ row.card.image_url }}" alt="" loading="lazy">{% if row.entry.is_foil %}</span>{% endif %}{% endif %}</td>
+      <td>{% if row.card.image_url %}{% if row.entry.is_foil %}<span class="foil-art thumb-foil">{% endif %}<img class="thumb" src="{{ row.card.image_url | replace('/normal/', '/small/') }}" alt="" loading="lazy">{% if row.entry.is_foil %}</span>{% endif %}{% endif %}</td>
       <td>
         <a href="/cards/{{ row.card.id }}">{{ row.card.name }}</a>
         {{ pips(row.card.colors) }}
@@ -190,36 +192,20 @@
         </details>
         {% endif %}
       </td>
-      <td class="muted"><span class="set-mark rarity-{{ row.card.rarity or 'unknown' }}" title="{{ (row.card.rarity or '') | capitalize }}"></span>{{ row.card.set_name }} (<span class="rarity-{{ row.card.rarity or 'unknown' }}">{{ row.card.set_code | upper }}</span>{% if row.card.collector_number %} #{{ row.card.collector_number }}{% endif %})</td>
-      <td class="num">
-        <form class="inline qty-form" method="post" action="/collection/{{ row.entry.id }}/quantity">
-          <input class="qty" name="quantity" type="number" min="1" step="1" value="{{ row.entry.quantity }}"
-                 data-entry="{{ row.entry.id }}" aria-label="Quantity of {{ row.card.name }}">
-        </form>
-        <div class="muted small view-copies" hidden></div>
-      </td>
+      <td class="set-cell">{{ set_icon(row.card) }}</td>
+      <td class="num"><input class="qty" name="quantity" type="number" min="1" step="1" value="{{ row.entry.quantity }}" data-entry="{{ row.entry.id }}" aria-label="Quantity of {{ row.card.name }}"></td>
       <td class="num">{{ row.unit_price | eur }}{% if row.price_from_set %} <span class="badge est" title="This printing has no price. Shown is the cheapest printing with a price: {{ row.price_from_set | upper }}.">≈ {{ row.price_from_set | upper }}</span>{% endif %}</td>
       <td class="num row-total" data-value="{{ row.total_price or 0 }}">{{ row.total_price | eur }}</td>
-      <td class="num">
-        <form class="inline paid-form" method="post" action="/collection/{{ row.entry.id }}/paid">
-          <input class="paid" name="purchase_price" inputmode="decimal" placeholder="–" data-entry="{{ row.entry.id }}"
-                 value="{{ '%.2f' | format(row.entry.purchase_price) if row.entry.purchase_price is not none else '' }}"
-                 aria-label="What you paid per copy of {{ row.card.name }}" title="What you paid per copy">
-        </form>
-        <div class="gain small {{ 'up' if (row.gain or 0) >= 0 else 'down' }}">{% if row.gain is not none %}{{ '+' if row.gain >= 0 else '−' }}{{ row.gain | abs | eur }}{% endif %}</div>
-      </td>
-      <td>
-        <div class="actions">
-          <form class="inline" method="post" action="/collection/{{ row.entry.id }}/delete" data-confirm="Click again to remove">
-            <button class="secondary small">Remove</button>
-          </form>
-        </div>
-      </td>
+      {% set prices = row.paid_prices %}{% set varies = prices | unique | list | length > 1 or (prices and prices | length < row.entry.quantity) %}
+      <td class="num paid-cell"><input class="paid{{ ' varies' if varies }}" name="purchase_price" inputmode="decimal" placeholder="–" data-entry="{{ row.entry.id }}" data-qty="{{ row.entry.quantity }}" data-prices="{{ prices | tojson | forceescape }}" value="{{ '%.2f' | format(row.entry.purchase_price) if row.entry.purchase_price is not none else '' }}" aria-label="What you paid per copy of {{ row.card.name }}"{% if varies %} title="Average of {{ prices | length }}: {% for p in prices %}€{{ '%.2f' | format(p) }}{{ ', ' if not loop.last }}{% endfor %}"{% endif %}>{% if row.entry.quantity > 1 %}<button type="button" class="link per-copy" title="Fill in what you paid for each copy">{{ ('avg of %d' % prices | length) if varies else 'per copy' }}</button>{% endif %}{% if row.gain is not none %}<div class="gain small {{ 'up' if row.gain >= 0 else 'down' }}">{{ '+' if row.gain >= 0 else '−' }}{{ row.gain | abs | eur }}</div>{% endif %}</td>
+      <td><form class="inline" method="post" action="/collection/{{ row.entry.id }}/delete" data-confirm="Click again to remove"><button class="secondary small">Remove</button></form></td>
     </tr>
     {% endfor %}
     </tbody>
     {% endfor %}
+    {% endfilter %}
   </table>
+  <div id="collection-more" class="more-row" hidden><button type="button" class="secondary">Show more</button></div>
   {% else %}
   {{ empty("G", "Your collection is empty", "Add a card by name, or import the CSV export of Archidekt or Moxfield. Their value shows up on the dashboard every day.", "#add", "Add or import cards") }}
   {% endif %}
@@ -238,7 +224,9 @@
     const table = document.getElementById("collection-table");
     // Lower-case and strip accents, so "lim-dul" finds "Lim-Dûl's Vault".
     const fold = (text) => text.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
-    const euro = (value) => (value === null ? "–" : "€" + value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+    // One formatter for every amount: making a new one per row is slow with thousands of rows.
+    const money = new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const euro = (value) => (value === null ? "–" : "€" + money.format(value));
     const rows = [...table.querySelectorAll("tr[data-search]")].map((row) => ({
       row,
       text: fold(row.dataset.search),
@@ -252,10 +240,19 @@
       price: row.dataset.price === "" ? null : Number(row.dataset.price),
       basic: row.dataset.basic === "1",  // basic lands: decks count them by number, not from the collection
       group: row.closest("tbody"),
+      totalCell: row.querySelector(".row-total"),
+      needed: row.querySelector("details.wanted-by"),
+      note: null,  // "3 free" under the quantity, made when it is needed
+      shownTotal: null,
     }));
-    const groups = [...table.tBodies].map((body) => ({
+    // A long collection: the first cards are shown, the next ones as you scroll down (or click).
+    const PAGE = 150;
+    let limit = PAGE;
+    const more = document.getElementById("collection-more");
+    const groups = [...table.tBodies].map((body) => (body.group = {
       body,
       header: body.querySelector("tr.group-row"),
+      parts: null,  // the bits of the header line the script fills in, looked up once
       items: rows.filter((item) => item.group === body),
       open: false,
     }));
@@ -267,7 +264,7 @@
     } catch (error) {}
     if (!sortBy.value) sortBy.value = "name";
 
-    const colours = colourFilter("collection", "collection-colors", "any", () => filter());
+    const colours = colourFilter("collection", "collection-colors", "any", () => { limit = PAGE; filter(); });
     const show = document.getElementById("collection-show");
     try { show.value = localStorage.getItem("collection-show") || "all"; } catch (error) {}
     if (!show.value) show.value = "all";
@@ -294,16 +291,23 @@
         // Another view than "All cards": the row says how many of its copies are in view, and the
         // total is what those copies are worth.
         const partial = show.value !== "all" && copies !== item.quantity;
-        const note = item.row.querySelector(".view-copies");
-        note.hidden = !partial;
-        const label = { free: "free", wanted: "free", used: "in decks", sort: "new", spare: "spare" }[show.value];
-        note.textContent = partial ? `${copies} ${label}` : "";
-        const totalCell = item.row.querySelector(".row-total");
-        totalCell.textContent = item.price === null ? "–" : euro((partial ? copies : item.quantity) * item.price);
-        totalCell.title = partial ? `What the ${copies} cop${copies === 1 ? "y" : "ies"} in view are worth` : "";
+        if (partial && !item.note) {
+          item.note = Object.assign(document.createElement("div"), { className: "muted small view-copies" });
+          item.row.querySelector("input.qty").after(item.note);
+        }
+        if (item.note) {
+          const label = { free: "free", wanted: "free", used: "in decks", sort: "new", spare: "spare" }[show.value];
+          setIf(item.note, "hidden", !partial);
+          setIf(item.note, "textContent", partial ? `${copies} ${label}` : "");
+        }
+        const total = item.price === null ? "–" : euro((partial ? copies : item.quantity) * item.price);
+        if (total !== item.shownTotal) {
+          item.shownTotal = total;
+          item.totalCell.textContent = total;
+          item.totalCell.title = partial ? `What the ${copies} cop${copies === 1 ? "y" : "ies"} in view are worth` : "";
+        }
         // Sorting: open the list of decks that need the card, with its "Put in this deck" buttons.
-        const needed = item.row.querySelector("details.wanted-by");
-        if (needed && show.value === "sort" && match) needed.open = true;
+        if (item.needed && show.value === "sort" && match) item.needed.open = true;
         if (match) {
           shown += 1;
           cards += copies;
@@ -316,24 +320,29 @@
         const matching = group.items.filter((item) => item.match);
         // What the copies in this view are worth, e.g. only the spare ones.
         group.value = matching.reduce((sum, item) => sum + item.copies * (item.price ?? 0), 0);
-        group.body.hidden = matching.length === 0;
+        group.matching = matching.length > 0;
         const folded = grouping.checked && group.header !== null;
-        if (group.header) {
-          group.header.hidden = !grouping.checked;
+        if (group.header && group.matching) {
+          const h = group.parts ||= {
+            toggle: group.header.querySelector(".group-toggle"), arrow: group.header.querySelector(".group-arrow"),
+            versions: group.header.querySelector(".group-versions"), qty: group.header.querySelector(".group-qty"),
+            total: group.header.querySelector(".group-total"),
+          };
           const open = group.open || opened;
-          group.header.querySelector(".group-toggle").setAttribute("aria-expanded", String(open));
-          group.header.querySelector(".group-arrow").textContent = open ? "▾" : "▸";
           const total = group.items.length;
-          group.header.querySelector(".group-versions").textContent =
-            matching.length === total ? `${total} versions` : `${matching.length} of ${total} versions`;
-          group.header.querySelector(".group-qty").textContent = matching.reduce((sum, item) => sum + item.copies, 0);
-          group.header.querySelector(".group-total").textContent = euro(group.value);
+          setIf(group.header, "hidden", !grouping.checked);
+          h.toggle.setAttribute("aria-expanded", String(open));
+          setIf(h.arrow, "textContent", open ? "▾" : "▸");
+          setIf(h.versions, "textContent", matching.length === total ? `${total} versions` : `${matching.length} of ${total} versions`);
+          setIf(h.qty, "textContent", String(matching.reduce((sum, item) => sum + item.copies, 0)));
+          setIf(h.total, "textContent", euro(group.value));
         }
         for (const item of group.items) {
-          item.row.hidden = !item.match || (folded && !(group.open || opened));
+          setIf(item.row, "hidden", !item.match || (folded && !(group.open || opened)));
         }
       }
       if (sortBy.value === "value") sortGroups();
+      applyLimit();
       const filtered = words.length > 0 || foilOnly.checked || show.value !== "all" || colours.active();
       const what = {
         free: "free cards", used: "cards in decks", wanted: "free cards a deck needs", sort: "new cards to sort",
@@ -350,6 +359,37 @@
       history.replaceState(null, "", url);
     }
 
+    // Change the page only where something changes: with thousands of cards that is what keeps it quick.
+    function setIf(element, key, value) {
+      if (element[key] !== value) element[key] = value;
+    }
+
+    // Only the first `limit` cards that match are laid out; the rest wait until you scroll to them.
+    function applyLimit() {
+      let visible = 0;
+      for (const body of table.tBodies) {
+        const group = body.group;
+        if (!group.matching) { setIf(body, "hidden", true); continue; }
+        visible += 1;
+        setIf(body, "hidden", visible > limit);
+      }
+      more.hidden = visible <= limit;
+      if (!more.hidden) {
+        const left = visible - limit;
+        more.firstElementChild.textContent = `Show ${Math.min(PAGE, left)} more · ${left} cards to go`;
+      }
+    }
+    function showMore() {
+      limit += PAGE;
+      applyLimit();
+    }
+    more.firstElementChild.addEventListener("click", showMore);
+    if ("IntersectionObserver" in window) {
+      new IntersectionObserver((entries) => {
+        if (entries.some((entry) => entry.isIntersecting) && !more.hidden) showMore();
+      }, { rootMargin: "600px" }).observe(more);
+    }
+
     // Sort by name, or by what the copies in view are worth (a card with several versions moves as one).
     function sortGroups() {
       const ordered = [...groups].sort((a, b) =>
@@ -357,10 +397,12 @@
           ? (b.value ?? 0) - (a.value ?? 0) || a.body.dataset.name.localeCompare(b.body.dataset.name)
           : a.body.dataset.name.localeCompare(b.body.dataset.name));
       table.append(...ordered.map((group) => group.body));
+      applyLimit();  // the first cards in the new order are the ones in view
     }
 
-    search.addEventListener("input", filter);
-    foilOnly.addEventListener("change", filter);
+    const restart = () => { limit = PAGE; filter(); };
+    search.addEventListener("input", restart);
+    foilOnly.addEventListener("change", restart);
     grouping.addEventListener("change", () => {
       try { localStorage.setItem("collection-group", grouping.checked ? "on" : "off"); } catch (error) {}
       filter();
@@ -388,10 +430,11 @@
     }
     show.addEventListener("change", () => {
       try { localStorage.setItem("collection-show", show.value); } catch (error) {}
+      limit = PAGE;
       filter();
     });
     filter();
-    sortGroups();
+    if (sortBy.value === "value") sortGroups();  // the page comes sorted by name already
 
     // Change a quantity in place: saved through the API, without reloading the page.
     const grandTotal = document.getElementById("collection-total");
@@ -421,6 +464,15 @@
         grandTotal.textContent = euro(Number(grandTotal.dataset.value));
         item.quantity = saved.quantity;
         input.value = saved.quantity;
+        // The prices per copy follow the number of copies.
+        const paid = item.row.querySelector("input.paid");
+        paid.dataset.qty = saved.quantity;
+        if (saved.quantity > 1 && !item.row.querySelector(".per-copy")) {
+          paid.after(Object.assign(document.createElement("button"), {
+            type: "button", className: "link per-copy", textContent: "per copy", title: "Fill in what you paid for each copy",
+          }));
+        }
+        showPaid(paid, saved);
         input.classList.remove("failed");
         input.classList.add("saved");
         setTimeout(() => input.classList.remove("saved"), 1200);
@@ -470,13 +522,7 @@
           body: JSON.stringify({ purchase_price: price }),
         });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const saved = await response.json();
-        input.value = saved.purchase_price === null ? "" : saved.purchase_price.toFixed(2);
-        input.defaultValue = input.value;
-        const gain = input.closest("td").querySelector(".gain");
-        gain.textContent = saved.gain === null ? "" : (saved.gain >= 0 ? "+" : "−") + euro(Math.abs(saved.gain));
-        gain.classList.toggle("up", (saved.gain ?? 0) >= 0);
-        gain.classList.toggle("down", (saved.gain ?? 0) < 0);
+        showPaid(input, await response.json());
         input.classList.remove("failed");
         input.classList.add("saved");
         setTimeout(() => input.classList.remove("saved"), 1200);
@@ -493,10 +539,101 @@
       if (event.target.matches("input.foil")) saveFoil(event.target);
       if (event.target.matches("input.paid")) savePaid(event.target);
     });
-    table.addEventListener("submit", (event) => {
-      if (!event.target.matches(".qty-form, .paid-form")) return;
-      event.preventDefault();  // Enter in the field: already handled by the change event
-      event.target.querySelector("input").blur();
+    // What you paid for each copy: a small editor under the field, one line per copy.
+    let priceEditor = null;
+    function closePriceEditor() {
+      if (priceEditor) priceEditor.remove();
+      priceEditor = null;
+    }
+    function openPriceEditor(input) {
+      closePriceEditor();
+      const copies = Number(input.dataset.qty);
+      let prices = [];
+      try { prices = JSON.parse(input.dataset.prices || "[]"); } catch (error) {}
+      const box = Object.assign(document.createElement("div"), { className: "price-editor" });
+      const title = Object.assign(document.createElement("div"), { className: "price-editor-title", textContent: "What you paid per copy" });
+      const list = Object.assign(document.createElement("div"), { className: "price-editor-list" });
+      const fields = [];
+      for (let i = 0; i < copies; i += 1) {
+        const field = Object.assign(document.createElement("input"), {
+          inputMode: "decimal", placeholder: "–", value: prices[i] === undefined ? "" : prices[i].toFixed(2),
+        });
+        field.setAttribute("aria-label", `Copy ${i + 1}`);
+        const label = Object.assign(document.createElement("label"), { textContent: `Copy ${i + 1}` });
+        label.append(field);
+        list.append(label);
+        fields.push(field);
+      }
+      const total = Object.assign(document.createElement("div"), { className: "muted small price-editor-total" });
+      const parse = (text) => {
+        const clean = text.trim().replace("€", "").replace(",", ".");
+        return clean === "" ? null : Number(clean);
+      };
+      const update = () => {
+        const known = fields.map((f) => parse(f.value)).filter((v) => v !== null && Number.isFinite(v));
+        total.textContent = known.length ? `Paid ${euro(known.reduce((a, b) => a + b, 0))} for ${known.length} of ${copies}` : "";
+      };
+      fields.forEach((f) => f.addEventListener("input", update));
+      update();
+      const save = Object.assign(document.createElement("button"), { type: "button", className: "small", textContent: "Save" });
+      const cancel = Object.assign(document.createElement("button"), { type: "button", className: "small secondary", textContent: "Cancel" });
+      const actions = Object.assign(document.createElement("div"), { className: "price-editor-actions" });
+      actions.append(cancel, save);
+      box.append(title, list, total, actions);
+      cancel.addEventListener("click", closePriceEditor);
+      save.addEventListener("click", async () => {
+        const values = fields.map((f) => parse(f.value));
+        if (values.some((v) => v !== null && (!Number.isFinite(v) || v < 0))) {
+          box.classList.add("failed");
+          return;
+        }
+        save.disabled = true;
+        try {
+          const response = await fetch(`/api/collection/${input.dataset.entry}`, {
+            method: "PATCH", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ purchase_prices: values }),
+          });
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          showPaid(input, await response.json());
+          closePriceEditor();
+        } catch (error) {
+          box.classList.add("failed");
+          save.disabled = false;
+        }
+      });
+      input.closest("td").append(box);
+      priceEditor = box;
+      fields[0]?.focus();
+    }
+    // After saving: the average in the field, the prices behind it, and the gain.
+    function showPaid(input, saved) {
+      const prices = saved.purchase_prices || [];
+      const varies = new Set(prices).size > 1 || (prices.length > 0 && prices.length < saved.quantity);
+      input.value = saved.purchase_price === null ? "" : saved.purchase_price.toFixed(2);
+      input.defaultValue = input.value;
+      input.dataset.prices = JSON.stringify(prices);
+      input.classList.toggle("varies", varies);
+      input.title = varies ? `Average of ${prices.length}: ${prices.map((p) => "€" + p.toFixed(2)).join(", ")}` : "";
+      const button = input.closest("td").querySelector(".per-copy");
+      if (button) button.textContent = varies ? `avg of ${prices.length}` : "per copy";
+      let gain = input.closest("td").querySelector(".gain");
+      if (!gain) {
+        gain = Object.assign(document.createElement("div"), { className: "gain small" });
+        input.closest("td").append(gain);
+      }
+      gain.textContent = saved.gain === null ? "" : (saved.gain >= 0 ? "+" : "−") + euro(Math.abs(saved.gain));
+      gain.classList.toggle("up", (saved.gain ?? 0) >= 0);
+      gain.classList.toggle("down", (saved.gain ?? 0) < 0);
+    }
+    table.addEventListener("click", (event) => {
+      const button = event.target.closest(".per-copy");
+      if (button) openPriceEditor(button.closest("td").querySelector("input.paid"));
+    });
+    document.addEventListener("keydown", (event) => { if (event.key === "Escape") closePriceEditor(); });
+
+    table.addEventListener("keydown", (event) => {
+      // Enter in a field saves it (through the change event).
+      if (event.key === "Enter" && event.target.matches("input.qty, input.paid")) event.target.blur();
     });
   }
 </script>

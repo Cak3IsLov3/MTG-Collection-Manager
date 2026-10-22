@@ -200,7 +200,7 @@ def test_add_exact_printing_by_set_and_collector_number(client):
     assert client.post("/api/collection", json={"set_code": "cmm", "collector_number": "999"}).status_code == 404
 
     form = client.post("/collection/add", data={"set_code": "cmm", "collector_number": "#410", "quantity": "1"})
-    assert "Added Sol Ring (CMM #410)" in form.text and "CMM</span> #410)" in client.get("/collection").text
+    assert "Added Sol Ring (CMM #410)" in form.text and "(CMM #410)" in client.get("/collection").text
     assert "Fill in the set" in client.post("/collection/add", data={"name": "Sol Ring", "collector_number": "410"}).text
 
 

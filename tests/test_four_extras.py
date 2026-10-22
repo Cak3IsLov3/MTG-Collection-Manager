@@ -201,3 +201,32 @@ async def test_price_drop_alerts(client, session):
     assert len(session.exec(select(PriceDropAlert)).all()) == 1
     assert "data-tab=\"drops\"" in client.get("/").text and "sent to Discord" in client.get("/").text
     assert "% cheaper" in client.get("/wishlist").text
+
+
+def test_a_price_for_every_copy(client):
+    # Four copies bought apart: every copy keeps its own price.
+    first = client.post("/api/collection", json={"name": "Sol Ring", "purchase_price": 1.00}).json()
+    for price in (2.00, 3.00):
+        client.post("/api/collection", json={"name": "Sol Ring", "purchase_price": price})
+    item = client.post("/api/collection", json={"name": "Sol Ring"}).json()  # the fourth: price not known
+    assert item["id"] == first["id"] and item["quantity"] == 4
+    assert item["purchase_prices"] == [1.0, 2.0, 3.0] and item["purchase_price"] == 2.0
+    unit = item["unit_price"]
+    assert item["paid_total"] == 6.0 and item["gain"] == round(unit * 3 - 6.0, 2)  # only the copies with a price
+
+    # Fill them in per copy (the last one too).
+    saved = client.patch(f"/api/collection/{item['id']}", json={"purchase_prices": [1.0, 2.0, 3.0, 4.5]}).json()
+    assert saved["purchase_prices"] == [1.0, 2.0, 3.0, 4.5] and saved["purchase_price"] == 2.62 and saved["paid_total"] == 10.5
+    assert client.patch(f"/api/collection/{item['id']}", json={"purchase_prices": [1, 2, 3, 4, 5]}).status_code == 400
+    assert client.patch(f"/api/collection/{item['id']}", json={"purchase_prices": [-1]}).status_code == 400
+
+    page = client.get("/collection").text
+    assert 'class="paid varies"' in page and "avg of 4" in page and "Average of 4: €1.00, €2.00, €3.00, €4.50" in page
+
+    # One copy less: the price of the last one goes too.
+    fewer = client.patch(f"/api/collection/{item['id']}", json={"quantity": 3}).json()
+    assert fewer["purchase_prices"] == [1.0, 2.0, 3.0]
+    # One price for all: the list is gone.
+    one = client.patch(f"/api/collection/{item['id']}", json={"purchase_price": 2.5}).json()
+    assert one["purchase_prices"] == [2.5, 2.5, 2.5] and one["paid_total"] == 7.5
+    assert 'class="paid varies"' not in client.get("/collection").text

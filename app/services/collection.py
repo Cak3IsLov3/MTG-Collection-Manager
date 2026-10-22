@@ -1,5 +1,6 @@
 """HAVE: the collection."""
 
+import json
 import unicodedata
 from dataclasses import dataclass, field
 
@@ -24,17 +25,26 @@ class CollectionRow:
         return None if self.unit_price is None else round(self.unit_price * self.entry.quantity, 2)
 
     @property
+    def paid_prices(self) -> list[float]:
+        """What you paid for each copy you know it of."""
+        return paid_prices(self.entry)
+
+    @property
+    def paid_copies(self) -> int:
+        return len(self.paid_prices)
+
+    @property
     def paid_total(self) -> float | None:
-        """What you paid for all copies, when you filled in a purchase price."""
-        paid = self.entry.purchase_price
-        return None if paid is None else round(paid * self.entry.quantity, 2)
+        """What you paid for the copies you filled in a purchase price for."""
+        prices = self.paid_prices
+        return round(sum(prices), 2) if prices else None
 
     @property
     def gain(self) -> float | None:
-        """What the copies are worth now minus what you paid for them."""
-        if self.paid_total is None or self.total_price is None:
+        """What those copies are worth now minus what you paid for them."""
+        if self.paid_total is None or self.unit_price is None:
             return None
-        return round(self.total_price - self.paid_total, 2)
+        return round(self.unit_price * self.paid_copies - self.paid_total, 2)
 
 
 @dataclass
@@ -48,16 +58,41 @@ class ImportResult:
     new_copies: int = 0
 
 
+def paid_prices(entry: CollectionEntry) -> list[float]:
+    """The price of every copy of an entry that you know it of (at most one per copy)."""
+    if entry.purchase_prices:
+        try:
+            prices = [round(float(p), 2) for p in json.loads(entry.purchase_prices)]
+        except (ValueError, TypeError):
+            prices = []
+        return prices[: entry.quantity]
+    if entry.purchase_price is None:
+        return []
+    return [entry.purchase_price] * entry.quantity
+
+
+def _store_prices(entry: CollectionEntry, prices: list[float], copies: int) -> None:
+    """Keep these prices for the entry (with `copies` copies): one price for all copies is kept as
+    just that price, anything else as the list, with the average as the purchase price."""
+    prices = [round(p, 2) for p in prices][:copies]
+    if not prices:
+        entry.purchase_price, entry.purchase_prices = None, None
+    elif len(prices) == copies and len(set(prices)) == 1:
+        entry.purchase_price, entry.purchase_prices = prices[0], None
+    else:
+        entry.purchase_price = round(sum(prices) / len(prices), 2)
+        entry.purchase_prices = json.dumps(prices)
+
+
 def _add_paid(entry: CollectionEntry, quantity: int, price: float | None) -> None:
-    """New copies bought for `price` each: the entry keeps the average price paid. When the copies
-    you already had have no price, the average is not known, so it stays empty."""
+    """New copies bought for `price` each (call before adding them to the quantity): every copy keeps
+    its own price, so copies bought apart for different prices are all known."""
     if price is None:
+        if entry.purchase_prices is None and entry.purchase_price is not None:
+            # The copies you had have a price, the new ones not: keep the ones you know.
+            _store_prices(entry, paid_prices(entry), entry.quantity + quantity)
         return
-    if entry.quantity == 0:
-        entry.purchase_price = round(price, 2)
-    elif entry.purchase_price is not None:
-        total = entry.purchase_price * entry.quantity + price * quantity
-        entry.purchase_price = round(total / (entry.quantity + quantity), 2)
+    _store_prices(entry, paid_prices(entry) + [price] * quantity, entry.quantity + quantity)
 
 
 def add_to_collection(
@@ -81,6 +116,8 @@ def set_quantity(session: Session, entry: CollectionEntry, quantity: int) -> Col
     """Change how many copies of a printing are in the collection (at least one; delete to remove)."""
     if quantity < 1:
         raise ValueError("Quantity must be at least 1")
+    if entry.purchase_prices:  # fewer copies: the prices of the last ones go too
+        _store_prices(entry, paid_prices(entry), quantity)
     entry.quantity = quantity
     entry.unsorted = min(entry.unsorted, quantity)
     session.add(entry)
@@ -93,6 +130,19 @@ def set_purchase_price(session: Session, entry: CollectionEntry, price: float | 
     if price is not None and price < 0:
         raise ValueError("A purchase price cannot be negative")
     entry.purchase_price = None if price is None else round(price, 2)
+    entry.purchase_prices = None  # one price for every copy
+    session.add(entry)
+    session.flush()
+    return entry
+
+
+def set_purchase_prices(session: Session, entry: CollectionEntry, prices: list[float | None]) -> CollectionEntry:
+    """What you paid for each copy (None: not known), at most one price per copy."""
+    if len(prices) > entry.quantity:
+        raise ValueError(f"There are only {entry.quantity} copies")
+    if any(p is not None and p < 0 for p in prices):
+        raise ValueError("A purchase price cannot be negative")
+    _store_prices(entry, [p for p in prices if p is not None], entry.quantity)
     session.add(entry)
     session.flush()
     return entry
@@ -121,8 +171,8 @@ def purchase_summary(rows: list[CollectionRow]) -> PurchaseSummary:
         if row.paid_total is None or row.total_price is None:
             continue
         summary.paid += row.paid_total
-        summary.worth += row.total_price
-        summary.copies += row.entry.quantity
+        summary.worth += row.unit_price * row.paid_copies
+        summary.copies += row.paid_copies
     summary.paid, summary.worth = round(summary.paid, 2), round(summary.worth, 2)
     return summary
 
@@ -145,11 +195,8 @@ def set_foil(session: Session, entry: CollectionEntry, is_foil: bool) -> Collect
         session.add(entry)
         session.flush()
         return entry
-    # A known purchase price wins over none; two known prices are averaged.
-    if other.purchase_price is None:
-        other.purchase_price = entry.purchase_price
-    elif entry.purchase_price is not None:
-        _add_paid(other, entry.quantity, entry.purchase_price)
+    # Both keep the prices of their copies.
+    _store_prices(other, paid_prices(other) + paid_prices(entry), other.quantity + entry.quantity)
     other.quantity += entry.quantity
     other.unsorted += entry.unsorted
     session.add(other)
@@ -328,11 +375,16 @@ async def import_rows(
         seen.add(entry.id)
         result.imported_rows += 1
         result.imported_cards += row.quantity
-    # Copies the import brought in wait for you to sort them into decks.
+    # Only the latest import is new: copies that still waited from an earlier import are shared out
+    # over the decks as usual now, and the copies this import brought in wait for you to sort them.
+    if seen:
+        for entry in session.exec(select(CollectionEntry).where(CollectionEntry.unsorted > 0)).all():
+            entry.unsorted = 0
+            session.add(entry)
     for entry_id in seen:
         entry = session.get(CollectionEntry, entry_id)
         added = entry.quantity - before[entry_id]
-        entry.unsorted = min(entry.quantity, max(0, entry.unsorted + max(0, added)))
+        entry.unsorted = min(entry.quantity, max(0, added))
         result.new_copies += max(0, added)
         session.add(entry)
     if replace:

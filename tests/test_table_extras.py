@@ -149,7 +149,7 @@ def test_curve_in_colours(client):
 def test_rarity_and_bracket_colours(client):
     client.post("/api/collection", json={"name": "Sol Ring", "set_code": "cmm"})
     page = client.get("/collection").text
-    assert 'class="set-mark rarity-uncommon"' in page and '<span class="rarity-uncommon">CMM</span>' in page
+    assert 'class="set-icon rarity-uncommon"' in page and '/set-icons/cmm.svg' in page
     client.post("/api/decks", json={"name": "Ramp", "decklist": "1 Sol Ring", "bracket": 4})
     assert 'class="badge bracket bracket-4"' in client.get("/deck").text
 
@@ -231,3 +231,33 @@ def test_dashboard_banner_card_wall_and_icons(client):
     assert 'class="panel card-wall-panel"' in page and 'data-wall-card="Sol Ring"' in page
     assert 'class="wall-card missing" data-wall-card="Black Lotus"' in page
     assert "🏆" not in client.get("/games").text
+
+
+def test_long_collection_shows_its_cards_in_pages(client, session):
+    from app.models import Card, CollectionEntry
+
+    for n in range(160):
+        card = Card(name=f"Card {n:03d}", set_code="tst", set_name="Test", scryfall_id=f"id-page-{n}", colors="", identity="")
+        session.add(card)
+        session.flush()
+        session.add(CollectionEntry(card_id=card.id, quantity=1))
+    session.commit()
+    page = client.get("/collection").text
+    assert 'id="collection-more"' in page and 'class="c-thumb"' in page
+    assert page.count('class="card-group"') == 160
+    assert page.count(' hidden>\n<tr') + page.count('" hidden>') >= 10  # the cards after the first 150 wait
+    assert '<i class="mana mana-C"' in page and "<img class=\"mana\"" not in page
+    assert "\n      <td" not in page.split('<tbody class="card-group"', 1)[1]  # no template indentation in the rows
+
+
+def test_set_symbols_card_page_and_deck_glow(client):
+    svg = client.get("/set-icons/cmm.svg")
+    assert svg.status_code == 200 and svg.headers["content-type"].startswith("image/svg+xml") and b"<svg" in svg.content
+    assert client.get("/set-icons/nope.svg").status_code == 404
+    first = client.post("/api/collection", json={"name": "Sol Ring", "set_code": "cmm"}).json()
+    client.post("/api/collection", json={"set_code": "cmm", "collector_number": "410"})
+    page = client.get(f"/cards/{first['card']['id']}").text
+    assert 'class="card-banner with-art"' in page and "--art: url(" in page
+    assert page.count('class="version-card') == 2 and 'class="version-card current"' in page
+    client.post("/api/decks", json={"name": "Ramp", "decklist": "1 Sol Ring\n1 Lim-Dûl's Vault"})
+    assert "--deck-colours: linear-gradient(180deg," in client.get("/deck").text

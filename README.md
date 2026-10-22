@@ -18,7 +18,7 @@ price.
 
 | Collection: add by name or card number, edit quantities, tick foil | Saved decks with their commander, colours, games played and value |
 | --- | --- |
-| ![The collection: your cards, with adding and importing in their own tab](docs/collection.jpg) | ![Saved decks with their commander, colours, bracket, progress, value and how often they were played](docs/decks.jpg) |
+| ![The collection: your cards with the symbol of their set in the colour of their rarity, with adding and importing in their own tab](docs/collection.jpg) | ![Saved decks, each with a stripe and a ring in its colours, with their commander, bracket, progress, value and how often they were played](docs/decks.jpg) |
 
 | Search everything (press `/`): cards, decks and wishlist | Point at a card name to see the card |
 | --- | --- |
@@ -78,7 +78,7 @@ Press **▶ Play** on a deck and the stream screen opens with every token that d
 
 ![Only the free copies: a card with copies in decks shows how many of its copies are free, and the total is what those are worth](docs/collection-free.jpg)
 
-![What you paid per card, filled in right in the list, with what each card gained or lost since and the total for all of them](docs/collection-paid.jpg)
+![What you paid per card, filled in right in the list, or per copy when you bought them apart, with what each card gained or lost since and the total for all of them](docs/collection-paid.jpg)
 
 ![Printings without a price of their own borrow one from another printing, marked ≈ SET (Dragon Egg and Fellwar Stone)](docs/collection-borrowed.jpg)
 
@@ -162,7 +162,7 @@ Press **▶ Play** on a deck and the stream screen opens with every token that d
 
 <sub>Destructive buttons use a two-click confirmation: the first click turns the button red ("Click again to delete"), a second click within four seconds confirms.</sub>
 
-![Card detail page with price history chart](docs/card.jpg)
+![A card page: its art as a banner, the versions you own and the price history](docs/card.jpg)
 
 <sub>Screenshots use demo data: real cards and current prices, with a generated price history.</sub>
 
@@ -171,7 +171,7 @@ Press **▶ Play** on a deck and the stream screen opens with every token that d
 **Collection (HAVE)**
 - Add cards by name (optionally a specific set, foil or non-foil), or by set + collector number to get one exact version when a set has several
 - CSV import with automatic format detection (Archidekt, Moxfield, or any CSV with a quantity and name column); adds to your collection or replaces what earlier imports brought in. Cards you added by hand are kept; a card that is in the file too gets the file's quantity, and decks keep the printings you chose
-- You decide which deck gets new cards: copies that come in through an import are not handed out to decks automatically. "Show the cards to sort" lists the new cards that a deck needs, with a "Put in this deck" button per deck (also under Still missing on the deck page), or let the app decide per card or for all of them
+- You decide which deck gets new cards: copies that come in through an import are not handed out to decks automatically. "Show the cards to sort" lists the new cards that a deck needs, with a "Put in this deck" button per deck (also under Still missing on the deck page), or let the app decide per card or for all of them. Only the latest import is new: with the next import, the copies still waiting from the one before are handed out to the decks as usual
 - Change the quantity of a card in place, without removing and re-adding it
 - Tick or untick "foil" on a card you already have; price and totals follow, and it merges with the same card in the other finish
 - See which decks a card is in: cards that are set aside for a deck carry an "in N decks" label that opens the list of decks, and how many copies are still free
@@ -210,6 +210,10 @@ Press **▶ Play** on a deck and the stream screen opens with every token that d
 - The cards of a deck as pictures: switch the list to a stack of card pictures per type, like on a table; missing cards are grey, foil copies shine
 - Foil copies shine: a moving rainbow sheen on foil cards in the collection, on the card page and in decks
 - The app's own icons (no emoji), soft transitions between pages and tabs
+- Set symbols: the symbol of each card's set, in the colour of its rarity (common, uncommon, rare, mythic), in the collection, the wishlist and on the card page
+- A price for every copy: bought four Command Towers apart? Fill in what each one cost ("per copy" under Paid); the field shows the average and the gain counts every copy
+- A long collection loads fast: the first 150 cards show at once and the next ones as you scroll, while search, filters and totals cover all of them
+- Card page: the art as a banner, every version you own as a row of pictures, and a price chart with a soft fill
 - Game nights: the games of a day together (who won, your decks, the table and their commanders), with a recap to Discord the morning after (GAME_NIGHT_RECAP)
 - Fold away what you do not need: click the title of a part (say "Basic lands" or "Add a card") to fold it, click again to open it. It is remembered, and on deck pages it counts for every deck
 - Collection value next to wishlist cost

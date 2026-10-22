@@ -36,6 +36,8 @@ class CollectionUpdate(BaseModel):
     quantity: int | None = Field(default=None, ge=1)
     is_foil: bool | None = None
     purchase_price: float | None = Field(default=None, ge=0)
+    # Or what you paid for each copy (null: not known), when you bought them apart.
+    purchase_prices: list[float | None] | None = None
 
 
 class DeckUseOut(BaseModel):
@@ -74,6 +76,7 @@ class CollectionItemOut(BaseModel):
     spare: int = 0
     # What you paid per copy and for all copies, and what they gained (or lost) since.
     purchase_price: float | None = None
+    purchase_prices: list[float] = []  # the price of every copy you know it of
     paid_total: float | None = None
     gain: float | None = None
 
@@ -89,6 +92,7 @@ class CollectionItemOut(BaseModel):
             total_price=row.total_price,
             price_from_set=row.price_from_set,
             purchase_price=row.entry.purchase_price,
+            purchase_prices=row.paid_prices,
             paid_total=row.paid_total,
             gain=row.gain,
         )

@@ -416,10 +416,10 @@ class _CardPool:
     or let the app decide.
     """
 
-    def __init__(self, session: Session) -> None:
+    def __init__(self, session: Session, rows: list[CollectionRow] | None = None) -> None:
         self.printings: dict[str, list[CollectionRow]] = {}
         self._alias: dict[str, str] = {}  # "fire" -> "fire // ice"
-        for row in collection_rows(session):
+        for row in collection_rows(session) if rows is None else rows:
             full = name_key(row.card.name)
             self.printings.setdefault(full, []).append(row)
             for name in _names(row.card.name):
@@ -576,8 +576,9 @@ class CollectionDecks:
     waiting: dict[int, int]  # new copies that wait for you to sort them into a deck
 
 
-def collection_decks(session: Session) -> CollectionDecks:
-    pool = _CardPool(session)
+def collection_decks(session: Session, rows: list[CollectionRow] | None = None) -> CollectionDecks:
+    """`rows`: the collection rows when you have them already (they are sorted again, in place)."""
+    pool = _CardPool(session, list(rows) if rows is not None else None)
     return CollectionDecks(_usage(pool), _wanted(pool), dict(pool.waiting))
 
 

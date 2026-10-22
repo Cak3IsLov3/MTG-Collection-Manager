@@ -2,6 +2,7 @@ import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from app.config import BASE_DIR, get_settings
@@ -30,6 +31,7 @@ app = FastAPI(
     description="Track what your Magic collection is worth and get alerted when wishlist cards get cheap.",
     lifespan=lifespan,
 )
+app.add_middleware(GZipMiddleware, minimum_size=1000)  # the collection page is much smaller over Wi-Fi
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 app.include_router(api.router)
 app.include_router(pages.router)

@@ -142,6 +142,13 @@ class FakeScryfall:
             if not prints:
                 return not_found
             return httpx.Response(200, json={"data": prints, "has_more": False})
+        if request.url.path == "/sets":
+            codes = sorted({card["set"] for card in self.cards})
+            return httpx.Response(200, json={"data": [
+                {"code": code, "icon_svg_uri": f"https://svgs.scryfall.io/sets/{code}.svg"} for code in codes]})
+        if request.url.host == "svgs.scryfall.io":
+            return httpx.Response(200, content=b'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><circle cx="16" cy="16" r="14"/></svg>',
+                                  headers={"Content-Type": "image/svg+xml"})
         if request.url.path == "/cards/autocomplete":
             query = request.url.params["q"].lower()
             extras = request.url.params.get("include_extras") == "true"

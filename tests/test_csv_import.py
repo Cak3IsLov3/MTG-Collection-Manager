@@ -150,3 +150,28 @@ async def test_imported_cards_wait_until_you_put_them_in_a_deck(client):
     assert client.post("/api/collection/let-app-sort").json() == {"released": 2}
     assert deck(first)["Sol Ring"]["missing"] == 0
     assert 'Show the cards to sort' not in client.get("/collection").text
+
+
+async def test_only_the_latest_import_is_new(client):
+    deck = client.post("/api/decks", json={"name": "Ring", "decklist": "1 Sol Ring"}).json()
+    client.post("/api/collection/import", files={"file": ("moxfield.csv", MOXFIELD, "text/csv")})
+
+    def items():
+        return {i["card"]["name"]: i for i in client.get("/api/collection").json()["items"]}
+
+    assert items()["Sol Ring"]["waiting"] == 3 and items()["Fire // Ice"]["waiting"] == 1
+
+    # The next import: the copies of the first one are no longer new and go to the decks as usual.
+    vault = MOXFIELD.split("\n")[0] + '\n"2","0","Lim-Dûl\'s Vault","all","Near Mint","English","","","2024-01-02 10:00:00.000000","","False","False",""\n'
+    result = client.post("/api/collection/import", files={"file": ("moxfield.csv", vault, "text/csv")}).json()
+    assert result["new_copies"] == 2
+    now = items()
+    assert now["Sol Ring"]["waiting"] == 0 and now["Fire // Ice"]["waiting"] == 0
+    assert now["Lim-Dûl's Vault"]["waiting"] == 2
+    card = client.get(f"/api/decks/{deck['id']}").json()["cards"][0]
+    assert card["missing"] == 0  # the Sol Ring from the first import is in the deck now
+
+    # More of a card that is already there: only the copies added now are new.
+    client.post("/api/collection/import", files={"file": ("moxfield.csv", MOXFIELD, "text/csv")})
+    now = items()
+    assert now["Sol Ring"]["waiting"] == 3 and now["Lim-Dûl's Vault"]["waiting"] == 0

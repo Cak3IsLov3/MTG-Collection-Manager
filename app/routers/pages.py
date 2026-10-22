@@ -3,18 +3,19 @@
 import datetime as dt
 import json
 import logging
+import re
 from pathlib import PurePath
 from urllib.parse import quote
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import PlainTextResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
+from markupsafe import Markup
 from sqlmodel import Session, select
 
-from app import backup, jobs
+from app import backup, jobs, set_icons
 from app.cardmarket import is_cardmarket_url
 from app.config import BASE_DIR, get_settings
-from app.icons import icon
 from app.icons import icon
 from app.csv_import import CsvFormatError, parse_collection_csv
 from app.database import get_session
@@ -46,7 +47,8 @@ def asset_version() -> int:
 
 templates.env.globals["asset_version"] = asset_version
 templates.env.globals["icon"] = icon
-templates.env.globals["icon"] = icon
+# Long lists (the collection): the indentation of the template is left out of the page.
+templates.env.filters["squeeze"] = lambda html: Markup(re.sub(r"\n[ \t]*\n?[ \t]*", "\n", str(html)))
 
 
 def render(request: Request, template: str, **context):
@@ -81,18 +83,31 @@ def dashboard_page(request: Request, session: Session = Depends(get_session)):
                   hero=stats.dashboard_hero(session), **stats.dashboard(session))
 
 
+@router.get("/set-icons/{code}.svg", include_in_schema=False)
+async def set_icon(code: str, scryfall: ScryfallClient = Depends(get_scryfall)):
+    """The symbol of a set, from Scryfall, served from here so the pages can colour it by rarity."""
+    svg = await set_icons.set_icon(scryfall, code)
+    if svg is None:
+        raise HTTPException(status_code=404, detail="Unknown set")
+    return Response(svg, media_type="image/svg+xml", headers={"Cache-Control": "public, max-age=2592000"})
+
+
 @router.get("/cards/{card_id}")
 def card_page(card_id: int, request: Request, session: Session = Depends(get_session)):
     card = session.get(Card, card_id)
     if card is None:
         raise HTTPException(status_code=404, detail="Card not found")
-    owned = [row for row in collection.collection_rows(session) if row.card.id == card_id]
+    rows = collection.collection_rows(session)
+    owned = [row for row in rows if row.card.id == card_id]
+    # Every printing of this card you own, for the row of pictures (one per printing).
+    versions = list({row.card.id: row for row in rows if row.card.name == card.name}.values())
     wanted = [row for row in wishlist.wishlist_rows(session) if row.card.id == card_id]
     return render(
         request,
         "card.html",
         card=card,
         owned=owned,
+        versions=versions,
         wanted=wanted,
         history=stats.price_history(session, card_id),
     )
@@ -104,7 +119,7 @@ def card_page(card_id: int, request: Request, session: Session = Depends(get_ses
 @router.get("/collection")
 def collection_page(request: Request, session: Session = Depends(get_session)):
     rows = collection.collection_rows(session)
-    shared = decks.collection_decks(session)
+    shared = decks.collection_decks(session, rows)
     return render(request, "collection.html", rows=rows, total=collection.collection_value(rows),
                   usage=shared.usage, wanted=shared.wanted, waiting=shared.waiting,
                   basic_lands=decks.BASIC_LAND_NAMES, purchases=collection.purchase_summary(rows))

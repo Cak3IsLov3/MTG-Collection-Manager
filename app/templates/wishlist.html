@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% from "_empty.html" import empty %}
-{% from "_colour_filter.html" import colour_filter, pips %}
+{% from "_colour_filter.html" import set_icon, colour_filter, pips %}
 {% block title %}Wishlist · MTG Collection Manager{% endblock %}
 
 {% block content %}
@@ -77,7 +77,7 @@
       <td>{% if row.card.image_url %}<img class="thumb" src="{{ row.card.image_url }}" alt="" loading="lazy">{% endif %}</td>
       <td>
         <a href="/cards/{{ row.card.id }}">{{ row.card.name }}</a> {{ pips(row.card.colors) }}
-        <div class="muted"><span class="set-mark rarity-{{ row.card.rarity or 'unknown' }}" title="{{ (row.card.rarity or '') | capitalize }}"></span>{{ row.card.set_name }} (<span class="rarity-{{ row.card.rarity or 'unknown' }}">{{ row.card.set_code | upper }}</span>{% if row.card.collector_number %} #{{ row.card.collector_number }}{% endif %})</div>
+        <div class="muted">{{ set_icon(row.card) }} {{ row.card.set_name }} (<span class="rarity-{{ row.card.rarity or 'unknown' }}">{{ row.card.set_code | upper }}</span>{% if row.card.collector_number %} #{{ row.card.collector_number }}{% endif %})</div>
         <form class="printing-form" method="post" action="/wishlist/{{ row.entry.id }}/printing" data-keep-scroll
               data-name="{{ row.card.name }}" data-current="{{ row.card.scryfall_id }}">
           <button type="button" class="link change-set" title="Pick the set you want this card from">Change set</button>

@@ -3,12 +3,9 @@
 import asyncio
 import datetime as dt
 
-from app.icons import icon
-
-from app.icons import icon
-
 from sqlmodel import Session, select
 
+from app.icons import icon
 from app.models import Card, Deck, DeckEntry, Game, utcnow
 from app.scryfall import name_key
 from app.services.deck_insights import token_suggestions

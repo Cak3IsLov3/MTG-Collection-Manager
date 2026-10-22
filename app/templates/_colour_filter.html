@@ -1,5 +1,5 @@
 {# A mana symbol (W, U, B, R, G or C) as Scryfall draws it; the letter shows when the picture cannot load. #}
-{% macro mana(letter, label="") %}<img class="mana" src="https://svgs.scryfall.io/card-symbols/{{ letter }}.svg" alt="{{ letter }}" title="{{ label }}" draggable="false">{% endmacro %}
+{% macro mana(letter, label="") %}<i class="mana mana-{{ letter }}" role="img" aria-label="{{ label or letter }}"{% if label %} title="{{ label }}"{% endif %}></i>{% endmacro %}
 
 {# Colour filter buttons (W U B R G and colourless) with a choice of how the colours must match.
    The page script reads the pressed buttons and calls colourMatch() from base.html. #}
@@ -22,4 +22,9 @@
 {% endmacro %}
 
 {# The colour identity of a card or deck as small pips; nothing when it is not known yet. #}
+{% macro set_icon(card, title=None) %}<i class="set-icon rarity-{{ card.rarity or 'unknown' }}" style="--set: url('/set-icons/{{ card.set_code | lower }}.svg')" role="img" aria-label="{{ card.set_name }}" title="{{ title or (card.set_name ~ ' (' ~ (card.set_code | upper) ~ (' #' ~ card.collector_number if card.collector_number else '') ~ ')' ~ (' · ' ~ (card.rarity | capitalize) if card.rarity else '')) }}"></i>{% endmacro %}
+
+{# The colours of a deck as a CSS gradient (colourless: grey). #}
+{% macro colour_gradient(colors) %}{% set hex = {"W": "#f3e3b5", "U": "#3a8fdc", "B": "#8e7d97", "R": "#e2473d", "G": "#2fa36a"} %}{% set letters = (colors or "") | list %}{% if not letters %}#9a9eab, #9a9eab{% elif letters | length == 1 %}{{ hex[letters[0]] }}, {{ hex[letters[0]] }}{% else %}{% for c in letters %}{{ hex[c] }}{{ ', ' if not loop.last }}{% endfor %}{% endif %}{% endmacro %}
+
 {% macro pips(colors) %}{% if colors is not none %}<span class="pips" title="Colours">{% for letter in colors or "C" %}<span class="pip pip-{{ letter }}">{{ mana(letter) }}</span>{% endfor %}</span>{% endif %}{% endmacro %}
