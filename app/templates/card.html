@@ -4,7 +4,7 @@
 {% block content %}
 <div class="card-detail">
   <div>
-    {% if card.image_url %}<img src="{{ card.image_url }}" alt="{{ card.name }}">{% endif %}
+    {% if card.image_url %}{% set foil = owned | selectattr('entry.is_foil') | list %}<span class="card-art{{ ' foil-art' if foil }}"{% if foil %} title="You own it in foil"{% endif %}><img src="{{ card.image_url }}" alt="{{ card.name }}"></span>{% endif %}
   </div>
   <div>
     <h1>{{ card.name }}</h1>

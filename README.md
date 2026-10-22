@@ -10,7 +10,7 @@ price.
 
 > "Your collection is worth €850, your wishlist still costs €120."
 
-![Dashboard: collection value, wishlist cost and what you paid on top, and tabs for the value over time, the top cards and movers, alerts and backups](docs/dashboard.jpg)
+![Dashboard: a banner with the deck you played last, your week and your newest achievement; collection value, wishlist cost and what you paid, and tabs for the value over time, the top cards and movers, alerts and backups](docs/dashboard.jpg)
 
 | Top cards and weekly movers | Wishlist with targets, sorted by current price |
 | --- | --- |
@@ -25,6 +25,8 @@ price.
 | ![Searching "sol": Sol Ring in your collection and every deck that runs it](docs/search.jpg) | ![The card picture next to the mouse when you point at a card name](docs/card-preview.jpg) |
 
 ![Game nights: per day the games, who won, your decks, who was at the table and their commanders, with a recap for Discord](docs/games-nights.jpg)
+
+![Achievements from your game log: unlocked ones in gold with their date, the others with how far you are](docs/games-achievements.jpg)
 
 ### Stream overlay for OBS
 
@@ -91,6 +93,8 @@ Press **▶ Play** on a deck and the stream screen opens with every token that d
 ![The saved decks sorted on missing cards: the decks closest to done first](docs/decks-sorted.jpg)
 
 ![A saved deck: its commander, bracket and "Tokens owned", an overview of cards, value, deck size and games, and tabs for its cards, analysis, improvements, lands and tokens, games and value, and Archidekt](docs/deck.jpg)
+
+![The cards of a deck as pictures: a stack per card type, missing cards grey, a foil copy shining](docs/deck-wall.jpg)
 
 ![The Analysis tab of a deck: mana curve and card types, then the bracket check and the combos](docs/deck-analysis.jpg)
 
@@ -201,6 +205,11 @@ Press **▶ Play** on a deck and the stream screen opens with every token that d
 - Tabs on every page: what you always need stays on top, the rest is in tabs (with counts such as "80 missing" or "⚠ bracket"). The tab bar stays in view while you scroll, the tab you chose is remembered, and a link like `/decks/3#improve` opens that tab
 - Search everything from the menu (press `/`): your cards, decks (by name or a card in them) and wishlist as you type
 - Point at a card name anywhere to see the card; the deck page has the commander's art as a banner and a mana curve in the colours of the cards; sets are coloured by rarity and brackets by level
+- Dashboard banner: the deck you played last with its commander art, your week (wins and losses) and your newest achievement
+- Achievements from your game log: First blood, Ten wins, On a roll, Clean sweep, Big table, All five colours and more, plus per deck First win, Ten wins and Hat-trick (shown on the deck page). Unlocked with I won on the stream, they show on stream too
+- The cards of a deck as pictures: switch the list to a stack of card pictures per type, like on a table; missing cards are grey, foil copies shine
+- Foil copies shine: a moving rainbow sheen on foil cards in the collection, on the card page and in decks
+- The app's own icons (no emoji), soft transitions between pages and tabs
 - Game nights: the games of a day together (who won, your decks, the table and their commanders), with a recap to Discord the morning after (GAME_NIGHT_RECAP)
 - Fold away what you do not need: click the title of a part (say "Basic lands" or "Add a card") to fold it, click again to open it. It is remembered, and on deck pages it counts for every deck
 - Collection value next to wishlist cost
@@ -219,7 +228,7 @@ Press **▶ Play** on a deck and the stream screen opens with every token that d
 - Commander picture: every deck shows its commander, taken from the Commander category on Archidekt, recognised from the deck name (only when that card can be a commander), or chosen on the deck page
 - Game log: log a game from the Games page or from a deck (date, players, who you played against and their commanders, who won, notes). Every deck shows how often it was played, its win rate and when it was last played
 - Live table for game night (made for an iPad on the table): life, poison and commander damage per player, whose turn it is and the round, undo, full screen, and the screen stays on. Players are out at 0 life, 10 poison or 21 commander damage; the top row can be turned upside down for the players across. At the end you pick the winner and the game goes into the log with everyone and their commanders. A game in progress survives a reload
-- **Stream overlay for OBS**: show tokens, counters, mana, dice and a turn tracker on your stream, with a control panel to run it (also as an OBS dock). Take the tokens of any saved deck with one click (**▶ Play** on a deck), with a deck intro on stream (commander, bracket and record). Put any card big in the spotlight, keep track of commander tax and storm, and end with Victory! and confetti (the game goes straight into your log). A ready-made Stream Deck profile (32 keys, with pictures) to import with a double-click; it works without a plugin. Control panel at `/stream/control`, Browser source at `/stream/overlay`; see [docs/stream.md](docs/stream.md)
+- **Stream overlay for OBS**: show tokens, counters, mana, dice and a turn tracker on your stream, with a control panel to run it (also as an OBS dock). Take the tokens of any saved deck with one click (**▶ Play** on a deck), with a deck intro on stream (commander, bracket and record). Put any card big in the spotlight, keep track of commander tax and storm, and end with Victory! and confetti (the game goes straight into your log), tonight's score in view and achievements as they unlock. A ready-made Stream Deck profile (32 keys, with pictures) to import with a double-click; it works without a plugin. Control panel at `/stream/control`, Browser source at `/stream/overlay`; see [docs/stream.md](docs/stream.md)
 - The commanders of your opponents: fill them in when you log a game (the one a player used last time is filled in). The Games page shows the commanders each player plays and your results against every commander
 - Weakest cards per deck: the cards the fewest decks with its commander play on EDHREC (under 10%), each with a more popular card of the same kind from your collection to swap in. "Only cards I have free" shows just the ones you can swap right away
 - Game statistics: your win rate, current streak and longest winning streak, games per month, win rates by table size (next to your fair share), deck colour and bracket, and per opponent, with the player who beats you most as your nemesis

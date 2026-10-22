@@ -3,12 +3,17 @@
 import asyncio
 import datetime as dt
 
+from app.icons import icon
+
+from app.icons import icon
+
 from sqlmodel import Session, select
 
 from app.models import Card, Deck, DeckEntry, Game, utcnow
 from app.scryfall import name_key
 from app.services.deck_insights import token_suggestions
 from app.services.decks import BRACKETS, deck_tokens
+from app.services.achievements import newly_unlocked, unlocked_keys
 from app.services.games import deck_plays, log_game, tonight
 from app.stream import server
 
@@ -57,10 +62,28 @@ def record_result(result: str, deck: dict) -> dict:
         last = session.exec(select(Game).where(Game.deck_id == saved.id).order_by(Game.created_at.desc())).first()
         created = last.created_at.replace(tzinfo=dt.UTC) if last and last.created_at.tzinfo is None else (last.created_at if last else None)
         if created and utcnow() - created < RESULT_REPEAT and last.played_on >= tonight():
-            return {"logged": False, "record": deck_intro(session, saved)["record"], "note": "Already logged a moment ago"}
+            return {"logged": False, "record": deck_intro(session, saved)["record"], "note": "Already logged a moment ago",
+                    "tonight": tonight_score(session)}
+        before = unlocked_keys(session)
         log_game(session, saved, result, played_on=tonight())
         session.commit()
-        return {"logged": True, "record": deck_intro(session, saved)["record"]}
+        new = [{"icon": a.icon, "svg": str(icon(a.icon)), "title": a.title, "text": a.text}
+               for a in newly_unlocked(session, before)]
+        return {"logged": True, "record": deck_intro(session, saved)["record"], "tonight": tonight_score(session),
+                "achievements": new}
+
+
+def tonight_score(session: Session | None = None) -> dict:
+    """Your wins, losses and draws of tonight's game night, for the stream."""
+    if session is None:
+        from app.database import engine
+
+        with Session(engine) as own:
+            return tonight_score(own)
+    score = {"wins": 0, "losses": 0, "draws": 0}
+    for game in session.exec(select(Game).where(Game.played_on >= tonight())):
+        score[{"win": "wins", "loss": "losses", "draw": "draws"}[game.result]] += 1
+    return score
 
 
 def spotlight_cards(session: Session, entries: list[DeckEntry]) -> list[dict]:

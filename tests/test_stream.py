@@ -999,7 +999,9 @@ def test_game_result_on_stream_only(client):
         ws.receive_json()
         assert client.post("/api/result", json={"result": "win"}).status_code == 200
         event = ws.receive_json()["event"]
-    assert event == {"type": "result", "result": "win", "deck": None, "record": None, "logged": False, "note": None}
+    assert event == {"type": "result", "result": "win", "deck": None, "record": None, "logged": False, "note": None,
+                     "tonight": None, "achievements": []}
+    assert client.get("/api/tonight").json() == {"wins": 0, "losses": 0, "draws": 0}
     assert client.post("/api/result", json={"result": "maybe"}).status_code == 422
     assert client.get("/sd/loss").status_code == 200 and client.get("/sd/tracker").status_code == 200
     assert turn(client)["on"]
@@ -1156,6 +1158,9 @@ def test_victory_logs_the_game():
             stream_app.state.decks.save({"source": "collection", "deck_id": deck["id"], "name": "Ramp", "tokens": []})
             first = stream.post("/api/result", json={"result": "win"}).json()
             assert first["logged"] and first["deck"] == "Ramp" and first["record"] == "1 W · 0 L"
+            assert first["tonight"] == {"wins": 1, "losses": 0, "draws": 0}
+            assert [a["title"] for a in first["achievements"]] == ["First blood", "First win"]
+            assert stream.get("/api/tonight").json()["wins"] == 1
             again = stream.get("/sd/win").json()  # a double press on the Stream Deck
             assert again["ok"]
             assert stream.post("/api/result", json={"result": "win"}).json()["note"] == "Already logged a moment ago"

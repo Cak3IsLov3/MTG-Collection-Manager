@@ -14,6 +14,8 @@ from sqlmodel import Session, select
 from app import backup, jobs
 from app.cardmarket import is_cardmarket_url
 from app.config import BASE_DIR, get_settings
+from app.icons import icon
+from app.icons import icon
 from app.csv_import import CsvFormatError, parse_collection_csv
 from app.database import get_session
 from app.deps import get_edhrec, get_scryfall, get_spellbook
@@ -21,7 +23,7 @@ from app.edhrec import EdhrecClient, EdhrecError
 from app.models import Card, CollectionEntry, Deck, WishlistEntry
 from app.routers.api import load_deck
 from app.scryfall import CardRef, ScryfallClient, ScryfallError, name_key
-from app.services import collection, combos, deck_insights, decks, edhrec_compare, games, reprints, stats, suggestions, wishlist
+from app.services import achievements, collection, combos, deck_insights, decks, edhrec_compare, games, reprints, stats, suggestions, wishlist
 from app.spellbook import SpellbookClient, SpellbookError
 from app.services.exports import collection_csv, wishlist_csv
 
@@ -43,6 +45,8 @@ def asset_version() -> int:
 
 
 templates.env.globals["asset_version"] = asset_version
+templates.env.globals["icon"] = icon
+templates.env.globals["icon"] = icon
 
 
 def render(request: Request, template: str, **context):
@@ -74,7 +78,7 @@ def dashboard_page(request: Request, session: Session = Depends(get_session)):
     return render(request, "dashboard.html", settings=get_settings(), backups=backup.list_backups(),
                   reprint_alerts=reprints.recent_reprint_alerts(session), today=dt.date.today(),
                   backup_possible=backup.database_path(get_settings().database_url) is not None,
-                  **stats.dashboard(session))
+                  hero=stats.dashboard_hero(session), **stats.dashboard(session))
 
 
 @router.get("/cards/{card_id}")
@@ -262,7 +266,7 @@ def games_page(request: Request, deck: int | None = None, session: Session = Dep
         overview=games.log_stats(session), players=games.known_players(session),
         last_commanders=games.last_commanders(session), game_commanders=games.game_commanders,
         nights=games.game_nights(session, 30), webhook=bool(get_settings().discord_webhook_url),
-        brackets=decks.BRACKETS,
+        brackets=decks.BRACKETS, achievements=achievements.achievements(session),
     )
 
 
@@ -699,6 +703,8 @@ async def saved_deck_page(
                   weakest=edhrec_compare.weakest_cards(session, deck, edhrec_comparison) if edhrec_comparison else None,
                   edhrec_floor=edhrec_compare.lowest_listed(edhrec_comparison) if edhrec_comparison else 0,
                   deck_plays=games.deck_plays(session).get(deck.id), deck_games=games.recent_games(session, 5, deck.id),
+                  deck_achievements=achievements.achievements(session)[1].get(deck.id, []),
+                  card_wall=deck_insights.card_wall(session, deck, deck_rows),
                   results=games.RESULTS, today=dt.date.today().isoformat(),
                   summaries=summaries, left_out=decks.deck_left_out(session, deck),
                   bracket=deck.bracket, brackets=decks.BRACKETS, basic_names=decks.BASIC_LAND_NAMES,

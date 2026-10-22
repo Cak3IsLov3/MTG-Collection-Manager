@@ -964,6 +964,8 @@ def create_app(state_path: Path | str = DEFAULT_STATE_PATH) -> FastAPI:
     # Set by the collection manager: result_hook(result, deck) logs the game of a saved deck and
     # returns {"logged": bool, "record": "5 W · 3 L", "note": "..."}.
     app.state.result_hook = None
+    # tonight_hook() returns {"wins": 2, "losses": 1, "draws": 0}: tonight's score, from the game log.
+    app.state.tonight_hook = None
 
     async def publish() -> dict:
         state = store.snapshot()
@@ -1173,9 +1175,17 @@ def create_app(state_path: Path | str = DEFAULT_STATE_PATH) -> FastAPI:
         if body.log and app.state.result_hook is not None:
             info = await asyncio.to_thread(app.state.result_hook, body.result, deck) or {}
         event = {"type": "result", "result": body.result, "deck": deck.get("name"),
-                 "record": info.get("record"), "logged": bool(info.get("logged")), "note": info.get("note")}
+                 "record": info.get("record"), "logged": bool(info.get("logged")), "note": info.get("note"),
+                 "tonight": info.get("tonight"), "achievements": info.get("achievements") or []}
         await hub.broadcast({"event": event})
         return event
+
+    @app.get("/api/tonight")
+    async def tonight_score():
+        """Tonight's wins, losses and draws (from the game log of the collection manager)."""
+        if app.state.tonight_hook is None:
+            return {"wins": 0, "losses": 0, "draws": 0}
+        return await asyncio.to_thread(app.state.tonight_hook)
 
     @app.post("/api/untap")
     async def untap_all():

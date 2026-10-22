@@ -611,3 +611,113 @@ p.small, span.small, div.small, .muted.small { color: var(--text-3); }
 .badge.bracket-3 { border-color: rgba(231, 179, 67, .6); color: var(--accent-2); background: rgba(231, 179, 67, .08); }
 .badge.bracket-4 { border-color: rgba(240, 116, 58, .65); color: #f59a6a; background: rgba(240, 116, 58, .08); }
 .badge.bracket-5 { border-color: rgba(224, 67, 75, .7); color: #f07a80; background: rgba(224, 67, 75, .1); }
+
+/* ===== Achievements ===== */
+.achievements { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; }
+.achievement-card { display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; border-radius: 14px;
+  border: 1px solid var(--border); background: var(--panel-2, #1b1e25); }
+.achievement-card .medal { font-size: 30px; line-height: 1; }
+.achievement-card .ach-body { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1; }
+.achievement-card.unlocked { border-color: rgba(231, 179, 67, .55);
+  background: radial-gradient(120% 120% at 0% 0%, rgba(231, 179, 67, .14), transparent 60%), var(--panel-2, #1b1e25); }
+.achievement-card.unlocked .medal { filter: drop-shadow(0 0 8px rgba(231, 179, 67, .55)); }
+.achievement-card.locked { opacity: .62; }
+.achievement-card.locked .medal { filter: grayscale(1); opacity: .6; }
+.ach-date { color: var(--accent-2, #f3cc6e); }
+.ach-progress { display: block; height: 5px; border-radius: 3px; background: rgba(255, 255, 255, .08); overflow: hidden; margin-top: 3px; }
+.ach-progress i { display: block; height: 100%; width: var(--p); background: linear-gradient(90deg, #c99a2e, #f3cc6e); }
+.ach-decks-title { margin: 22px 0 10px; }
+.ach-decks { display: grid; gap: 8px; }
+.ach-deck { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.ach-deck > a { min-width: 180px; font-weight: 600; }
+.ach-pills { display: flex; gap: 6px; flex-wrap: wrap; }
+.ach-pill { padding: 2px 10px; border-radius: 999px; font-size: 12.5px; font-weight: 600; white-space: nowrap;
+  border: 1px solid var(--border); color: var(--muted); }
+.ach-pill.unlocked { color: #ffe3a0; border-color: rgba(231, 179, 67, .6); background: rgba(231, 179, 67, .12); }
+.ach-pill.locked { opacity: .55; }
+.hero-badges { display: flex; gap: 6px; flex-wrap: wrap; margin: 2px 0 6px; }
+.hero-badges .ach-pill { background: rgba(14, 15, 19, .7); }
+
+/* ===== Own icons ===== */
+svg.icon { width: 1.15em; height: 1.15em; vertical-align: -0.2em; flex: none; }
+.achievement-card .medal svg.icon { width: 30px; height: 30px; color: var(--accent-2, #f3cc6e); }
+.achievement-card.locked .medal svg.icon { color: var(--muted); }
+.ach-pill svg.icon { width: 1.05em; height: 1.05em; }
+.winner svg.icon { color: var(--accent-2, #f3cc6e); }
+
+/* ===== Dashboard banner: the deck you played last, your week, your newest achievement ===== */
+.dash-hero { position: relative; display: flex; align-items: flex-end; gap: 24px; flex-wrap: wrap; margin: 0 0 18px; padding: 26px 26px 22px;
+  min-height: 150px; border-radius: 18px; overflow: hidden; border: 1px solid var(--border); color: var(--text); text-decoration: none;
+  background: linear-gradient(120deg, #1d2029, #121318); transition: border-color .2s, transform .2s; }
+.dash-hero:hover { border-color: rgba(231, 179, 67, .6); text-decoration: none; transform: translateY(-1px); }
+.dash-hero.with-art::before { content: ""; position: absolute; inset: 0 0 0 30%; background: var(--hero) center 25% / cover no-repeat; opacity: .9; transition: transform 6s ease-out;
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 35%); mask-image: linear-gradient(90deg, transparent, #000 35%); }
+.dash-hero.with-art:hover::before { transform: scale(1.05); }
+.dash-hero::after { content: ""; position: absolute; inset: 0;
+  background: linear-gradient(90deg, rgba(14, 15, 19, .9) 0%, rgba(14, 15, 19, .55) 45%, rgba(14, 15, 19, .1) 100%), linear-gradient(0deg, rgba(14, 15, 19, .5), transparent 55%); }
+.dash-hero > div { position: relative; z-index: 1; }
+.dash-hero-main { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 240px; }
+.dash-hero .kicker { color: var(--accent, #e7b343); font-size: 12px; font-weight: 700; letter-spacing: .18em; text-transform: uppercase; }
+.dash-hero-deck { font-family: var(--title-font, "Cinzel", Georgia, serif); font-size: 34px; font-weight: 700; line-height: 1.1; color: #fff4d6;
+  text-shadow: 0 2px 14px rgba(0, 0, 0, .7); }
+.dash-hero-sub { color: #c9ccd6; font-weight: 600; }
+.dash-hero-side { display: flex; gap: 12px; flex-wrap: wrap; }
+.hero-stat { display: flex; flex-direction: column; gap: 2px; padding: 10px 16px; border-radius: 12px; min-width: 150px;
+  background: rgba(14, 15, 19, .72); border: 1px solid rgba(255, 255, 255, .12); backdrop-filter: blur(4px); }
+.hero-stat-label { font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.hero-stat-value { font-size: 20px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.hero-stat-sub { font-size: 12.5px; color: var(--muted); }
+.hero-ach { border-color: rgba(231, 179, 67, .5); }
+.hero-ach .hero-stat-value { color: #ffe3a0; font-size: 17px; }
+.hero-ach svg.icon { color: var(--accent-2, #f3cc6e); }
+
+/* ===== Foil: a moving rainbow sheen, like a real foil card ===== */
+.foil-art { position: relative; display: inline-block; overflow: hidden; vertical-align: middle; isolation: isolate; }
+.foil-art::after { content: ""; position: absolute; inset: 0; pointer-events: none; mix-blend-mode: color-dodge; opacity: .5;
+  background: linear-gradient(115deg, transparent 18%, rgba(255, 70, 160, .55) 30%, rgba(255, 220, 60, .55) 40%,
+    rgba(60, 255, 170, .55) 50%, rgba(60, 170, 255, .55) 60%, rgba(190, 80, 255, .55) 70%, transparent 82%);
+  background-size: 260% 260%; animation: foil-sheen 4.5s linear infinite; }
+.foil-art:hover::after, tr:hover .foil-art::after { opacity: .8; animation-duration: 1.8s; }
+.thumb-foil { border-radius: 3px; }
+.card-art { display: inline-block; border-radius: 4.75% / 3.5%; }
+.card-art img { display: block; }
+@keyframes foil-sheen { 0% { background-position: 0% 0%; } 100% { background-position: 100% 100%; } }
+
+/* ===== The deck as a wall of card pictures ===== */
+.view-switch { display: inline-flex; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+.view-switch button { border: 0; border-radius: 0; background: transparent; color: var(--muted); box-shadow: none; }
+.view-switch button[aria-pressed="true"] { background: var(--panel-3, #252932); color: var(--text); }
+.view-hidden { display: none !important; }
+.card-wall-groups { display: grid; grid-template-columns: repeat(auto-fill, minmax(165px, 1fr)); gap: 22px 18px; align-items: start; }
+.wall-type { margin: 0 0 10px; font-size: 13px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+/* Stacked like on a table: every card shows its name bar, the last one shows all of it. */
+.card-wall { display: flex; flex-direction: column; }
+.wall-card { position: relative; margin: 0; }
+.wall-card + .wall-card { margin-top: -112%; }
+.wall-card:hover { z-index: 5; }
+.wall-note { margin: 18px 0 0; }
+.wall-art { display: block; border-radius: 4.75% / 3.5%; overflow: hidden; aspect-ratio: 488 / 680; background: var(--bg);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, .45); transition: transform .18s, box-shadow .18s; }
+.wall-art img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.wall-card:hover .wall-art { transform: translateY(-6px) scale(1.04); box-shadow: 0 18px 34px rgba(0, 0, 0, .7); }
+.wall-blank { display: grid; place-items: center; height: 100%; padding: 8px; text-align: center; font-size: 13px; color: var(--muted); border: 1px dashed var(--border); border-radius: inherit; }
+.wall-count { position: absolute; top: 6px; right: 6px; padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 800;
+  color: #1a1406; background: linear-gradient(180deg, #f8d988, #e7b343); box-shadow: 0 2px 6px rgba(0, 0, 0, .5); }
+.wall-card.missing .wall-art { filter: grayscale(.85) brightness(.62); outline: 2px solid rgba(224, 67, 75, .85); outline-offset: -2px; }
+.wall-card.missing:hover .wall-art { filter: grayscale(.4) brightness(.85); }
+.wall-missing { position: absolute; left: 6px; top: 6px; padding: 1px 8px; border-radius: 999px;
+  font-size: 11.5px; font-weight: 700; color: #ffd0d0; background: rgba(160, 30, 40, .85); }
+
+/* ===== Smooth transitions ===== */
+main, .container { animation: page-in .28s ease-out both; }
+[data-tab-panel]:not([hidden]) { animation: panel-in .26s ease-out both; }
+button, .button-link, a.button, .badge, .ach-pill, .achievement-card { transition: background-color .15s, border-color .15s, color .15s, transform .12s, box-shadow .15s, filter .15s; }
+button:active:not(:disabled) { transform: translateY(1px); }
+.achievement-card.unlocked:hover { transform: translateY(-2px); box-shadow: 0 10px 24px rgba(0, 0, 0, .35); }
+@keyframes page-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@keyframes panel-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) {
+  main, .container, [data-tab-panel]:not([hidden]) { animation: none; }
+  .foil-art::after { animation: none; }
+  .dash-hero.with-art::before { transition: none; }
+}

@@ -24,6 +24,31 @@
   <form method="post" action="/jobs/update-prices"><button class="secondary">Update prices now</button></form>
 </div>
 
+{% if hero %}
+{% set art = hero.deck.commander_image if hero.deck and hero.deck.commander_image else None %}
+<a class="dash-hero{{ ' with-art' if art }}" href="{{ '/decks/%d' % hero.deck.id if hero.deck else '/games' }}"{% if art %} style="--hero: url('{{ art | replace('/normal/', '/art_crop/') }}')"{% endif %}>
+  <div class="dash-hero-main">
+    <span class="kicker">Last played · {{ hero.played_on.strftime('%d %B') }}</span>
+    <span class="dash-hero-deck">{{ hero.deck_name }}</span>
+    {% if hero.deck and hero.deck.commander and hero.deck.commander != hero.deck_name %}<span class="dash-hero-sub">{{ hero.deck.commander }}</span>{% endif %}
+  </div>
+  <div class="dash-hero-side">
+    <div class="hero-stat">
+      <span class="hero-stat-label">This week</span>
+      <span class="hero-stat-value">{% if hero.week_games %}{{ hero.week_wins }} W · {{ hero.week_losses }} L{% else %}–{% endif %}</span>
+      <span class="hero-stat-sub">{{ hero.week_games }} game{{ 's' if hero.week_games != 1 }}</span>
+    </div>
+    {% if hero.achievement %}
+    <div class="hero-stat hero-ach">
+      <span class="hero-stat-label">Newest achievement</span>
+      <span class="hero-stat-value">{{ icon(hero.achievement.icon) }} {{ hero.achievement.title }}</span>
+      <span class="hero-stat-sub">{{ hero.unlocked }} unlocked</span>
+    </div>
+    {% endif %}
+  </div>
+</a>
+{% endif %}
+
 <div class="grid stats">
   <div class="panel stat have">
     <div class="label">Collection value</div>

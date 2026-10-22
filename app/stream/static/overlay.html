@@ -404,9 +404,12 @@
     bottom: 3vh;
     z-index: 18;
     display: flex;
-    gap: 1vh;
+    flex-direction: column;   /* stacked, so they never run into the turn tracker */
+    align-items: flex-end;
+    gap: .8vh;
     pointer-events: none;
   }
+  #tally.left { align-items: flex-start; }
   #tally.top { bottom: auto; top: 3vh; }
   #tally.left { right: auto; left: 2.2vh; }
   #tally[hidden] { display: none; }
@@ -441,6 +444,22 @@
   .tally.storm .ico { background: linear-gradient(180deg, #9fd0ff, #3b74d6); color: #0b1830; }
   .tally.storm .num { color: #9fd0ff; }
   .tally.bump { animation: bump .45s var(--ease); }
+
+  .tally .ico svg { width: 2.1vh; height: 2.1vh; }
+  .achievement .medal svg { width: 6vh; height: 6vh; color: #f3cc6e; }
+  .tally.tonight .ico { background: linear-gradient(180deg, #c9b8ff, #6c4fd0); color: #140b30; }
+  .tally.tonight .num { color: #e2d9ff; }
+  /* ---- achievement unlocked: slides down from the top after the result */
+  .achievement {
+    position: fixed; left: 50%; top: 4vh; z-index: 42; pointer-events: none;
+    display: flex; align-items: center; gap: 1.6vh; padding: 1.2vh 2.6vh 1.2vh 1.4vh; border-radius: 2vh;
+    color: #fff; background: linear-gradient(180deg, rgba(36, 30, 14, .95), rgba(16, 14, 10, .95));
+    border: .25vh solid rgba(231, 179, 67, .85); box-shadow: 0 0 4vh rgba(231, 179, 67, .35), 0 1.4vh 3vh rgba(0, 0, 0, .6);
+  }
+  .achievement .medal { font-size: 6vh; line-height: 1; filter: drop-shadow(0 0 1.4vh rgba(231, 179, 67, .7)); }
+  .achievement .kicker { color: #e7b343; font-size: 1.8vh; font-weight: 800; letter-spacing: .28em; text-transform: uppercase; }
+  .achievement .title { font-family: "Cinzel", Georgia, serif; font-size: 3.8vh; font-weight: 700; color: #fff3cf; line-height: 1.1; }
+  .achievement .text { font-size: 2.3vh; color: rgba(255, 255, 255, .78); font-weight: 600; }
 
   /* ---- spotlight: one card big in the middle of the screen */
   .spotlight {
@@ -1428,6 +1447,13 @@
     });
   }
 
+  // The app's own icons (app/icons.py), for the pills.
+  const ICONS = {
+    crown: '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 19h18 M4 16L3 7l5 4 4-7 4 7 5-4-1 9z" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    bolt: '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M13.5 2L4.5 13.5h6.5L10 22l9-11.5h-6.5z" fill="currentColor"/></svg>',
+    moon: '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.6A8.2 8.2 0 1 1 9.4 4a6.6 6.6 0 0 0 10.6 10.6z" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  };
+
   // ---- Tallies: commander tax (2 per cast) and storm (spells this turn).
   // ?tally=left|right|off; they sit at the same height as the turn tracker.
   const tallyPos = params.get("tally") || "right";
@@ -1436,23 +1462,49 @@
   tallyBox.classList.toggle("left", tallyPos === "left");
   function tallyPill(cls, icon, label) {
     const pill = Object.assign(document.createElement("div"), { className: `tally ${cls}`, hidden: true });
-    pill.append(Object.assign(document.createElement("span"), { className: "ico", textContent: icon }),
+    const ico = Object.assign(document.createElement("span"), { className: "ico" });
+    ico.innerHTML = ICONS[icon] || "";  // our own constant drawings
+    pill.append(ico,
       Object.assign(document.createElement("span"), { className: "lbl", textContent: label }),
       Object.assign(document.createElement("span"), { className: "num" }),
       Object.assign(document.createElement("span"), { className: "sub" }));
     tallyBox.append(pill);
     return pill;
   }
-  const castsPill = tallyPill("casts", "♛", "Commander tax");
-  const stormPill = tallyPill("storm", "⚡", "Storm");
+  const castsPill = tallyPill("casts", "crown", "Commander tax");
+  const stormPill = tallyPill("storm", "bolt", "Storm");
   let tallies = null;  // not shown yet: no bump on the first draw
+
+  // Tonight's score: from the game log, fetched now and then and after every result.
+  const tonightPill = tallyPill("tonight", "moon", "Tonight");
+  const tonightOff = params.get("tonight") === "off";
+  let tonight = null;
+  function renderTonight(score) {
+    tonight = score;
+    const total = score ? score.wins + score.losses + score.draws : 0;
+    tonightPill.hidden = tonightOff || !total;
+    if (total) {
+      tonightPill.querySelector(".num").textContent = `${score.wins} W · ${score.losses} L` + (score.draws ? ` · ${score.draws} D` : "");
+      tonightPill.querySelector(".sub").textContent = "";
+    }
+    showTallyBox();
+  }
+  function fetchTonight() {
+    fetch(`${ROOT}/api/tonight`).then((r) => (r.ok ? r.json() : null)).then((s) => s && renderTonight(s)).catch(() => {});
+  }
+  fetchTonight();
+  setInterval(fetchTonight, 60000);
+  tallyBox.prepend(tonightPill);
+  function showTallyBox() {
+    tallyBox.hidden = tallyPos === "off" || [...tallyBox.children].every((pill) => pill.hidden);
+  }
 
   function renderTally(turn) {
     const casts = (turn && turn.casts) || 0;
     const storm = (turn && turn.storm) || 0;
-    tallyBox.hidden = tallyPos === "off" || (!casts && !storm);
     castsPill.hidden = !casts;
     stormPill.hidden = !storm;
+    showTallyBox();
     castsPill.querySelector(".num").textContent = `+${2 * casts}`;
     castsPill.querySelector(".sub").textContent = `${casts}× cast`;
     stormPill.querySelector(".num").textContent = String(storm);
@@ -1528,6 +1580,27 @@
     setTimeout(() => bar.remove(), 9500);
   }
 
+  // ---- Achievements unlocked by this game: one after the other, after the result screen.
+  function showAchievements(list, after) {
+    list.forEach((a, i) => setTimeout(() => {
+      const make = (tag, cls, text) => Object.assign(document.createElement(tag), { className: cls, textContent: text || "" });
+      const box = make("div", "achievement");
+      const words = make("div", "");
+      words.append(make("div", "kicker", "Achievement unlocked"), make("div", "title", a.title), make("div", "text", a.text));
+      const medal = make("div", "medal");
+      if (typeof a.svg === "string" && a.svg.startsWith("<svg")) medal.innerHTML = a.svg;  // drawn by our own server
+      box.append(medal, words);
+      document.body.append(box);
+      box.animate([
+        { transform: "translate(-50%, -160%)", opacity: 0 },
+        { transform: "translate(-50%, 0)", opacity: 1, offset: .1 },
+        { transform: "translate(-50%, 0)", opacity: 1, offset: .9 },
+        { transform: "translate(-50%, -160%)", opacity: 0 },
+      ], { duration: 4200, easing: "cubic-bezier(.25, .8, .3, 1)" }).onfinish = () => box.remove();
+      setTimeout(() => box.remove(), 4700);
+    }, after + i * 4400));
+  }
+
   // ---- The end of the game: Victory! with confetti, a calm GG, or Draw.
   let resultEl = null;
   const CONFETTI = ["#f8e7b9", "#2f8fd8", "#a69f9d", "#e0443c", "#2fa36a", "#f3cc6e", "#ffffff"];
@@ -1553,6 +1626,8 @@
       { transform: "scale(.55)", opacity: 0 }, { transform: "scale(1.08)", opacity: 1, offset: .6 }, { transform: "scale(1)", opacity: 1 },
     ], { duration: 700, easing: "cubic-bezier(.2, .9, .3, 1.2)" });
     setTimeout(() => screen.remove(), duration + 500);
+    if (ev.tonight) setTimeout(() => renderTonight(ev.tonight), 1200);
+    if (ev.achievements && ev.achievements.length) showAchievements(ev.achievements, duration - 600);
     if (ev.result !== "win") return;
     for (let i = 0; i < 160; i += 1) {
       const bit = make("div", "confetti");

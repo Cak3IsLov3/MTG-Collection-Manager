@@ -56,6 +56,8 @@
     <div>
       <a class="back-link" href="/deck">← All decks</a>
       <h1>{{ deck.name }}</h1>
+      {% set won = (deck_achievements | default([])) | selectattr('unlocked') | list %}
+      {% if won %}<div class="hero-badges">{% for a in won %}<span class="ach-pill unlocked" title="{{ a.text }} · {{ a.unlocked_on.strftime('%d %b %Y') }}">{{ icon(a.icon) }} {{ a.title }}</span>{% endfor %}</div>{% endif %}
       <label class="muted commander-pick">Commander
         <select name="commander" form="deck-form" title="The commander of this deck; its picture shows here and in the list of decks">
           <option value="">None</option>
@@ -681,8 +683,38 @@
   <div class="toolbar search-bar">
     <input id="deck-search" type="search" size="40" autocomplete="off" placeholder="Search in this deck…" aria-label="Search in this deck">
     <span id="deck-count" class="muted"></span>
+    {% if deck and card_wall is defined and card_wall %}
+    <span class="spacer"></span>
+    <span class="view-switch" role="group" aria-label="Show the cards as">
+      <button type="button" class="small" data-view="table" aria-pressed="true">☰ List</button>
+      <button type="button" class="small" data-view="wall" aria-pressed="false">▦ Pictures</button>
+    </span>
+    {% endif %}
   </div>
 </div>
+
+{% if deck and card_wall is defined and card_wall %}
+<div class="panel card-wall-panel" data-tab-panel="cards" style="order: 2" hidden>
+  <div class="card-wall-groups">
+  {% for kind, cards in card_wall %}
+  <div class="wall-column">
+  <h3 class="wall-type">{{ kind }} <span class="muted">· {{ cards | sum(attribute='count') }}</span></h3>
+  <div class="card-wall">
+    {% for c in cards %}
+    <figure class="wall-card{{ ' missing' if c.missing }}" data-wall-card="{{ c.name }}" title="{{ c.name }}{{ ' (still missing)' if c.missing }}">
+      <span class="wall-art{{ ' foil-art' if c.foil }}">
+        {% if c.image %}<img src="{{ c.image }}" alt="{{ c.name }}" loading="lazy">{% else %}<span class="wall-blank">{{ c.name }}</span>{% endif %}
+      </span>
+      {% if c.count > 1 %}<span class="wall-count">{{ c.count }}×</span>{% endif %}
+    </figure>
+    {% endfor %}
+  </div>
+  </div>
+  {% endfor %}
+  </div>
+  <p class="muted small wall-note">Point at a card to see all of it. Grey cards with a red edge are still missing; a foil copy shines.</p>
+</div>
+{% endif %}
 
 <div class="panel table-wrap" data-tab-panel="cards" style="order: 2">
   <h2 class="up">{{ 'In this deck' if deck else 'Available in your collection' }} ({{ have | length }})</h2>
@@ -1142,6 +1174,27 @@
 </script>
 {% endif %}
 {% if deck %}
+<script>
+  // List or pictures: the cards of the deck as a table, or as a wall of card pictures by type.
+  (() => {
+    const buttons = [...document.querySelectorAll(".view-switch [data-view]")];
+    if (!buttons.length) return;
+    const wall = document.querySelector(".card-wall-panel");
+    const tables = [...document.querySelectorAll('.table-wrap[data-tab-panel="cards"]')];
+    function show(view) {
+      for (const b of buttons) b.setAttribute("aria-pressed", String(b.dataset.view === view));
+      wall.hidden = view !== "wall";
+      for (const t of tables) t.classList.toggle("view-hidden", view === "wall");
+      try { localStorage.setItem("deck-view", view); } catch (error) {}
+    }
+    for (const b of buttons) b.addEventListener("click", () => show(b.dataset.view));
+    let saved = "table";
+    try { saved = localStorage.getItem("deck-view") || "table"; } catch (error) {}
+    show(saved === "wall" ? "wall" : "table");
+  })();
+</script>
+{% endif %}
+{% if deck %}
 <div id="unsaved-bar" class="unsaved-bar" hidden>
   <span>You have unsaved changes in this deck.</span>
   <a href="/decks/{{ deck.id }}">Discard</a>
@@ -1188,6 +1241,7 @@
   const deckCount = document.getElementById("deck-count");
   const fold = (text) => text.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
   const deckRows = [...document.querySelectorAll("tr[data-deck-row]")].map((row) => ({ row, text: fold(row.dataset.deckRow) }));
+  const wallCards = [...document.querySelectorAll("[data-wall-card]")].map((card) => ({ card, text: fold(card.dataset.wallCard) }));
 
   function filterDeck() {
     const words = fold(deckSearch.value).split(/\s+/).filter(Boolean);
@@ -1197,6 +1251,7 @@
       item.row.hidden = !match;
       if (match) shown += 1;
     }
+    for (const item of wallCards) item.card.hidden = !words.every((word) => item.text.includes(word));
     deckCount.textContent = words.length ? `${shown} of ${deckRows.length} cards` : `${deckRows.length} different cards`;
   }
 

@@ -40,6 +40,27 @@ _REPEATS = re.compile(r"\b(whenever|at the beginning of|landfall)\b|\{t\}[^.]*cr
 MAX_TOKENS_PER_CARD = 10
 
 
+def card_wall(session: Session, deck, rows: list) -> list[tuple[str, list[dict]]]:
+    """The cards of a deck as pictures, grouped by type: the printing the deck uses (or, when missing,
+    the one from the deck list), how many, foil, and whether you still miss it."""
+    from app.models import DeckEntry
+
+    entries = {e.name: e for e in session.exec(select(DeckEntry).where(DeckEntry.deck_id == deck.id))}
+    groups: dict[str, list[dict]] = {}
+    for row in rows:
+        entry = entries.get(row.name)
+        pick = row.picks[0][0] if row.picks else None
+        image = (pick.card.image_url if pick else None) or (entry.image_url if entry else None) or \
+            (row.printings[0].card.image_url if row.printings else None)
+        kind = card_type(entry.type_line if entry else None) or "Other"
+        groups.setdefault(kind, []).append({
+            "name": row.name, "count": row.needed, "image": image, "missing": row.missing,
+            "foil": bool(pick and pick.entry.is_foil),
+        })
+    order = TYPES + ["Other"]
+    return [(kind, sorted(groups[kind], key=lambda c: c["name"])) for kind in order if kind in groups]
+
+
 def card_type(type_line: str | None) -> str | None:
     """The type a card counts as, from the front face: "Instant // Land" is an instant."""
     front = (type_line or "").split(" // ")[0]

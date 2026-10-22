@@ -234,9 +234,9 @@
     "next-phase": { glyph: "▶", color: "#f3cc6e", label: "Next phase" },
     "prev-phase": { glyph: "◀", color: "#c3c7d1", label: "Prev phase" },
     "untap": { glyph: "⟳", color: "#f3cc6e", label: "Untap all" },
-    "attack-all": { glyph: "⚔", color: "#ff7b6b", label: "Attack all", ring: "#e0434b" },
+    "attack-all": { path: "swords", color: "#ff7b6b", label: "Attack all", ring: "#e0434b" },
     "undo": { glyph: "↶", color: "#c3c7d1", label: "Undo" },
-    "intro": { glyph: "★", color: "#f3cc6e", label: "Deck intro" },
+    "intro": { path: "star", filled: true, color: "#f3cc6e", label: "Deck intro" },
     "spotlight-hide": { glyph: "✕", color: "#c3c7d1", label: "Hide card" },
     "new-game": { glyph: "⟲", color: "#9be8aa", label: "New game", ring: "#3fb950" },
     "mana-W": { mana: "W", label: "White" }, "mana-U": { mana: "U", label: "Blue" },
@@ -244,18 +244,28 @@
     "mana-G": { mana: "G", label: "Green" }, "mana-C": { mana: "C", label: "Colorless" },
     "mana-empty": { glyph: "∅", color: "#c3c7d1", label: "Empty pool" },
     "d20": { glyph: "d20", color: "#9fd0ff", label: "Roll d20", small: true },
-    "commander": { glyph: "♛", color: "#f3cc6e", label: "Commander", ring: "#e7b343" },
-    "commander-back": { glyph: "♛−", color: "#a58a4a", label: "Cmdr −1", small: true },
-    "storm": { glyph: "⚡", color: "#9fd0ff", label: "Storm +1", ring: "#3b74d6" },
-    "storm-back": { glyph: "⚡−", color: "#6d8fb8", label: "Storm −1", small: true },
+    "commander": { path: "crown", color: "#f3cc6e", label: "Commander", ring: "#e7b343" },
+    "commander-back": { path: "crown", minus: true, color: "#a58a4a", label: "Cmdr −1" },
+    "storm": { path: "bolt", filled: true, color: "#9fd0ff", label: "Storm +1", ring: "#3b74d6" },
+    "storm-back": { path: "bolt", filled: true, minus: true, color: "#6d8fb8", label: "Storm −1" },
     "plus-counter": { glyph: "+1/+1", color: "#7be08f", label: "Counter", small: true, ring: "#23944a" },
     "minus-counter": { glyph: "−1/−1", color: "#d39af0", label: "Counter", small: true, ring: "#8a2bb4" },
     "coin": { glyph: "◐", color: "#f3cc6e", label: "Flip coin" },
     "d6": { glyph: "d6", color: "#9fd0ff", label: "Roll d6", small: true },
-    "tracker": { glyph: "⏱", color: "#f3cc6e", label: "Tracker" },
-    "win": { glyph: "🏆", color: "#f3cc6e", label: "I won", ring: "#e7b343" },
+    "tracker": { path: "timer", color: "#f3cc6e", label: "Tracker" },
+    "win": { path: "trophy", color: "#f3cc6e", label: "I won", ring: "#e7b343" },
     "loss": { glyph: "GG", color: "#d9dbe2", label: "I lost", small: true },
-    "clear": { glyph: "🗑", color: "#ff7b6b", label: "Clear board", ring: "#e0434b" },
+    "clear": { path: "trash", color: "#ff7b6b", label: "Clear board", ring: "#e0434b" },
+  };
+  // The app's own line drawings (app/icons.py) on a 24 × 24 grid.
+  const PATHS = {
+    swords: "M14.5 17.5L3 6V3h3l11.5 11.5 M13 19l6-6 M16 16l4 4 M19 21l2-2 M9.5 6.5L14 2h3v3l-4.5 4.5 M5 14l4 4 M7 17l-3 3 M4 19l1 1",
+    star: "M12 2.8l2.8 5.8 6.4.9-4.6 4.5 1.1 6.3L12 17.3l-5.7 3 1.1-6.3-4.6-4.5 6.4-.9z",
+    crown: "M3 19h18 M4 16L3 7l5 4 4-7 4 7 5-4-1 9z",
+    bolt: "M13.5 2L4.5 13.5h6.5L10 22l9-11.5h-6.5z",
+    timer: "M12 21.5a8 8 0 1 0 0-16 8 8 0 0 0 0 16z M12 9.5v4l2.5 2 M9.5 2.5h5 M12 2.5v3",
+    trophy: "M8 21h8 M12 17v4 M7 4h10v5a5 5 0 0 1-10 0z M7 6H4.5a2.5 2.5 0 0 0 2.6 4 M17 6h2.5a2.5 2.5 0 0 1-2.6 4",
+    trash: "M4 7h16 M9.5 7V4h5v3 M6 7l1 13.5h10L18 7 M10 11v6 M14 11v6",
   };
 
   const symbols = {};
@@ -325,6 +335,24 @@
         ctx.fillStyle = "#e8e6e1";
         fitText(ctx, look.mana, 800, 56, 110);
         ctx.fillText(look.mana, SIZE / 2, 52);
+      }
+    } else if (look.path) {
+      // A line drawing of 24 × 24, drawn 56 px big around the middle of the symbol area.
+      ctx.save();
+      ctx.shadowColor = look.color;
+      ctx.shadowBlur = 16;
+      ctx.translate(look.minus ? 30 : 44, 24);
+      ctx.scale(56 / 24, 56 / 24);
+      ctx.strokeStyle = ctx.fillStyle = look.color;
+      ctx.lineWidth = 1.9;
+      ctx.lineCap = ctx.lineJoin = "round";
+      const shape = new Path2D(PATHS[look.path]);
+      if (look.filled) ctx.fill(shape); else ctx.stroke(shape);
+      ctx.restore();
+      if (look.minus) {
+        ctx.fillStyle = look.color;
+        fitText(ctx, "−", 800, 44, 40);
+        ctx.fillText("−", 108, 52);
       }
     } else {
       ctx.fillStyle = look.color || "#eceef3";

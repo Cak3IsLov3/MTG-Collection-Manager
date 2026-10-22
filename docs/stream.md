@@ -56,6 +56,7 @@ Via the URL, for example `http://localhost:8017/stream/overlay?size=200&pos=righ
 | `outline` | `0` turns off the white card outline | on     |
 | `phases` | turn tracker: `top`, `bottom` or `off`  | opposite the row |
 | `tally` | commander tax & storm: `right`, `left` or `off` | right |
+| `tonight` | `off` hides tonight's score | shown |
 | `label` | `0` turns off the name & P/T plate     | on      |
 | `preview` | `1` shows a checkered background (used by the control panel) | off |
 
@@ -193,6 +194,15 @@ double press on the Stream Deck), it is logged once. Opponents, notes and the li
 **Games** page afterwards.
 
 ![Victory! with confetti on stream, with the deck and its record](stream-victory.jpg)
+
+**Tonight's score** sits above commander tax and storm at the bottom right: "Tonight 3 W · 1 L", all your
+games of tonight's game night, also the ones you log on the Games page (updated every minute and after
+every result). `?tonight=off` in the overlay URL hides it.
+
+**Achievements** a win unlocks (see the Games page) slide in at the top after the Victory! screen,
+one after the other.
+
+![Tonight's score and an achievement that was just unlocked, on stream](stream-achievement.jpg)
 
 ## Deck presets
 
@@ -406,6 +416,7 @@ Handy for hotkeys or a Stream Deck.
 | POST   | `/stream/api/tally/storm`       | none, or `{"delta": -1}`              | one spell more for storm (or back); 0 again every new turn |
 | POST   | `/stream/api/spotlight`         | `{"name": "...", "image_url": "...", "seconds": 7}` | show a card big on stream (2–30 seconds) |
 | DELETE | `/stream/api/spotlight`         |                                       | take the spotlight card away |
+| GET    | `/stream/api/tonight`           |                                       | tonight's wins, losses and draws |
 | POST   | `/stream/api/result`            | `{"result": "win"}` / `"loss"` / `"draw"`, optional `"log": false` | Victory!, GG or Draw on stream; logs the game of a saved deck |
 | POST   | `/stream/api/intro`             | none, or `{"name": "...", "commander": "...", "bracket": "...", "record": "..."}` | show the deck intro (of the deck in the control panel) |
 | DELETE | `/stream/api/tokens/{id}`       |                                       | remove |

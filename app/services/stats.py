@@ -222,3 +222,29 @@ def price_history(session: Session, card_id: int) -> dict:
         "scryfall_foil": series("scryfall", "price_eur_foil"),
         "cardmarket": series("cardmarket", "price_eur"),
     }
+
+
+def dashboard_hero(session: Session) -> dict | None:
+    """The banner of the dashboard: the deck you played last (with its commander art), your week and
+    your newest achievement. None until you have logged a game."""
+    import datetime as dt
+
+    from app.models import Deck, Game
+    from app.services.achievements import achievements
+
+    games = sorted(session.exec(select(Game)), key=lambda g: (g.played_on, g.id or 0), reverse=True)
+    if not games:
+        return None
+    last = next((g for g in games if g.deck_id is not None and session.get(Deck, g.deck_id)), games[0])
+    deck = session.get(Deck, last.deck_id) if last.deck_id is not None else None
+    week_start = dt.date.today() - dt.timedelta(days=6)
+    week = [g for g in games if g.played_on >= week_start]
+    overall, per_deck = achievements(session)
+    unlocked = [a for a in overall + [a for items in per_deck.values() for a in items] if a.unlocked]
+    newest = max(unlocked, key=lambda a: a.unlocked_on) if unlocked else None
+    return {
+        "deck": deck, "deck_name": deck.name if deck else last.deck_name, "played_on": last.played_on,
+        "result": last.result, "week_wins": sum(g.result == "win" for g in week),
+        "week_losses": sum(g.result == "loss" for g in week), "week_games": len(week),
+        "achievement": newest, "unlocked": len(unlocked),
+    }

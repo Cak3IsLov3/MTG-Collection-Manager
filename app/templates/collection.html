@@ -141,7 +141,7 @@
     <tr data-search="{{ row.card.name }} {{ row.card.set_name }} {{ row.card.set_code }} #{{ row.card.collector_number or '' }}{% for deck, count in used %} {{ deck.name }}{% endfor %}{% for deck, count, _ in needs %} {{ deck.name }}{% endfor %}" data-foil="{{ 1 if row.entry.is_foil else 0 }}" data-qty="{{ row.entry.quantity }}" data-used="{{ in_decks }}" data-wanted="{{ needs | length }}" data-waiting="{{ new }}" data-colors="{{ '?' if row.card.colors is none else row.card.colors }}" data-identity="{{ '?' if row.card.identity is none else row.card.identity }}"
         data-price="{{ row.unit_price if row.unit_price is not none else '' }}" data-basic="{{ 1 if row.card.name in basic_lands else 0 }}"
         class="{{ 'version' if group | length > 1 }}">
-      <td>{% if row.card.image_url %}<img class="thumb" src="{{ row.card.image_url }}" alt="" loading="lazy">{% endif %}</td>
+      <td>{% if row.card.image_url %}{% if row.entry.is_foil %}<span class="foil-art thumb-foil">{% endif %}<img class="thumb" src="{{ row.card.image_url }}" alt="" loading="lazy">{% if row.entry.is_foil %}</span>{% endif %}{% endif %}</td>
       <td>
         <a href="/cards/{{ row.card.id }}">{{ row.card.name }}</a>
         {{ pips(row.card.colors) }}

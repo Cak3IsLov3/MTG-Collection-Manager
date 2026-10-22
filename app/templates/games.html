@@ -51,6 +51,9 @@
     <button type="button" data-tab="decks" role="tab">Per deck</button>
     <button type="button" data-tab="nights" role="tab">Game nights{% if nights %} <span class="tab-count">{{ nights | length }}</span>{% endif %}</button>
     <button type="button" data-tab="log" role="tab">Log <span class="tab-count">{{ games | length }}</span></button>
+    {% set overall, by_deck = achievements %}
+    {% set unlocked_count = (overall | selectattr('unlocked') | list | length) + (by_deck.values() | map('selectattr', 'unlocked') | map('list') | map('length') | sum) %}
+    <button type="button" data-tab="achievements" role="tab">Achievements{% if unlocked_count %} <span class="tab-count">{{ unlocked_count }}</span>{% endif %}</button>
   </nav>
 
 {% if overview.played %}
@@ -156,7 +159,7 @@
           <button class="small secondary" {{ 'disabled' if not webhook }} title="{{ 'Send this recap to Discord' if webhook else 'Set DISCORD_WEBHOOK_URL to send recaps' }}">{{ '✓ Sent to Discord' if n.sent else 'Send to Discord' }}</button>
         </form>
       </div>
-      {% if n.winners %}<div class="night-winners">{% for name, count in n.winners.items() %}<span class="winner {{ 'you' if name == 'You' }}">🏆 {{ name }} <strong>{{ count }}×</strong></span>{% endfor %}</div>{% endif %}
+      {% if n.winners %}<div class="night-winners">{% for name, count in n.winners.items() %}<span class="winner {{ 'you' if name == 'You' }}">{{ icon('trophy') }} {{ name }} <strong>{{ count }}×</strong></span>{% endfor %}</div>{% endif %}
       <div class="night-facts muted small">
         <span>Your decks: {% for name, count in n.decks.items() %}{{ name }} {{ count }}×{{ ', ' if not loop.last }}{% endfor %}</span>
         {% if n.players %}<span>At the table: {{ n.players | join(', ') }}</span>{% endif %}
@@ -168,6 +171,36 @@
   <p class="muted small">A game night is all the games of one day. The recap of yesterday goes to Discord by itself in the morning (GAME_NIGHT_RECAP); you can also send one yourself.</p>
 </div>
 {% endif %}
+
+{% set overall, by_deck = achievements %}
+<div class="panel" data-tab-panel="achievements">
+  <h2>Achievements <span class="muted">· {{ overall | selectattr('unlocked') | list | length }} of {{ overall | length }}</span></h2>
+  <div class="achievements">
+    {% for a in overall %}
+    <div class="achievement-card {{ 'unlocked' if a.unlocked else 'locked' }}" title="{{ a.text }}">
+      <div class="medal">{{ icon(a.icon) }}</div>
+      <div class="ach-body">
+        <strong>{{ a.title }}</strong>
+        <span class="muted small">{{ a.text }}</span>
+        {% if a.unlocked %}<span class="ach-date small">{{ a.unlocked_on.strftime('%d %b %Y') }}</span>
+        {% elif a.goal > 1 %}<span class="ach-progress" style="--p: {{ (100 * a.progress / a.goal) | round }}%"><i></i></span><span class="muted small">{{ a.progress }} / {{ a.goal }}</span>{% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% if by_deck %}
+  <h3 class="ach-decks-title">Per deck</h3>
+  <div class="ach-decks">
+    {% for deck_id, items in by_deck.items() if deck_names.get(deck_id) %}
+    <div class="ach-deck">
+      <a href="/decks/{{ deck_id }}">{{ deck_names[deck_id] }}</a>
+      <span class="ach-pills">{% for a in items %}<span class="ach-pill {{ 'unlocked' if a.unlocked else 'locked' }}" title="{{ a.text }}{% if not a.unlocked and a.goal > 1 %} · {{ a.progress }} / {{ a.goal }}{% endif %}">{{ icon(a.icon) }} {{ a.title }}</span>{% endfor %}</span>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+  <p class="muted small">Worked out from your game log: log your games (also with I won on the stream) to unlock them. New ones show on stream after the result.</p>
+</div>
 
 {% if stats %}
 <div class="panel table-wrap" data-tab-panel="decks">

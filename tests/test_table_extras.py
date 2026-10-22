@@ -179,3 +179,55 @@ def test_colourless_cards_are_colourless_but_keep_their_identity(session):
     # Shown and filtered as colourless; "fits within" still goes by the identity.
     assert color_match("", "C", "any", "WU") and not color_match("", "W", "any", "WU")
     assert color_match("", "WU", "within", "WU") and not color_match("", "R", "within", "WU")
+
+
+def test_achievements_from_the_game_log(client):
+    import datetime as dt
+
+    from app.models import Game
+    from app.services.achievements import achievements, newly_unlocked, unlocked_keys
+
+    deck = client.post("/api/decks", json={"name": "Kess", "decklist": "1 Sol Ring", "bracket": 4}).json()
+    other = client.post("/api/decks", json={"name": "Marwyn", "decklist": "1 Sol Ring"}).json()
+    day = dt.date(2026, 10, 1)
+    for n, (deck_id, result) in enumerate([(deck, "win"), (deck, "win"), (other, "loss"), (deck, "win"), (deck, "win")]):
+        client.post("/api/games", json={"deck_id": deck_id["id"], "result": result, "played_on": (day + dt.timedelta(days=n)).isoformat(),
+                                        "players": 5 if n == 4 else 4})
+    from app.database import engine
+    from sqlmodel import Session
+
+    with Session(engine) as session:
+        overall, per_deck = achievements(session)
+        got = {a.key: a for a in overall}
+        assert got["first-win"].unlocked_on == day
+        assert got["high-power"].unlocked and got["big-table"].unlocked
+        assert got["streak-3"].progress == 2 and not got["streak-3"].unlocked  # the loss broke the streak
+        assert got["nights-5"].unlocked and got["wins-10"].progress == 4
+        mine = {a.title: a for a in per_deck[deck["id"]]}
+        assert mine["Hat-trick"].unlocked and mine["First win"].unlocked  # Marwyn's game in between doesn't count
+        assert not mine["Ten wins"].unlocked and mine["Ten wins"].progress == 4
+        assert [a.title for a in per_deck[other["id"]] if a.unlocked] == []
+        before = unlocked_keys(session)
+        session.add(Game(played_on=day + dt.timedelta(days=5), deck_id=deck["id"], deck_name="Kess", result="win"))
+        session.commit()
+        assert [a.title for a in newly_unlocked(session, before)] == ["On a roll"]
+
+    page = client.get("/games").text
+    assert 'data-tab="achievements"' in page and "First blood" in page and "5 / 10" in page
+    assert 'class="hero-badges"' in client.get(f"/decks/{deck['id']}").text
+
+
+def test_dashboard_banner_card_wall_and_icons(client):
+    from app.icons import icon
+
+    assert icon("trophy").startswith('<svg class="icon"') and ">10<" in icon("count-10")
+    assert 'class="dash-hero' not in client.get("/").text  # no games yet
+    client.post("/api/collection", json={"name": "Sol Ring", "set_code": "cmm"})
+    deck = client.post("/api/decks", json={"name": "Ring", "decklist": "1 Sol Ring\n1 Black Lotus"}).json()
+    client.post("/api/games", json={"deck_id": deck["id"], "result": "win"})
+    home = client.get("/").text
+    assert 'class="dash-hero' in home and "Last played" in home and "1 W · 0 L" in home and "First blood" in home
+    page = client.get(f"/decks/{deck['id']}").text
+    assert 'class="panel card-wall-panel"' in page and 'data-wall-card="Sol Ring"' in page
+    assert 'class="wall-card missing" data-wall-card="Black Lotus"' in page
+    assert "🏆" not in client.get("/games").text

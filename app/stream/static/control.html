@@ -654,6 +654,7 @@
   .show-bar input:focus, .show-bar select:focus { outline: none; border-color: var(--accent); }
   .show-bar .note { color: var(--muted); font-size: 13px; }
   .result-row { margin-top: 4px; }
+  svg.icon { width: 1.15em; height: 1.15em; vertical-align: -0.2em; }
   .result-btn.win { color: #1a1406; border-color: transparent; background: linear-gradient(180deg, #f8d988, #e7b343); }
   .show-bar .tally-btn b { margin-left: 4px; color: var(--accent-2, #f3cc6e); font-variant-numeric: tabular-nums; }
 
@@ -1046,7 +1047,7 @@
         </div>
         <span id="introDeck" class="note">Pick a deck under Add tokens first.</span>
         <div class="qrow result-row">
-          <button type="button" class="result-btn win" data-result="win" title="Victory! with confetti on stream; the win goes in the game log">🏆 I won</button>
+          <button type="button" class="result-btn win" data-result="win" title="Victory! with confetti on stream; the win goes in the game log"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 21h8 M12 17v4 M7 4h10v5a5 5 0 0 1-10 0z M7 6H4.5a2.5 2.5 0 0 0 2.6 4 M17 6h2.5a2.5 2.5 0 0 1-2.6 4" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg> I won</button>
           <button type="button" class="result-btn" data-result="loss" title="GG on stream; the loss goes in the game log">I lost</button>
           <button type="button" class="result-btn" data-result="draw" title="Draw on stream; the draw goes in the game log">Draw</button>
         </div>
