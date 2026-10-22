@@ -95,8 +95,9 @@ deck** to remove it. The deck has to be public.
 
 **Two tokens on one picture** (the Roles of Wilds of Eldraine: Monster // Sorcerer, the second one
 printed upside down below the first) are split: each is its own button and its own stack on the board,
-shown as a half card, the second one turned the right way up, without the name plate (the name is
-printed on the token already). The same goes for the results when you search for a token.
+shown in the control panel as a half card. On stream only the name bar of each is shown ("Monster",
+"Sorcerer"), the second one turned the right way up, without the name plate (the name is printed on the
+bar already). The bar scales with the card size. The same goes for the results when you search for a token.
 
 ## Placing cards anywhere (drag & drop)
 

@@ -91,12 +91,13 @@
     /* Rotate around the centre and shift so the card sits at the bottom of the slot. */
     transform: translate(var(--shift), var(--shift)) rotate(90deg);
   }
-  /* Two tokens on one picture (the Roles): each is a half card, the second one turned the right way up. */
-  .token.half { --h: calc(var(--hf) / 2); --shift: calc((var(--hf) / 2 - var(--w)) / 2); }
+  /* Two tokens on one picture (the Roles): only the name bar of each, the second one turned the right way up.
+     The bar is about 0.127 times the card width tall; the picture is 1.393 times as tall as it is wide. */
+  .token.half { --h: calc(var(--w) * 0.127); --shift: calc((var(--w) * 0.127 - var(--w)) / 2); }
   .token.half .card { overflow: hidden; box-shadow: 0 0 0 max(2px, calc(var(--w) * 0.012)) rgba(255, 255, 255, .92), 0 2px 4px rgba(0, 0, 0, .5), 0 10px 26px rgba(0, 0, 0, .6); }
   body.no-outline .token.half .card { box-shadow: 0 2px 4px rgba(0, 0, 0, .5), 0 10px 26px rgba(0, 0, 0, .6); }
-  .token.half .card img { height: 200%; box-shadow: none; }
-  .token.half.bottom .card img { transform: rotate(180deg); }
+  .token.half .card img { position: absolute; left: 0; top: calc(var(--w) * -0.0405); width: 100%; height: calc(var(--w) * 1.393); box-shadow: none; }
+  .token.half.bottom .card img { top: calc(var(--w) * -0.0885); transform: rotate(180deg); }
   .card img {
     width: 100%;
     height: 100%;
