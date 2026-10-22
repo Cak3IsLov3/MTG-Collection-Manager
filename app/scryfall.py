@@ -8,6 +8,7 @@ from urllib.parse import quote
 
 import httpx
 
+from app.cardmarket import clean_cardmarket_url
 from app.config import get_settings
 from app.rate_limit import RateLimiter
 
@@ -90,6 +91,8 @@ class ScryfallCard:
     # The tokens and emblems the card makes: [(Scryfall id, name)]. Scryfall lists an emblem as a
     # "combo_piece" of its planeswalker, so it is told apart by its type.
     token_parts: list[tuple[str, str]] = field(default_factory=list)
+    mana_cost: str = ""  # "{1}{U}{U}"; the faces apart for a split or double-faced card: "{R} // {1}{U}"
+    produced_mana: str = ""  # the mana it can make, letters of WUBRGC ("" for most spells)
 
     @classmethod
     def from_json(cls, data: dict) -> "ScryfallCard":
@@ -111,7 +114,7 @@ class ScryfallCard:
             image_url=images.get("normal") or images.get("large") or images.get("small"),
             price_eur=_to_float(prices.get("eur")),
             price_eur_foil=_to_float(prices.get("eur_foil")),
-            cardmarket_url=(data.get("purchase_uris") or {}).get("cardmarket"),
+            cardmarket_url=clean_cardmarket_url((data.get("purchase_uris") or {}).get("cardmarket")),
             colors=None if colors is None else "".join(c for c in "WUBRG" if c in colors),
             identity=None if identity is None else "".join(c for c in "WUBRG" if c in identity),
             rarity=data.get("rarity") or "",
@@ -119,6 +122,9 @@ class ScryfallCard:
             cmc=data.get("cmc"),
             oracle_text=data.get("oracle_text")
             or "\n".join(face.get("oracle_text") or "" for face in data.get("card_faces") or []),
+            mana_cost=data["mana_cost"] if "mana_cost" in data and not data.get("card_faces") else " // ".join(
+                face.get("mana_cost") or "" for face in data.get("card_faces") or [data]),
+            produced_mana="".join(c for c in "WUBRGC" if c in (data.get("produced_mana") or [])),
             token_parts=[
                 (part["id"], part["name"]) for part in data.get("all_parts") or []
                 if (part.get("component") == "token" or (part.get("type_line") or "").startswith("Emblem"))

@@ -142,7 +142,9 @@ def test_curve_in_colours(client):
     deck = client.post("/api/decks", json={"name": "Mix", "decklist": "1 Sol Ring\n1 Lim-Dûl's Vault\n1 Marwyn, the Nurturer"}).json()
     page = client.get(f"/decks/{deck['id']}").text
     # Sol Ring colourless (1), Lim-Dûl's Vault blue-black (2), Marwyn green (3).
-    assert '"C": [0, 1, 0, 0, 0, 0, 0, 0]' in page and '"M": [0, 0, 1, 0, 0, 0, 0, 0]' in page and '"G": [0, 0, 0, 1, 0, 0, 0, 0]' in page
+    for colour in "CMG":
+        assert f'seg seg-{colour}' in page
+    assert 'conic-gradient' in page and 'Click a bar to see its cards' in page
     assert 'class="deck-hero' in page and 'data-card-name="Sol Ring"' in page
 
 

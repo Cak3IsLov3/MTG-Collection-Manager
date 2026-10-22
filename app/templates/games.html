@@ -25,6 +25,8 @@
     <label>Won by, if not you<input name="winner" list="known-players" placeholder="Sam" autocomplete="off"></label>
     <div id="opponent-decks" class="row opponent-decks"></div>
     <input type="hidden" name="opponent_commanders" id="opponent-commanders">
+    <label>How did it end?<select name="win_method"><option value="">Not filled in</option>{% for key, label in win_methods.items() %}<option value="{{ key }}">{{ label }}</option>{% endfor %}</select></label>
+    <label>Who went first?<select name="went_first"><option value="">Not filled in</option><option value="me">Me</option><option value="other">Someone else</option></select></label>
     <label>Notes (optional)<input name="notes" placeholder="Won with a big Treasure turn"></label>
     <datalist id="known-players">{% for name in players %}<option value="{{ name }}">{% endfor %}</datalist>
     <div class="result-buttons" role="group" aria-label="Result">
@@ -146,6 +148,37 @@
 </div>
 {% endif %}
 
+{% if o is defined and (o.win_methods or o.first or o.not_first) %}
+<div class="panel" data-tab-panel="overview">
+  <h2>How games are won</h2>
+  <div class="grid two">
+    <div>
+      {% if o.win_methods %}
+      <table class="compact">
+        <tr><th></th><th class="num">Games</th><th class="num down">Lost to it</th><th class="num up">Won with it</th></tr>
+        {% for t in o.win_methods %}
+        <tr><td>{{ win_methods[t.label] }}</td><td class="num">{{ t.played }}</td><td class="num down">{{ t.their_wins or '' }}</td><td class="num up">{{ t.wins or '' }}</td></tr>
+        {% endfor %}
+      </table>
+      {% set decided = o.win_methods | sum(attribute='played') %}
+      <p class="muted small">{{ decided }} game{{ 's' if decided != 1 }} with the way it ended filled in. "Lost to it" counts the games someone else won that way.</p>
+      {% endif %}
+    </div>
+    <div>
+      {% if o.first or o.not_first %}
+      <table class="compact">
+        <tr><th>Turn order</th><th class="num">Games</th><th class="num">Won</th><th class="num">Win rate</th></tr>
+        {% for label, t in (("You went first", o.first), ("Someone else went first", o.not_first)) if t %}
+        <tr><td>{{ label }}</td><td class="num">{{ t.played }}</td><td class="num">{{ t.wins }}</td><td class="num">{{ t.win_rate }}%</td></tr>
+        {% endfor %}
+      </table>
+      <p class="muted small">At a table of four everyone has 25% on average.</p>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endif %}
+
 {% if nights %}
 <div class="panel" data-tab-panel="nights">
   <h2>Game nights</h2>
@@ -230,7 +263,7 @@
   <h2>Log</h2>
   {% if games %}
   <table>
-    <tr><th>Date</th><th>Deck</th><th>Result</th><th class="num">Players</th><th>Against</th><th>Notes</th><th></th></tr>
+    <tr><th>Date</th><th>Deck</th><th>Result</th><th class="num">Players</th><th>Against</th><th>How</th><th>Notes</th><th></th></tr>
     {% for game in games %}
     <tr>
       <td class="muted">{{ game.played_on }}</td>
@@ -239,6 +272,13 @@
       <td class="num">{{ game.players or '–' }}</td>
       {% set played_with = game_commanders(game) %}
       <td>{% for name in (game.opponents or '').split(', ') if name %}{{ name }}{% if played_with.get(name) %} <span class="muted">({{ played_with[name] }})</span>{% endif %}{{ ', ' if not loop.last }}{% endfor %}{% if game.winner %} <span class="muted">· {{ game.winner }} won</span>{% endif %}</td>
+      <td>
+        <form class="inline game-details" method="post" action="/games/{{ game.id }}/details" title="How the game ended and who went first">
+          <select name="win_method" class="small" {{ 'disabled' if game.result == 'draw' }}><option value="">–</option>{% for key, label in win_methods.items() %}<option value="{{ key }}" {{ 'selected' if game.win_method == key }}>{{ label }}</option>{% endfor %}</select>
+          <select name="went_first" class="small" title="Who went first"><option value="">1st: ?</option><option value="me" {{ 'selected' if game.went_first == true }}>1st: me</option><option value="other" {{ 'selected' if game.went_first == false }}>1st: other</option></select>
+          <noscript><button class="small secondary">Save</button></noscript>
+        </form>
+      </td>
       <td class="muted">{{ game.notes or '' }}</td>
       <td>
         <form class="inline" method="post" action="/games/{{ game.id }}/delete" data-confirm="Click again to remove" data-keep-scroll>
@@ -287,6 +327,9 @@
       ));
     });
   }
+
+  // Changing how a game ended or who went first saves straight away.
+  for (const select of document.querySelectorAll(".game-details select")) select.addEventListener("change", () => select.form.submit());
 
   // Click a name you played against before to add it to the players.
   const opponents = document.getElementById("opponents");

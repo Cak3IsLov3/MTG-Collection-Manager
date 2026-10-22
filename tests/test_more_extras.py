@@ -83,13 +83,14 @@ def test_mana_curve_and_card_types(client):
         "name": "Mix", "decklist": "1 Sol Ring\n2 Lim-Dûl's Vault\n1 Fire // Ice\n1 Marwyn, the Nurturer\n20 Forest\n1 Nonsense Card",
     }).json()
     page = client.get(f"/decks/{deck['id']}").text
-    assert 'id="curve-chart"' in page
+    assert 'class="curve"' in page and 'class="colour-ring"' in page
     assert "<td>Creature</td><td class=\"num\">1</td>" in page and "<td>Instant</td><td class=\"num\">3</td>" in page
     assert "<td>Land</td><td class=\"num\">20</td>" in page and "<td>Artifact</td><td class=\"num\">1</td>" in page
     assert "Ramp 2" in page and "Card draw 1" in page  # Sol Ring and Marwyn add mana; Ice draws
     assert "average mana value 2.4" in page  # (1 + 2 + 2 + 4 + 3) / 5
     assert "1 card not counted" in page
-    assert '"1": 1, "2": 2, "3": 1, "4": 1' in page
+    for bucket, cards in (("1", 1), ("2", 2), ("3", 1), ("4", 1)):
+        assert f'aria-label="{cards} card{"s" if cards != 1 else ""} with mana value {bucket}"' in page
 
 
 def test_proxies(client):

@@ -230,3 +230,61 @@ def test_a_price_for_every_copy(client):
     one = client.patch(f"/api/collection/{item['id']}", json={"purchase_price": 2.5}).json()
     assert one["purchase_prices"] == [2.5, 2.5, 2.5] and one["paid_total"] == 7.5
     assert 'class="paid varies"' not in client.get("/collection").text
+
+
+def test_cardmarket_links_without_tracking_extras():
+    import sqlite3
+    import tempfile
+    from pathlib import Path
+
+    from sqlalchemy import create_engine
+
+    from app.cardmarket import clean_cardmarket_url
+    from app.database import run_data_migrations
+    from app.scryfall import ScryfallCard
+
+    scryfall_link = ("https://www.cardmarket.com/en/Magic/Products?idProduct=292863&referrer=scryfall"
+                     "&utm_campaign=card_prices&utm_medium=text&utm_source=scryfall")
+    assert clean_cardmarket_url(scryfall_link) == "https://www.cardmarket.com/en/Magic/Products?idProduct=292863"
+    plain = "https://www.cardmarket.com/en/Magic/Products/Singles/Alliances/Force-of-Will?language=1"
+    assert clean_cardmarket_url(plain) == plain
+    assert clean_cardmarket_url(None) is None and clean_cardmarket_url("https://example.com/?utm_x=1") == "https://example.com/?utm_x=1"
+    card = ScryfallCard.from_json({"id": "x", "name": "Force of Will", "set": "all", "set_name": "Alliances",
+                                   "collector_number": "1", "prices": {}, "purchase_uris": {"cardmarket": scryfall_link}})
+    assert card.cardmarket_url == "https://www.cardmarket.com/en/Magic/Products?idProduct=292863"
+
+    # Links saved before are cleaned once.
+    path = Path(tempfile.mkdtemp()) / "old.db"
+    with sqlite3.connect(path) as db:
+        db.execute("CREATE TABLE wishlistentry (id INTEGER PRIMARY KEY, cardmarket_url VARCHAR)")
+        db.execute("INSERT INTO wishlistentry VALUES (1, ?)", (scryfall_link,))
+        db.execute("INSERT INTO wishlistentry VALUES (2, ?)", (plain,))
+        db.execute("PRAGMA user_version = 3")
+    engine = create_engine(f"sqlite:///{path}")
+    run_data_migrations(engine)
+    engine.dispose()
+    with sqlite3.connect(path) as db:
+        urls = [row[0] for row in db.execute("SELECT cardmarket_url FROM wishlistentry ORDER BY id")]
+        assert urls == ["https://www.cardmarket.com/en/Magic/Products?idProduct=292863", plain]
+        assert db.execute("PRAGMA user_version").fetchone()[0] == 4
+
+
+async def test_discord_price_alert_has_a_clean_cardmarket_link():
+    import json
+
+    import httpx
+
+    from app.discord import DiscordNotifier
+    from app.models import Card
+
+    sent = []
+
+    def handler(request):
+        sent.append(json.loads(request.content))
+        return httpx.Response(204)
+
+    notifier = DiscordNotifier("https://discord.example/webhook", transport=httpx.MockTransport(handler))
+    card = Card(name="Force of Will", set_code="all", set_name="Alliances", scryfall_id="x")
+    link = "https://www.cardmarket.com/en/Magic/Products?idProduct=1&referrer=scryfall&utm_source=scryfall"
+    assert await notifier.send_price_alert(card, 50.0, 60.0, link, "cardmarket")
+    assert sent[0]["embeds"][0]["url"] == "https://www.cardmarket.com/en/Magic/Products?idProduct=1"

@@ -24,7 +24,7 @@ from app.edhrec import EdhrecClient, EdhrecError
 from app.models import Card, CollectionEntry, Deck, WishlistEntry
 from app.routers.api import load_deck
 from app.scryfall import CardRef, ScryfallClient, ScryfallError, name_key
-from app.services import achievements, collection, combos, deck_insights, decks, edhrec_compare, games, reprints, stats, suggestions, wishlist
+from app.services import achievements, collection, combos, deck_insights, decks, edhrec_compare, games, mana_base, reprints, stats, suggestions, wishlist
 from app.spellbook import SpellbookClient, SpellbookError
 from app.services.exports import collection_csv, wishlist_csv
 
@@ -276,7 +276,7 @@ def games_page(request: Request, deck: int | None = None, session: Session = Dep
     return render(
         request, "games.html", decks=saved, games=games.recent_games(session), stats=stats_rows,
         not_played=sorted((d for d in saved if d.id not in plays), key=lambda d: d.name),
-        deck_names={d.id: d.name for d in saved}, results=games.RESULTS,
+        deck_names={d.id: d.name for d in saved}, results=games.RESULTS, win_methods=games.WIN_METHODS,
         today=dt.date.today().isoformat(), selected_deck=deck,
         overview=games.log_stats(session), players=games.known_players(session),
         last_commanders=games.last_commanders(session), game_commanders=games.game_commanders,
@@ -312,6 +312,7 @@ def table_page(request: Request, deck: int | None = None, session: Session = Dep
     """The live table: life, poison, commander damage and turns on one screen; logged afterwards.
     `deck` chooses the deck to play in the setup."""
     return render(request, "table.html", decks=list(session.exec(select(Deck))), players=games.known_players(session),
+                  win_methods=games.WIN_METHODS,
                   last_commanders=games.last_commanders(session), chosen_deck=deck)
 
 
@@ -325,6 +326,8 @@ def games_log(
     opponents: str = Form(""),
     winner: str = Form(""),
     opponent_commanders: str = Form(""),
+    win_method: str = Form(""),
+    went_first: str = Form(""),
     back: str = Form(""),
     session: Session = Depends(get_session),
 ):
@@ -338,13 +341,31 @@ def games_log(
         commanders = json.loads(opponent_commanders) if opponent_commanders.strip() else {}
         game = games.log_game(
             session, deck, result, day, int(players) if players.strip() else None, notes, opponents, winner,
-            commanders if isinstance(commanders, dict) else {},
+            commanders if isinstance(commanders, dict) else {}, win_method, _went_first(went_first),
         )
     except ValueError as exc:
         message = str(exc) if isinstance(exc, games.GameError) else "That is not a valid date or number"
         return redirect(target, message, error=True)
     session.commit()
     return redirect(target, f"Logged: {games.RESULTS[game.result].lower()} with {deck.name} on {game.played_on}")
+
+
+def _went_first(value: str) -> bool | None:
+    """The form's "Who went first": "me", "other" or not filled in."""
+    return {"me": True, "other": False}.get(value.strip())
+
+
+@router.post("/games/{game_id}/details")
+def games_details(
+    game_id: int, win_method: str = Form(""), went_first: str = Form(""), session: Session = Depends(get_session),
+):
+    """Fill in afterwards how a game was won and who went first."""
+    try:
+        games.set_details(session, game_id, win_method, _went_first(went_first))
+    except games.GameError as exc:
+        return redirect("/games#log", str(exc), error=True)
+    session.commit()
+    return redirect("/games", "Game updated")
 
 
 @router.post("/games/nights/{night}/discord")
@@ -701,6 +722,7 @@ async def saved_deck_page(
     except EdhrecError as exc:
         logger.warning("EDHREC: %s", exc)
         edhrec_comparison, edhrec_error = None, str(exc)
+    salt_scores = await edhrec.salt_scores_soon()
     deck_rows = decks.saved_deck_rows(session, deck)
     if decks.update_commander_image(session, deck, deck_rows):  # the printing you have, not just any
         session.commit()
@@ -715,12 +737,14 @@ async def saved_deck_page(
                   bracket_check=deck_insights.bracket_check(session, deck, await _game_changers(scryfall), deck_combos),
                   deck_combos=deck_combos, owned=combos.owned_missing(session, deck_combos), deck_suggestions=deck_suggestions,
                   edhrec=edhrec_comparison, edhrec_error=edhrec_error,
+                  salt=deck_insights.salt_check(session, deck, salt_scores) if salt_scores is not None else None,
+                  salt_loading=salt_scores is None, salt_error=edhrec.salt_error, mana_check=mana_base.mana_base(session, deck),
                   weakest=edhrec_compare.weakest_cards(session, deck, edhrec_comparison) if edhrec_comparison else None,
                   edhrec_floor=edhrec_compare.lowest_listed(edhrec_comparison) if edhrec_comparison else 0,
                   deck_plays=games.deck_plays(session).get(deck.id), deck_games=games.recent_games(session, 5, deck.id),
                   deck_achievements=achievements.achievements(session)[1].get(deck.id, []),
                   card_wall=deck_insights.card_wall(session, deck, deck_rows),
-                  results=games.RESULTS, today=dt.date.today().isoformat(),
+                  results=games.RESULTS, win_methods=games.WIN_METHODS, today=dt.date.today().isoformat(),
                   summaries=summaries, left_out=decks.deck_left_out(session, deck),
                   bracket=deck.bracket, brackets=decks.BRACKETS, basic_names=decks.BASIC_LAND_NAMES,
                   tracked_basics=decks.tracked_basic_lands(session, deck), deck_link=decks.deck_url(deck))

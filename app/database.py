@@ -85,6 +85,19 @@ def run_data_migrations(target=None) -> None:
                 if "colors" in columns:
                     connection.exec_driver_sql(f"UPDATE {table} SET colors = NULL")
             connection.exec_driver_sql("PRAGMA user_version = 3")
+            version = 3
+        if version < 4:
+            # Cardmarket blocks its links with Scryfall's tracking extras: take those off the saved ones.
+            from app.cardmarket import clean_cardmarket_url
+
+            if "wishlistentry" in tables:
+                rows = connection.exec_driver_sql(
+                    "SELECT id, cardmarket_url FROM wishlistentry WHERE cardmarket_url LIKE '%utm_%' OR cardmarket_url LIKE '%referrer=%'"
+                ).fetchall()
+                for entry_id, url in rows:
+                    connection.exec_driver_sql("UPDATE wishlistentry SET cardmarket_url = ? WHERE id = ?",
+                                               (clean_cardmarket_url(url), entry_id))
+            connection.exec_driver_sql("PRAGMA user_version = 4")
 
 
 def init_db() -> None:

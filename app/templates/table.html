@@ -45,6 +45,8 @@
     <h2>How did it end?</h2>
     <form id="finish-form" class="row">
       <label>Winner<select id="finish-winner"></select></label>
+      <label>How did it end?<select id="finish-method"><option value="">Not filled in</option>{% for key, label in win_methods.items() %}<option value="{{ key }}">{{ label }}</option>{% endfor %}</select></label>
+      <label>Who went first?<select id="finish-first"></select></label>
       <label>Notes (optional)<input id="finish-notes" size="40"></label>
       <button>Save to the game log</button>
       <button type="button" class="secondary" id="finish-back">Back to the game</button>
@@ -199,6 +201,7 @@
     const alive = game.players.map((p, i) => [p, i]).filter(([p]) => !outReason(p));
     if (alive.length) {
       let next = game.turn;
+      if (game.starter === undefined) game.starter = game.turn;  // whoever took the first turn
       do {
         next = (next + 1) % game.players.length;
         if (next === 0) game.round += 1;
@@ -229,6 +232,9 @@
     const alive = game.players.map((p, i) => i).filter((i) => !outReason(game.players[i]));
     winner.value = alive.length === 1 ? String(alive[0]) : String(game.turn);
     $("finish-notes").value = `Round ${game.round}`;
+    const first = $("finish-first");
+    first.innerHTML = '<option value="">Not filled in</option>' + game.players.map((p, i) => `<option value="${i}">${esc(p.name)}</option>`).join("");
+    first.value = game.starter === undefined ? "" : String(game.starter);
     $("finish-message").textContent = "";
     $("board").hidden = true;
     $("finish").hidden = false;
@@ -254,6 +260,8 @@
       winner: winner && !winner.you ? winner.name : null,
       opponent_commanders: Object.fromEntries(others.filter((p) => p.commander).map((p) => [p.name, p.commander])),
       notes: $("finish-notes").value.trim() || null,
+      win_method: picked === "draw" ? null : $("finish-method").value || null,
+      went_first: $("finish-first").value === "" ? null : game.players[Number($("finish-first").value)].you === true,
     };
     const response = await fetch("/api/games", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
     if (!response.ok) {

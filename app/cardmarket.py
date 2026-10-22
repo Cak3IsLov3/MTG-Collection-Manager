@@ -11,7 +11,7 @@ import re
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 import httpx
 from bs4 import BeautifulSoup
@@ -108,6 +108,21 @@ def parse_product_page(html: str, selectors: dict | None = None) -> CardmarketPr
     if low is None and trend is None:
         raise CardmarketParseError("No price found on Cardmarket page; check cardmarket_selectors.json")
     return CardmarketPrice(low=low, trend=trend)
+
+
+# Link extras that Cardmarket's bot protection blocks outright ("Sorry, you have been blocked"):
+# Scryfall's links carry them (referrer=scryfall&utm_source=scryfall...).
+_TRACKING = ("referrer", "utm_")
+
+
+def clean_cardmarket_url(url: str | None) -> str | None:
+    """A Cardmarket link without the tracking extras, so the page opens instead of being blocked."""
+    if not url or not is_cardmarket_url(url):
+        return url
+    parsed = urlparse(url)
+    query = [(key, value) for key, value in parse_qsl(parsed.query, keep_blank_values=True)
+             if not key.lower().startswith(_TRACKING)]
+    return urlunparse(parsed._replace(query=urlencode(query)))
 
 
 def is_cardmarket_url(url: str) -> bool:

@@ -576,6 +576,12 @@
   .result-screen.win .line { border-color: rgba(231, 179, 67, .75); color: #ffe9b0; }
   .result-screen .line .rec { margin-left: .7em; color: #9be8aa; }
   .confetti { position: fixed; top: -3vh; z-index: 41; width: 1.1vh; height: 1.8vh; border-radius: .2vh; pointer-events: none; }
+  /* a card tumbling down in the colours of the deck */
+  .confetti.card {
+    width: 4.4vh; height: 6.2vh; border-radius: .5vh; border: .25vh solid rgba(255, 236, 170, .9);
+    box-shadow: 0 .6vh 1.6vh rgba(0, 0, 0, .55), inset 0 0 0 .35vh rgba(0, 0, 0, .35);
+  }
+  .confetti.card::after { content: ""; position: absolute; inset: 12% 14% 40%; border-radius: .3vh; background: rgba(255, 255, 255, .28); }
 
   /* ---- turn tracker: the phases of the turn, the current one lit up */
   #phases {
@@ -1604,6 +1610,7 @@
   // ---- The end of the game: Victory! with confetti, a calm GG, or Draw.
   let resultEl = null;
   const CONFETTI = ["#f8e7b9", "#2f8fd8", "#a69f9d", "#e0443c", "#2fa36a", "#f3cc6e", "#ffffff"];
+  const MANA_HEX = { W: "#f8e7b9", U: "#2f8fd8", B: "#8c7f99", R: "#e0443c", G: "#2fa36a" };
   function onResult(ev) {
     if (resultEl) resultEl.remove();
     const make = (tag, cls, text) => Object.assign(document.createElement(tag), { className: cls, textContent: text || "" });
@@ -1629,10 +1636,29 @@
     if (ev.tonight) setTimeout(() => renderTonight(ev.tonight), 1200);
     if (ev.achievements && ev.achievements.length) showAchievements(ev.achievements, duration - 600);
     if (ev.result !== "win") return;
+    // The colours of the deck, with gold and white between; every colour when the deck has none.
+    const mine = [...String(ev.colors || "")].map((c) => MANA_HEX[c]).filter(Boolean);
+    const palette = mine.length ? [...mine, ...mine, "#f3cc6e", "#ffffff"] : CONFETTI;
+    for (let i = 0; i < 26; i += 1) {   // cards: slower, turning over as they fall
+      const card = make("div", "confetti card");
+      const colour = palette[i % palette.length];
+      card.style.left = `${3 + Math.random() * 94}vw`;
+      card.style.background = `linear-gradient(155deg, ${colour}, #14151b 130%)`;
+      document.body.append(card);
+      const fall = 3800 + Math.random() * 2600;
+      const turn = (Math.random() < .5 ? -1 : 1) * (360 + Math.random() * 540);
+      const drift = (Math.random() - .5) * 22;
+      card.animate([
+        { transform: "translate(0, 0) rotateY(0deg) rotateZ(-12deg)", opacity: 1 },
+        { transform: `translate(${drift}vw, 112vh) rotateY(${turn}deg) rotateZ(${12 + Math.random() * 30}deg)`, opacity: 1 },
+      ], { duration: fall, delay: 300 + Math.random() * 1800, easing: "cubic-bezier(.3, .45, .5, 1)", fill: "backwards" })
+        .onfinish = () => card.remove();
+      setTimeout(() => card.remove(), fall + 2600);
+    }
     for (let i = 0; i < 160; i += 1) {
       const bit = make("div", "confetti");
       bit.style.left = `${Math.random() * 100}vw`;
-      bit.style.background = CONFETTI[i % CONFETTI.length];
+      bit.style.background = palette[i % palette.length];
       document.body.append(bit);
       const fall = 2600 + Math.random() * 2600;
       const drift = (Math.random() - .5) * 30;

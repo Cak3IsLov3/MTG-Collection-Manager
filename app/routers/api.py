@@ -33,6 +33,7 @@ from app.schemas import (
     DeckSyncOut,
     DeckCommanderIn,
     DeckPlaysOut,
+    GameDetailsIn,
     GameIn,
     GameOut,
     DeckTokensIn,
@@ -584,10 +585,21 @@ def log_game(payload: GameIn, session: Session = Depends(get_session)):
     try:
         game = games.log_game(
             session, deck, payload.result, payload.played_on, payload.players, payload.notes,
-            payload.opponents, payload.winner, payload.opponent_commanders,
+            payload.opponents, payload.winner, payload.opponent_commanders, payload.win_method, payload.went_first,
         )
     except games.GameError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    session.commit()
+    return game
+
+
+@router.patch("/games/{game_id}", response_model=GameOut)
+def game_details(game_id: int, payload: GameDetailsIn, session: Session = Depends(get_session)):
+    """Fill in afterwards how a game was won and whether you went first."""
+    try:
+        game = games.set_details(session, game_id, payload.win_method, payload.went_first)
+    except games.GameError as exc:
+        raise HTTPException(status_code=404 if "not in the log" in str(exc) else 400, detail=str(exc)) from exc
     session.commit()
     return game
 

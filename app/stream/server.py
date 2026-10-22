@@ -1176,7 +1176,8 @@ def create_app(state_path: Path | str = DEFAULT_STATE_PATH) -> FastAPI:
             info = await asyncio.to_thread(app.state.result_hook, body.result, deck) or {}
         event = {"type": "result", "result": body.result, "deck": deck.get("name"),
                  "record": info.get("record"), "logged": bool(info.get("logged")), "note": info.get("note"),
-                 "tonight": info.get("tonight"), "achievements": info.get("achievements") or []}
+                 "tonight": info.get("tonight"), "achievements": info.get("achievements") or [],
+                 "colors": str((deck.get("intro") or {}).get("colors") or "")[:5]}
         await hub.broadcast({"event": event})
         return event
 

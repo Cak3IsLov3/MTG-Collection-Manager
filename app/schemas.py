@@ -227,6 +227,8 @@ class GameIn(BaseModel):
     opponents: list[str] = []  # who else played
     winner: str | None = None  # who won, when you lost
     opponent_commanders: dict[str, str] = {}  # {"Sam": "Atraxa, Praetors' Voice"}
+    win_method: str | None = None  # "combat", "commander", "combo", ... (games.WIN_METHODS)
+    went_first: bool | None = None  # you took the first turn
 
 
 class GameOut(BaseModel):
@@ -242,6 +244,13 @@ class GameOut(BaseModel):
     opponents: str | None = None  # "Sam, Robin"
     winner: str | None = None
     opponent_commanders: str | None = None  # JSON: {"Sam": "Atraxa, Praetors' Voice"}
+    win_method: str | None = None
+    went_first: bool | None = None
+
+
+class GameDetailsIn(BaseModel):
+    win_method: str | None = None
+    went_first: bool | None = None
 
 
 class DeckPlaysOut(BaseModel):

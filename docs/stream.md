@@ -185,7 +185,8 @@ The **Show on stream** block on the Board tab:
 ## Game over: Victory!, GG or Draw
 
 Under **Deck intro & result** on the Board tab: **🏆 I won** shows "Victory!" in gold with confetti
-over the whole stream, **I lost** a calm "GG · Well played", **Draw** shows "Draw". Under it the deck
+over the whole stream, with cards falling in the colours of the deck (confetti in every colour for a deck
+without colours), **I lost** a calm "GG · Well played", **Draw** shows "Draw". Under it the deck
 and its record after this game.
 
 For a deck from your collection the game also goes in the game log, on the date of tonight's game

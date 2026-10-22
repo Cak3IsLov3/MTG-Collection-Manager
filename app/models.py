@@ -138,6 +138,9 @@ class Game(SQLModel, table=True):
     winner: str | None = None
     # The commanders the others played, as JSON: {"Sam": "Atraxa, Praetors' Voice"}.
     opponent_commanders: str | None = None
+    # How the game was won (a key of games.WIN_METHODS) and whether you took the first turn; None: not filled in.
+    win_method: str | None = None
+    went_first: bool | None = None
     created_at: dt.datetime = Field(default_factory=utcnow)
 
 
@@ -203,6 +206,10 @@ class DeckEntry(SQLModel, table=True):
     # The colours of the card itself, letters in WUBRG order ("" colourless); None: not looked up yet.
     colors: str | None = None
     image_url: str | None = None
+    # For the mana base check: the mana cost ("{1}{U}{U}") and the mana the card makes, letters of
+    # WUBRGC, "F" for a land that fetches one; produces None: not looked up yet.
+    mana_cost: str | None = None
+    produces: str | None = None
 
 
 class DeckToken(SQLModel, table=True):

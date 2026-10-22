@@ -5,6 +5,7 @@ from dataclasses import dataclass
 
 from sqlmodel import Session, select
 
+from app.cardmarket import clean_cardmarket_url
 from app.models import Alert, Card, CollectionEntry, WishlistEntry
 from app.scryfall import ScryfallClient, name_key
 from app.services.collection import add_to_collection
@@ -44,7 +45,7 @@ def add_to_wishlist(
         entry = WishlistEntry(card_id=card.id, target_price=target_price)
     entry.target_price = target_price
     if cardmarket_url:
-        entry.cardmarket_url = cardmarket_url
+        entry.cardmarket_url = clean_cardmarket_url(cardmarket_url)
     session.add(entry)
     session.flush()
     return entry

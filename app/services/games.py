@@ -9,6 +9,11 @@ from sqlmodel import Session, select
 from app.models import Deck, Game
 
 RESULTS = {"win": "Won", "loss": "Lost", "draw": "Draw"}
+# How a game was won, by you or by someone else.
+WIN_METHODS = {
+    "combat": "Combat damage", "commander": "Commander damage", "combo": "Combo", "drain": "Drain / life loss",
+    "poison": "Poison", "alt": "Alternate win or mill", "concede": "The others conceded", "other": "Something else",
+}
 
 
 class GameError(ValueError):
@@ -24,10 +29,19 @@ class DeckPlays:
     losses: int = 0
     draws: int = 0
     last_played: dt.date | None = None
+    win_methods: dict[str, int] = field(default_factory=dict)  # how this deck won: "combo" -> 3
 
     @property
     def win_rate(self) -> int | None:
         return round(self.wins / self.played * 100) if self.played else None
+
+    @property
+    def favourite_win(self) -> tuple[str, int] | None:
+        """The way this deck wins most often: ("Combo", 3)."""
+        if not self.win_methods:
+            return None
+        method = max(self.win_methods, key=lambda key: (self.win_methods[key], -list(WIN_METHODS).index(key)))
+        return WIN_METHODS[method], self.win_methods[method]
 
     def days_since(self, today: dt.date | None = None) -> int | None:
         if self.last_played is None:
@@ -64,11 +78,14 @@ def log_game(
     opponents: str | list[str] | None = None,
     winner: str | None = None,
     opponent_commanders: dict[str, str] | None = None,
+    win_method: str | None = None,
+    went_first: bool | None = None,
 ) -> Game:
     if result not in RESULTS:
         raise GameError("A game is a win, a loss or a draw")
     if players is not None and not 1 <= players <= 12:
         raise GameError("Fill in between 1 and 12 players")
+    win_method = check_win_method(win_method, result)
     played_on = played_on or dt.date.today()
     if played_on > dt.date.today():
         raise GameError("That date is still to come")
@@ -93,7 +110,27 @@ def log_game(
         played_on=played_on, deck_id=deck.id, deck_name=deck.name, result=result, players=players,
         notes=(notes or "").strip() or None, opponents=", ".join(names) or None, winner=winner or None,
         opponent_commanders=json.dumps(commanders) if commanders else None,
+        win_method=win_method, went_first=went_first,
     )
+    session.add(game)
+    session.flush()
+    return game
+
+
+def check_win_method(win_method: str | None, result: str) -> str | None:
+    win_method = (win_method or "").strip() or None
+    if win_method is not None and win_method not in WIN_METHODS:
+        raise GameError("That is not a way to win a game")
+    return None if result == "draw" else win_method
+
+
+def set_details(session: Session, game_id: int, win_method: str | None, went_first: bool | None) -> Game:
+    """Fill in afterwards how a game was won and who went first (say after "I won" on stream)."""
+    game = session.get(Game, game_id)
+    if game is None:
+        raise GameError("That game is not in the log")
+    game.win_method = check_win_method(win_method, game.result)
+    game.went_first = went_first
     session.add(game)
     session.flush()
     return game
@@ -176,6 +213,10 @@ class LogStats:
     brackets: list[Tally] = field(default_factory=list)  # label "3": games with a bracket 3 deck
     opponents: list[Tally] = field(default_factory=list)  # most games first
     commanders: list[Tally] = field(default_factory=list)  # the commanders you played against, most games first
+    # How games ended (label a key of WIN_METHODS): wins = yours, their_wins = someone else's.
+    win_methods: list[Tally] = field(default_factory=list)
+    first: Tally | None = None  # the games you went first
+    not_first: Tally | None = None  # the games someone else went first
 
     @property
     def win_rate(self) -> int | None:
@@ -209,6 +250,8 @@ def log_stats(session: Session, today: dt.date | None = None) -> LogStats:
     brackets: dict[str, Tally] = {}
     opponents: dict[str, Tally] = {}
     commanders: dict[str, Tally] = {}
+    methods: dict[str, Tally] = {}
+    turn_order: dict[str, Tally] = {}
     run = 0
     for game in games:
         stats.played += 1
@@ -222,6 +265,10 @@ def log_stats(session: Session, today: dt.date | None = None) -> LogStats:
         run = run + 1 if game.result == "win" else 0
         stats.longest_win_streak = max(stats.longest_win_streak, run)
         count(months, game.played_on.strftime("%Y-%m"), game)
+        if game.win_method and game.result != "draw":
+            count(methods, game.win_method, game).their_wins += game.result == "loss"
+        if game.went_first is not None:
+            count(turn_order, "first" if game.went_first else "not_first", game)
         if game.players:
             count(sizes, str(game.players), game)
         deck = decks.get(game.deck_id)
@@ -259,6 +306,8 @@ def log_stats(session: Session, today: dt.date | None = None) -> LogStats:
     stats.brackets = sorted(brackets.values(), key=lambda tally: int(tally.label))
     stats.opponents = sorted(opponents.values(), key=lambda tally: (-tally.played, tally.label.casefold()))
     stats.commanders = sorted(commanders.values(), key=lambda tally: (-tally.played, -tally.their_wins, tally.label.casefold()))
+    stats.win_methods = sorted(methods.values(), key=lambda tally: (-tally.played, list(WIN_METHODS).index(tally.label)))
+    stats.first, stats.not_first = turn_order.get("first"), turn_order.get("not_first")
     return stats
 
 
@@ -343,4 +392,6 @@ def deck_plays(session: Session) -> dict[int, DeckPlays]:
         stats.draws += game.result == "draw"
         if stats.last_played is None or game.played_on > stats.last_played:
             stats.last_played = game.played_on
+        if game.result == "win" and game.win_method:
+            stats.win_methods[game.win_method] = stats.win_methods.get(game.win_method, 0) + 1
     return plays

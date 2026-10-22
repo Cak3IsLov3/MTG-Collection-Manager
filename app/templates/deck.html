@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_colour_filter.html" import colour_gradient, colour_filter, pips %}
+{% from "_colour_filter.html" import colour_gradient, colour_filter, mana, pips %}
 {% block title %}{{ deck.name if deck else 'Decks' }} · MTG Collection Manager{% endblock %}
 
 {% macro printing_name(p) %}{{ p.card.set_name }} ({{ p.card.set_code | upper }}{% if p.card.collector_number %} #{{ p.card.collector_number }}{% endif %}){% endmacro %}
@@ -324,6 +324,8 @@
       <input type="hidden" name="back" value="/decks/{{ deck.id }}">
       <label>Date<input name="played_on" type="date" value="{{ today }}" max="{{ today }}"></label>
       <label>Players<input name="players" class="qty" type="number" min="1" max="12" value="4"></label>
+      <label>How did it end?<select name="win_method"><option value="">Not filled in</option>{% for key, label in win_methods.items() %}<option value="{{ key }}">{{ label }}</option>{% endfor %}</select></label>
+    <label>Who went first?<select name="went_first"><option value="">Not filled in</option><option value="me">Me</option><option value="other">Someone else</option></select></label>
       <label>Notes (optional)<input name="notes"></label>
       <div class="result-buttons" role="group" aria-label="Result">
         {% for value, label in results.items() %}
@@ -332,6 +334,7 @@
       </div>
     </form>
     {% if deck_games %}
+    {% if deck_plays and deck_plays.favourite_win %}<p class="muted small">This deck wins most by <strong>{{ deck_plays.favourite_win[0] }}</strong> ({{ deck_plays.favourite_win[1] }} of {{ deck_plays.wins }} wins).</p>{% endif %}
     <p class="muted small">Last games: {% for game in deck_games %}<span class="badge result-{{ game.result }}">{{ results[game.result] }}</span> {{ game.played_on }}{{ ' · ' if not loop.last }}{% endfor %} · <a href="/games?deck={{ deck.id }}">all games</a></p>
     {% endif %}
   </div>
@@ -521,6 +524,64 @@
 </div>
 {% endif %}
 
+{% if mana_check is defined and mana_check and mana_check.colours %}
+{% set mb = mana_check %}
+{% set mb_bad = mb.colours | rejectattr("status", "equalto", "ok") | list %}
+<div class="panel mana-base" data-tab-panel="analysis" style="order: 2">
+  <h2>Mana base <span class="muted">· {{ mb.lands }} land{{ 's' if mb.lands != 1 }}{% if mb.rocks %} and {{ mb.rocks }} early mana rock{{ 's' if mb.rocks != 1 }} or dork{{ 's' if mb.rocks != 1 }}{% endif %}</span></h2>
+  {% if mb_bad %}<p class="down"><strong>⚠ {{ mb_bad | map(attribute="name") | join(" and ") }} could use more sources.</strong></p>
+  {% else %}<p class="up"><strong>✓ Enough sources for every colour.</strong></p>{% endif %}
+  <div class="mana-rows">
+    {% for c in mb.colours %}
+    {% set top = [c.needed, c.sources, 1] | max %}
+    <div class="mana-row {{ c.status }}" style="--c: {{ {'W': '#f2e8c4', 'U': '#3d8be0', 'B': '#a08fb0', 'R': '#e2483a', 'G': '#3fa45a'}[c.colour] }}">
+      <span class="mana-colour">{{ mana(c.colour, c.name) }} {{ c.name }}</span>
+      <span class="mana-meter" title="{{ c.sources }} of about {{ c.needed }} sources">
+        <i class="have" style="width: {{ (100 * c.sources / top) | round }}%"></i>
+        <b class="goal" style="left: {{ (100 * c.needed / top) | round }}%"></b>
+      </span>
+      <span class="mana-count"><strong>{{ c.sources }}</strong> / {{ c.needed }}</span>
+      <span class="muted small mana-why">{% if c.hardest %}{{ c.symbols }} symbol{{ 's' if c.symbols != 1 }} · hardest: {{ c.hardest }} <span class="mana-cost">{{ c.hardest_cost }}</span>{% else %}no spells with this colour in their cost{% endif %}{% if c.from_rocks %} · {{ c.from_rocks }} from rocks/dorks{% endif %}</span>
+    </div>
+    {% endfor %}
+  </div>
+  {% if mb.land_drops %}
+  <div class="land-drops">
+    {% for label, chance in mb.land_drops %}<span class="land-drop {{ 'up' if chance >= 80 else 'down' if chance < 60 }}"><strong>{{ chance }}%</strong> {{ label }}</span>{% endfor %}
+  </div>
+  {% endif %}
+  {% if mb.advice %}<ul class="mana-advice">{% for line in mb.advice %}<li>{{ line }}</li>{% endfor %}</ul>{% endif %}
+  {% if mb.unknown %}<p class="muted small">{{ mb.unknown }} card{{ 's' if mb.unknown != 1 }} not looked up yet; reload in a minute.</p>{% endif %}
+  <p class="muted small">The line on each bar is how many sources you need for an 85% chance to have the colours for your hardest spell on its turn (Frank Karsten's method, one-drops counted as turn two).
+    Lands, fetch lands and mana rocks or dorks up to two mana count as sources; hybrid and Phyrexian symbols are left out.</p>
+</div>
+{% endif %}
+
+{% if salt is defined and (salt or salt_loading) %}
+<div class="panel salt-panel" data-tab-panel="analysis" style="order: 2">
+  {% if salt %}
+  {% set level, level_text = salt.level %}
+  <h2>Salt score <span class="muted">· how much the table will mind</span></h2>
+  <div class="salt-head">
+    <span class="salt-total salt-{{ level | lower | replace(' ', '-') }}" style="--p: {{ [100 * salt.total / 30, 100] | min | round }}%"><b>{{ '%.1f' | format(salt.total) }}</b></span>
+    <div><strong>{{ level }}</strong><br><span class="muted">{{ level_text }}{% if salt.cards %} · {{ salt.cards | length }} salty card{{ 's' if salt.cards | length != 1 }}{% endif %}</span></div>
+  </div>
+  {% if salt.cards %}
+  <table class="compact salt-table">
+    {% for name, score in salt.cards[:10] %}
+    <tr><td>{{ name }}</td><td class="salt-bar"><i style="width: {{ (100 * score / 4) | round }}%"></i></td><td class="num">{{ '%.2f' | format(score) }}</td></tr>
+    {% endfor %}
+  </table>
+  {% if salt.cards | length > 10 %}<p class="muted small">And {{ salt.cards[10:] | map(attribute=0) | join(', ') }}.</p>{% endif %}
+  {% endif %}
+  <p class="muted small">From EDHREC's salt scores: players rate from 0 to 4 how much they hate playing against a card. The deck score adds up the cards rated 1 or more.</p>
+  {% else %}
+  <h2>Salt score</h2>
+  <p class="muted">{% if salt_error %}{{ salt_error }}; the salt scores show once EDHREC can be reached again.{% else %}The salt scores are being fetched from EDHREC; reload in half a minute.{% endif %}</p>
+  {% endif %}
+</div>
+{% endif %}
+
 {% if deck_combos is defined and deck_combos.checked %}
 <div class="panel combos-panel" data-tab-panel="analysis" style="order: 3">
   <h2>Combos <span class="muted">· {{ deck_combos.included | length }} in this deck{% if deck_combos.almost %}, {{ deck_combos.almost | length }} one card away{% endif %}</span></h2>
@@ -663,8 +724,43 @@
 <div class="panel" data-tab-panel="analysis" style="order: 1">
   <h2>Mana curve and card types{% if deck_stats.average_cmc is not none %} <span class="muted">· average mana value {{ deck_stats.average_cmc }}</span>{% endif %}</h2>
   <div class="grid two deck-stats">
-    <div class="chart-box small"><canvas id="curve-chart"></canvas></div>
     <div>
+      {% set top = deck_stats.curve.values() | max %}
+      <div class="curve" id="curve">
+        {% for bucket, count in deck_stats.curve.items() %}
+        {% set idx = loop.index0 %}
+        {% set cards = deck_stats.curve_cards.get(bucket, []) %}
+        <button type="button" class="curve-col {{ 'empty' if not count }}" data-bucket="{{ bucket }}" {{ 'disabled' if not count }} aria-label="{{ count }} card{{ 's' if count != 1 }} with mana value {{ bucket }}">
+          <span class="curve-top">
+            <span class="curve-count">{{ count or '' }}</span>
+            <span class="curve-bar" style="--h: {{ (100 * count / top) | round | int if top else 0 }}; --d: {{ idx * 45 }}ms">
+              {% for colour, per in deck_stats.curve_colors.items() if per[idx] %}<i class="seg seg-{{ colour }}" style="flex: {{ per[idx] }} 1 0" title="{{ per[idx] }}"></i>{% endfor %}
+            </span>
+          </span>
+          <span class="curve-label">{{ bucket }}</span>
+          <span class="curve-fan">
+            {% for card in cards[:4] %}{% if card.image %}<img src="{{ card.image }}" alt="" loading="lazy" style="--i: {{ loop.index0 }}">{% endif %}{% endfor %}
+            {% if cards | length > 4 %}<b>+{{ cards | length - 4 }}</b>{% endif %}
+          </span>
+        </button>
+        {% endfor %}
+      </div>
+      <div class="curve-gallery" id="curve-gallery" hidden></div>
+      <p class="muted small">Click a bar to see its cards. Lands are not counted.</p>
+    </div>
+    <div>
+      {% if deck_stats.colour_totals %}
+      <div class="colour-ring-box">
+        <div class="colour-ring" style="background: {{ deck_stats.ring }}"><span><strong>{{ deck_stats.colour_totals | sum(attribute=1) }}</strong><small>spells</small></span></div>
+        <ul class="ring-legend">
+          {% for colour, count in deck_stats.colour_totals %}
+          <li>{% if colour in 'WUBRG' %}{{ mana(colour, {'W': 'White', 'U': 'Blue', 'B': 'Black', 'R': 'Red', 'G': 'Green'}[colour]) }}{% else %}<i class="ring-dot ring-{{ colour }}"></i>{% endif %}
+            {{ {'W': 'White', 'U': 'Blue', 'B': 'Black', 'R': 'Red', 'G': 'Green', 'M': 'Multicolour', 'C': 'Colourless'}[colour] }}
+            <strong>{{ count }}</strong> <span class="muted">{{ (100 * count / (deck_stats.colour_totals | sum(attribute=1))) | round | int }}%</span></li>
+          {% endfor %}
+        </ul>
+      </div>
+      {% endif %}
       <table class="compact">
         {% for kind, count in deck_stats.types.items() %}<tr><td>{{ kind }}</td><td class="num">{{ count }}</td></tr>{% endfor %}
       </table>
@@ -803,33 +899,44 @@
 {% block scripts %}
 {% set curve_chart = deck and deck_stats and deck_stats.has_data %}
 {% set value_chart = deck and value_history and value_history["values"] | length > 1 %}
-{% if curve_chart or value_chart %}
+{% if value_chart %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 {% endif %}
 {% if curve_chart %}
 <script>
-  // Mana curve: cards per mana value, lands not counted, stacked in the colours of the cards.
-  const curve = {{ deck_stats.curve | tojson }};
-  const perColour = {{ deck_stats.curve_colors | tojson }};
-  const colourLook = {
-    W: ["White", "#f2e8c4"], U: ["Blue", "#3d8be0"], B: ["Black", "#8a7d93"], R: ["Red", "#e2483a"],
-    G: ["Green", "#3fa45a"], M: ["Multicolour", "#e7b343"], C: ["Colourless", "#a3a8b4"],
-  };
-  const curveSets = Object.keys(perColour).length
-    ? [..."WUBRGMC"].filter((c) => perColour[c]).map((c) => ({ label: colourLook[c][0], data: perColour[c], backgroundColor: colourLook[c][1], borderRadius: 3 }))
-    : [{ label: "Cards", data: Object.values(curve), backgroundColor: "#5aa2ff", borderRadius: 3 }];
-  new Chart(document.getElementById("curve-chart"), {
-    type: "bar",
-    data: { labels: Object.keys(curve), datasets: curveSets },
-    options: {
-      maintainAspectRatio: false,
-      scales: {
-        x: { stacked: true, title: { display: true, text: "Mana value", color: "#9599a8" }, ticks: { color: "#9599a8" }, grid: { display: false } },
-        y: { stacked: true, beginAtZero: true, ticks: { color: "#9599a8", precision: 0 }, grid: { color: "#2b2f39" } },
-      },
-      plugins: { legend: { display: curveSets.length > 1, position: "bottom", labels: { color: "#eceef3", boxWidth: 12 } } },
-    },
-  });
+  // Mana curve: click a bar to show the cards behind it.
+  (() => {
+    const cards = {{ deck_stats.curve_cards | tojson }};
+    const gallery = document.getElementById("curve-gallery");
+    const cols = [...document.querySelectorAll(".curve-col")];
+    for (const col of cols) {
+      col.addEventListener("click", () => {
+        const open = !col.classList.contains("on");
+        cols.forEach((c) => c.classList.remove("on"));
+        gallery.hidden = !open;
+        if (!open) return;
+        col.classList.add("on");
+        gallery.replaceChildren();
+        const title = document.createElement("div");
+        title.className = "curve-gallery-title";
+        const list = cards[col.dataset.bucket] || [];
+        title.textContent = `Mana value ${col.dataset.bucket} · ${list.reduce((n, c) => n + c.count, 0)} cards`;
+        gallery.append(title);
+        for (const card of list) {
+          const item = document.createElement("figure");
+          if (card.image) {
+            const img = document.createElement("img");
+            img.src = card.image; img.alt = card.name;
+            item.append(img);
+          }
+          const caption = document.createElement("figcaption");
+          caption.textContent = card.count > 1 ? `${card.count}× ${card.name}` : card.name;
+          item.append(caption);
+          gallery.append(item);
+        }
+      });
+    }
+  })();
 </script>
 {% endif %}
 {% if deck %}

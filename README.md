@@ -96,7 +96,11 @@ Press **▶ Play** on a deck and the stream screen opens with every token that d
 
 ![The cards of a deck as pictures: a stack per card type, missing cards grey, a foil copy shining](docs/deck-wall.jpg)
 
-![The Analysis tab of a deck: mana curve and card types, then the bracket check and the combos](docs/deck-analysis.jpg)
+![The Analysis tab of a deck: the mana curve with the cards under every bar, a ring with the colours of the deck and its card types, then the bracket check](docs/deck-analysis.jpg)
+
+![A bar of the mana curve clicked open: the cards with that mana value as pictures](docs/deck-curve.jpg)
+
+![The mana base: sources per colour against what the hardest spell needs, the chance of enough lands on turn 3, 4 and 5, and the salt score of the deck with its saltiest cards](docs/deck-mana.jpg)
 
 ![Logging a game from the deck page, and the value of the deck's copies over the last month](docs/deck-value.jpg)
 
@@ -105,8 +109,6 @@ Press **▶ Play** on a deck and the stream screen opens with every token that d
 ![Parts of a deck folded away by clicking their title: only what you need stays open](docs/deck-folded.jpg)
 
 ![Choosing which Angel token: every token with that name, by picture](docs/deck-token-versions.jpg)
-
-![Mana curve and card types of a 100-card deck, with ramp, card draw, removal and board wipes](docs/deck-curve.jpg)
 
 ![The bracket check: eight Game Changers do not fit bracket 3; below it the combos in the deck and the ones it is one card away from, from Commander Spellbook](docs/deck-bracket.jpg)
 
@@ -137,6 +139,8 @@ Press **▶ Play** on a deck and the stream screen opens with every token that d
 ![The Games page: log a game, then tabs for the overview (win rate, streak, nemesis, games per month), opponents, per deck and the log](docs/games.jpg)
 
 ![Win rates by table size, deck colour and bracket, and per opponent; the player who beats you most is your nemesis](docs/games-stats.jpg)
+
+![How games are won: combat, commander damage, combo and the rest, how often you won and lost to each, and your win rate when you go first](docs/games-wins.jpg)
 
 ![The commanders each opponent plays, and your results against every commander](docs/games-commanders.jpg)
 
@@ -204,7 +208,7 @@ Press **▶ Play** on a deck and the stream screen opens with every token that d
 **Both**
 - Tabs on every page: what you always need stays on top, the rest is in tabs (with counts such as "80 missing" or "⚠ bracket"). The tab bar stays in view while you scroll, the tab you chose is remembered, and a link like `/decks/3#improve` opens that tab
 - Search everything from the menu (press `/`): your cards, decks (by name or a card in them) and wishlist as you type
-- Point at a card name anywhere to see the card; the deck page has the commander's art as a banner and a mana curve in the colours of the cards; sets are coloured by rarity and brackets by level
+- Point at a card name anywhere to see the card; the deck page has the commander's art as a banner and a mana curve in the colours of the cards, with the cards under every bar; sets are coloured by rarity and brackets by level
 - Dashboard banner: the deck you played last with its commander art, your week (wins and losses) and your newest achievement
 - Achievements from your game log: First blood, Ten wins, On a roll, Clean sweep, Big table, All five colours and more, plus per deck First win, Ten wins and Hat-trick (shown on the deck page). Unlocked with I won on the stream, they show on stream too
 - The cards of a deck as pictures: switch the list to a stack of card pictures per type, like on a table; missing cards are grey, foil copies shine
@@ -225,17 +229,20 @@ Press **▶ Play** on a deck and the stream screen opens with every token that d
 - Basic lands per deck: fill in how many of each basic land a deck runs (shown as land cards), whatever the printing. Imported decks start with the numbers from the list, and older decks can move their lands over in one click
 - Deck randomizer: can't decide what to play? Pick a random deck, or a different one for every player at the table, optionally only from one bracket or only decks you can build right now, with a bigger chance for the decks you have not played for a while, and skipping the decks you already played tonight
 - Tokens per deck: which tokens, emblems and helper cards (Morph, Manifest) a deck needs and how many (from the deck list, or added by hand), in alphabetical order with their pictures (click a number to change it) and tick boxes for packing them for game night. There are often several tokens with one name (many Angels): "other version" shows them all to pick from
-- Mana curve and card types per deck: cards per mana value, the average mana value, how many creatures, instants, lands and so on, and how many cards ramp, draw, remove or wipe the board (guessed from the rules text)
+- Mana curve and card types per deck: cards per mana value with the cards as pictures under every bar (click a bar to see them), the average mana value, a ring with the colours of the deck, how many creatures, instants, lands and so on, and how many cards ramp, draw, remove or wipe the board (guessed from the rules text)
+- Mana base check per deck: the sources of every colour (lands, fetch lands, and mana rocks or dorks up to two mana) against what the hardest spell of that colour needs for an 85% chance on its turn (Frank Karsten's method), the chance of two lands in your opening hand and of three, four and five lands by turn three, four and five, and advice when a colour is short
+- Salt score per deck, from EDHREC's salt scores per card (how much players hate playing against it): one score for the deck with a label from Sweet to Very salty, and its saltiest cards
 - Proxies: a printable sheet of the cards a deck still misses (or the whole deck) at real card size, nine to an A4 page, for play-testing
 - Export a deck as a text list for Archidekt or Moxfield, with the commander first and its tokens at the end
 - Weekly summary on Discord (by default on Monday at 9:00): collection value and its change, new cards, risers and fallers, and the games you played. The dashboard shows the same under "This week"
 - Commander picture: every deck shows its commander, taken from the Commander category on Archidekt, recognised from the deck name (only when that card can be a commander), or chosen on the deck page
-- Game log: log a game from the Games page or from a deck (date, players, who you played against and their commanders, who won, notes). Every deck shows how often it was played, its win rate and when it was last played
+- Game log: log a game from the Games page or from a deck (date, players, who you played against and their commanders, who won, how it ended, who went first, notes). Every deck shows how often it was played, its win rate and when it was last played
 - Live table for game night (made for an iPad on the table): life, poison and commander damage per player, whose turn it is and the round, undo, full screen, and the screen stays on. Players are out at 0 life, 10 poison or 21 commander damage; the top row can be turned upside down for the players across. At the end you pick the winner and the game goes into the log with everyone and their commanders. A game in progress survives a reload
-- **Stream overlay for OBS**: show tokens, counters, mana, dice and a turn tracker on your stream, with a control panel to run it (also as an OBS dock). Take the tokens of any saved deck with one click (**▶ Play** on a deck), with a deck intro on stream (commander, bracket and record). Put any card big in the spotlight, keep track of commander tax and storm, and end with Victory! and confetti (the game goes straight into your log), tonight's score in view and achievements as they unlock. A ready-made Stream Deck profile (32 keys, with pictures) to import with a double-click; it works without a plugin. Control panel at `/stream/control`, Browser source at `/stream/overlay`; see [docs/stream.md](docs/stream.md)
+- **Stream overlay for OBS**: show tokens, counters, mana, dice and a turn tracker on your stream, with a control panel to run it (also as an OBS dock). Take the tokens of any saved deck with one click (**▶ Play** on a deck), with a deck intro on stream (commander, bracket and record). Put any card big in the spotlight, keep track of commander tax and storm, and end with Victory! with confetti and cards falling in the colours of your deck (the game goes straight into your log), tonight's score in view and achievements as they unlock. A ready-made Stream Deck profile (32 keys, with pictures) to import with a double-click; it works without a plugin. Control panel at `/stream/control`, Browser source at `/stream/overlay`; see [docs/stream.md](docs/stream.md)
 - The commanders of your opponents: fill them in when you log a game (the one a player used last time is filled in). The Games page shows the commanders each player plays and your results against every commander
 - Weakest cards per deck: the cards the fewest decks with its commander play on EDHREC (under 10%), each with a more popular card of the same kind from your collection to swap in. "Only cards I have free" shows just the ones you can swap right away
 - Game statistics: your win rate, current streak and longest winning streak, games per month, win rates by table size (next to your fair share), deck colour and bracket, and per opponent, with the player who beats you most as your nemesis
+- How games are won: for every game you can fill in how it ended (combat, commander damage, combo, drain, poison, alternate win or mill, the others conceded) and who went first, also afterwards in the log. The Games page shows how often each way won or beat you, and your win rate when you go first; a deck shows how it wins most. The live table remembers who went first
 - Bracket check per deck: Game Changers (the official list, from Scryfall), mass land denial, extra turns and two-card infinite combos, against the bracket you set. A deck that does not fit gets a ⚠ in the list of decks
 - Combos per deck from Commander Spellbook: the combos in the deck and what they do, and the combos it is one card away from, marked when you own that card
 - EDHREC next to every deck with a commander: the cards other decks with that commander play most, how often and their synergy, with the ones you have a free copy of marked
@@ -366,6 +373,7 @@ product page. Two things to know:
 | `POST` | `/api/decks/{id}/stream/intro` | Show the deck intro on stream, with the record as it is now |
 | `GET` | `/api/decks/{id}/value-history` | What the copies in a deck were worth on every day with prices |
 | `GET` / `POST` | `/api/games` | The game log (`?deck_id=` for one deck) / log a game |
+| `PATCH` | `/api/games/{id}` | Fill in afterwards how a game was won (`win_method`: `combat`, `commander`, `combo`, `drain`, `poison`, `alt`, `concede`, `other`) and whether you went first (`went_first`) |
 | `DELETE` | `/api/games/{id}` | Remove a game from the log |
 | `GET` | `/api/games/stats` | Per deck: games played, wins, losses, draws, win rate and last played |
 | `GET` | `/api/games/overview` | Win rate, streaks, and win rates per month, table size, colour, bracket and opponent |
@@ -390,7 +398,7 @@ app/
   scryfall.py          async Scryfall client (httpx), batch lookups, 429 retry
   cardmarket.py        product page scraper (BeautifulSoup), selectors from JSON
   spellbook.py         Commander Spellbook client: the combos in a deck
-  edhrec.py            EDHREC client: the most played cards per commander
+  edhrec.py            EDHREC client: the most played cards per commander, and the salt scores
   backup.py            daily copies of the SQLite database
   stream/              the token overlay for OBS, mounted at /stream (see docs/stream.md)
   rate_limit.py        one independent rate-limit queue per external source

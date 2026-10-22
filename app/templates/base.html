@@ -37,6 +37,43 @@
     {% block content %}{% endblock %}
   </main>
   <script>
+    // Big numbers on the stat tiles count up to their value when the page opens.
+    (() => {
+      if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+      const token = /-?\d[\d.,]*/g;
+      function read(text) {
+        const dot = text.includes("."), comma = text.includes(",");
+        let dec = null, thou = null;
+        if (dot && comma) { dec = text.lastIndexOf(".") > text.lastIndexOf(",") ? "." : ","; thou = dec === "." ? "," : "."; }
+        else if (dot || comma) {
+          const sep = dot ? "." : ",", parts = text.split(sep);
+          if (parts.length > 2 || parts[1].length === 3) thou = sep; else dec = sep;
+        }
+        let plain = thou ? text.split(thou).join("") : text;
+        if (dec) plain = plain.replace(dec, ".");
+        return { value: parseFloat(plain), dec, thou, decimals: dec ? text.length - text.lastIndexOf(dec) - 1 : 0 };
+      }
+      function show(info, value) {
+        const [whole, fraction] = value.toFixed(info.decimals).split(".");
+        const grouped = info.thou ? whole.replace(/\B(?=(\d{3})+(?!\d))/g, info.thou) : whole;
+        return fraction ? grouped + info.dec + fraction : grouped;
+      }
+      for (const el of document.querySelectorAll(".stat .value")) {
+        const text = el.textContent, found = text.match(token);
+        if (!found || found.length !== 1) continue;
+        const info = read(found[0]);
+        if (!isFinite(info.value) || info.value === 0) continue;
+        const start = performance.now(), length = 800;
+        const tick = (now) => {
+          const t = Math.min(1, (now - start) / length), eased = 1 - Math.pow(1 - t, 3);
+          el.textContent = text.replace(token, show(info, info.value * eased));
+          if (t < 1) requestAnimationFrame(tick); else el.textContent = text;
+        };
+        requestAnimationFrame(tick);
+      }
+    })();
+  </script>
+  <script>
     // Forms marked data-keep-scroll reload the same page; put the reader back where they were.
     const scrollKey = "scroll:" + location.pathname;
     try {

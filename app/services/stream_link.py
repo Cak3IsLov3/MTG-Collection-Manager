@@ -39,6 +39,7 @@ def deck_intro(session: Session, deck: Deck) -> dict:
         "image_url": image,
         "bracket": f"Bracket {deck.bracket} · {BRACKETS[deck.bracket]}" if deck.bracket in BRACKETS else None,
         "record": record,
+        "colors": "".join(c for c in (deck.colors or "") if c in "WUBRG"),
     }
 
 

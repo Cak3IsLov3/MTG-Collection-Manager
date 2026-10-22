@@ -236,6 +236,10 @@ class FakeEdhrec:
 
     def __call__(self, request: httpx.Request) -> httpx.Response:
         self.requests.append(request)
+        if request.url.path == "/pages/top/salt.json":
+            return httpx.Response(200, json={"container": {"json_dict": {"cardlists": [{"cardviews": [
+                {"name": "Sol Ring", "salt": 1.5}, {"name": "Rhystic Study", "salt": 1.2},
+            ], "more": None}]}}})
         slug = request.url.path.removeprefix("/pages/commanders/").removesuffix(".json")
         page = EDHREC_PAGES.get(slug)
         return httpx.Response(200, json=page) if page else httpx.Response(404)

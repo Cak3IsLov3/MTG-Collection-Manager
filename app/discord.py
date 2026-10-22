@@ -2,6 +2,7 @@ import logging
 
 import httpx
 
+from app.cardmarket import clean_cardmarket_url
 from app.models import Card
 
 logger = logging.getLogger(__name__)
@@ -111,7 +112,7 @@ class DiscordNotifier:
             "color": 0x2ECC71,
         }
         if url:
-            embed["url"] = url
+            embed["url"] = clean_cardmarket_url(url)  # Cardmarket blocks its links with tracking extras
         if card.image_url:
             embed["thumbnail"] = {"url": card.image_url}
         try:

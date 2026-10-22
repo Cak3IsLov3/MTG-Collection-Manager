@@ -61,6 +61,10 @@ def card_wall(session: Session, deck, rows: list) -> list[tuple[str, list[dict]]
     return [(kind, sorted(groups[kind], key=lambda c: c["name"])) for kind in order if kind in groups]
 
 
+# A land that makes no mana itself but finds one (Evolving Wilds, Prismatic Vista).
+_FETCH = re.compile(r"search your library for an? [^.]*land card", re.IGNORECASE)
+
+
 def card_type(type_line: str | None) -> str | None:
     """The type a card counts as, from the front face: "Instant // Land" is an instant."""
     front = (type_line or "").split(" // ")[0]
@@ -114,6 +118,7 @@ def _store(entry: DeckEntry, data: ScryfallCard | None) -> None:
     if data is None:
         entry.type_line, entry.roles, entry.bracket_flags = "", "", ""  # looked up, not found: not again
         entry.token_parts, entry.colors = "[]", ""
+        entry.mana_cost, entry.produces = "", ""
         return
     entry.token_parts = _token_parts(data)
     entry.colors = data.colors or ""
@@ -122,6 +127,10 @@ def _store(entry: DeckEntry, data: ScryfallCard | None) -> None:
     entry.roles = card_roles(data.type_line, data.oracle_text)
     entry.bracket_flags = bracket_flags(data.oracle_text)
     entry.image_url = data.image_url
+    entry.mana_cost = data.mana_cost
+    entry.produces = data.produced_mana
+    if not entry.produces and card_type(data.type_line) == "Land" and _FETCH.search(data.oracle_text):
+        entry.produces = "F"
 
 
 async def fill_card_info(session: Session, scryfall: ScryfallClient, deck_id: int | None = None) -> int:
@@ -129,7 +138,7 @@ async def fill_card_info(session: Session, scryfall: ScryfallClient, deck_id: in
     (of one deck, or of all), and the pictures of their tokens. Returns the number of cards filled in."""
     statement = select(DeckEntry).where(or_(
         DeckEntry.type_line == None, DeckEntry.bracket_flags == None, DeckEntry.token_parts == None,  # noqa: E711
-        DeckEntry.colors == None,  # noqa: E711
+        DeckEntry.colors == None, DeckEntry.produces == None,  # noqa: E711
     ))
     if deck_id is not None:
         statement = statement.where(DeckEntry.deck_id == deck_id)
@@ -441,10 +450,29 @@ class DeckStats:
     roles: dict[str, int] = field(default_factory=dict)  # "Ramp" -> cards
     average_cmc: float | None = None
     unknown: int = 0  # cards Scryfall did not know (yet)
+    # The cards behind every bar of the curve: "3" -> [{"name", "image", "count", "colour"}], by name.
+    curve_cards: dict[str, list[dict]] = field(default_factory=dict)
 
     @property
     def has_data(self) -> bool:
         return bool(self.types)
+
+    @property
+    def colour_totals(self) -> list[tuple[str, int]]:
+        """The spells per colour ("M" more than one colour, "C" colourless), most common first."""
+        totals = [(colour, sum(per)) for colour, per in self.curve_colors.items() if sum(per)]
+        return sorted(totals, key=lambda item: -item[1])
+
+    @property
+    def ring(self) -> str:
+        """The colour ring as a CSS conic-gradient."""
+        total = sum(count for _, count in self.colour_totals)
+        stops, at = [], 0.0
+        for colour, count in self.colour_totals:
+            end = at + count / total * 100
+            stops.append(f"{RING_COLOURS[colour]} {at:.2f}% {end:.2f}%")
+            at = end
+        return f"conic-gradient({', '.join(stops)})" if stops else "none"
 
 
 def deck_stats(session: Session, deck: Deck) -> DeckStats:
@@ -466,6 +494,8 @@ def deck_stats(session: Session, deck: Deck) -> DeckStats:
             colour = colors if len(colors) == 1 else "M" if colors else "C"
             per_value = stats.curve_colors.setdefault(colour, [0] * len(stats.curve))
             per_value[list(stats.curve).index(bucket)] += entry.quantity
+            stats.curve_cards.setdefault(bucket, []).append(
+                {"name": entry.name, "image": entry.image_url, "count": entry.quantity, "colour": colour})
             spells += entry.quantity
             total_cmc += (entry.cmc or 0) * entry.quantity
     lands = sum(row.quantity for row in session.exec(select(DeckBasicLand).where(DeckBasicLand.deck_id == deck.id)))
@@ -475,6 +505,8 @@ def deck_stats(session: Session, deck: Deck) -> DeckStats:
     stats.roles = {label: stats.roles[label] for label in ROLES.values() if stats.roles.get(label)}
     stats.average_cmc = round(total_cmc / spells, 2) if spells else None
     stats.curve_colors = {c: stats.curve_colors[c] for c in "WUBRGMC" if c in stats.curve_colors}
+    for cards in stats.curve_cards.values():
+        cards.sort(key=lambda card: card["name"])
     return stats
 
 
@@ -515,3 +547,33 @@ def proxies(session: Session, rows: list[DeckRow], everything: bool = False) -> 
         copies = row.needed if everything else row.missing
         sheet += [(row.name, pictures.get(row.entry_id) or "")] * max(0, copies)
     return sheet
+
+
+RING_COLOURS = {"W": "#f2e8c4", "U": "#3d8be0", "B": "#8a7d93", "R": "#e2483a", "G": "#3fa45a", "M": "#e7b343", "C": "#a3a8b4"}
+
+SALT_LEVELS = ((2.0, "Sweet", "nothing the table will mind"), (6.0, "A pinch of salt", "a few cards people groan at"),
+               (12.0, "Salty", "expect some sighs at the table"), (float("inf"), "Very salty", "the table will not love this one"))
+
+
+@dataclass
+class SaltCheck:
+    """How much the table will hate playing against a deck, from EDHREC's salt scores per card."""
+
+    total: float = 0.0  # the scores of the cards added up
+    cards: list[tuple[str, float]] = field(default_factory=list)  # (card, score), saltiest first
+
+    @property
+    def level(self) -> tuple[str, str]:
+        return next((name, text) for limit, name, text in SALT_LEVELS if self.total < limit)
+
+
+def salt_check(session: Session, deck: Deck, scores: dict[str, float]) -> SaltCheck:
+    check = SaltCheck()
+    for entry in session.exec(select(DeckEntry).where(DeckEntry.deck_id == deck.id)):
+        score = scores.get(entry.name.split(" // ")[0].casefold())
+        if score:
+            check.cards.append((entry.name, score))
+            check.total += score
+    check.cards.sort(key=lambda item: (-item[1], item[0]))
+    check.total = round(check.total, 1)
+    return check
