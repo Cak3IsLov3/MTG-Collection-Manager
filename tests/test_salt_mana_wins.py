@@ -121,3 +121,24 @@ def test_game_details_can_be_filled_in_afterwards(client):
     assert "Commander damage" in page and "How games are won" in page
     client.post(f"/games/{game['id']}/details", data={"win_method": "combo", "went_first": "other"})
     assert client.get("/api/games").json()[0]["went_first"] is False
+
+
+# --- the database of before ---------------------------------------------------------------
+
+
+def test_new_columns_reach_a_database_from_before():
+    """The mana cost, what a card produces and how a game was won are added to the tables of an older database."""
+    from sqlalchemy import create_engine
+
+    from app.database import add_missing_columns
+
+    old = create_engine("sqlite://")
+    with old.begin() as connection:
+        connection.exec_driver_sql("CREATE TABLE deckentry (id INTEGER PRIMARY KEY, deck_id INTEGER, name VARCHAR, quantity INTEGER)")
+        connection.exec_driver_sql("CREATE TABLE game (id INTEGER PRIMARY KEY, played_on DATE, deck_name VARCHAR, result VARCHAR)")
+        connection.exec_driver_sql("INSERT INTO deckentry (deck_id, name, quantity) VALUES (1, 'Sol Ring', 1)")
+        connection.exec_driver_sql("INSERT INTO game (played_on, deck_name, result) VALUES ('2026-10-01', 'Kess', 'win')")
+    add_missing_columns(old)
+    with old.begin() as connection:
+        assert connection.exec_driver_sql("SELECT name, mana_cost, produces FROM deckentry").all() == [("Sol Ring", None, None)]
+        assert connection.exec_driver_sql("SELECT result, win_method, went_first FROM game").all() == [("win", None, None)]

@@ -709,14 +709,7 @@ svg.icon { width: 1.15em; height: 1.15em; vertical-align: -0.2em; flex: none; }
   font-size: 11.5px; font-weight: 700; color: #ffd0d0; background: rgba(160, 30, 40, .85); }
 
 /* ===== Smooth transitions ===== */
-@view-transition { navigation: auto; }
-::view-transition-old(root) { animation: .16s ease-in both vt-out; }
-::view-transition-new(root) { animation: .26s ease-out both vt-in; }
-@keyframes vt-out { to { opacity: 0; } }
-@keyframes vt-in { from { opacity: 0; } }
-@supports not selector(::view-transition) {
-  main, .container { animation: page-in .28s ease-out both; }
-}
+main, .container { animation: page-in .28s ease-out both; }
 [data-tab-panel]:not([hidden]) { animation: panel-in .3s ease-out both; }
 [data-tab-panel]:not([hidden]):nth-child(2) { animation-delay: .04s; }
 [data-tab-panel]:not([hidden]):nth-child(3) { animation-delay: .08s; }
@@ -732,7 +725,6 @@ button:active:not(:disabled) { transform: translateY(1px); }
 @media (prefers-reduced-motion: reduce) {
   main, .container, [data-tab-panel]:not([hidden]) { animation: none !important; }
   .curve-bar, .mana-meter .have, .salt-bar i { animation: none !important; }
-  ::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*) { animation: none !important; }
   .foil-art::after { animation: none; }
   .dash-hero.with-art::before { transition: none; }
 }
