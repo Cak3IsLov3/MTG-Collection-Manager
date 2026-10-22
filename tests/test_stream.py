@@ -1170,3 +1170,41 @@ def test_victory_logs_the_game():
     finally:
         manager.dependency_overrides.clear()
         stream_app.state.decks.save(None)
+
+
+# --- two tokens on one picture (the Roles of Wilds of Eldraine) -------------------------------
+
+
+ROLES = {
+    "id": "role", "name": "Monster // Sorcerer", "layout": "flip", "keywords": ["Trample"],
+    "image_uris": {"normal": IMG.format("role")}, "type_line": "Token Enchantment — Aura Role",
+    "card_faces": [
+        {"name": "Monster", "type_line": "Token Enchantment — Aura Role",
+         "oracle_text": "Enchant creature\nEnchanted creature gets +1/+1 and has trample."},
+        {"name": "Sorcerer", "type_line": "Token Enchantment — Aura Role",
+         "oracle_text": "Enchant creature\nEnchanted creature gets +1/+1 and has \"Whenever this creature attacks, scry 1.\""},
+    ],
+}
+
+
+def test_a_flip_picture_is_two_tokens():
+    from app.stream.server import token_infos
+
+    top, bottom = token_infos(ROLES)
+    assert (top["name"], top["part"], bottom["name"], bottom["part"]) == ("Monster", "top", "Sorcerer", "bottom")
+    assert top["keywords"] == ["Trample"] and bottom["keywords"] == []
+    assert top["image_url"] == bottom["image_url"] == IMG.format("role")
+    [plain] = token_infos({"id": "t", "name": "Treasure", "image_uris": {"normal": IMG.format("t")}})
+    assert plain["part"] == "whole"
+
+
+def test_the_parts_of_a_picture_are_separate_stacks(client):
+    monster = {"name": "Monster", "image_url": IMG.format("role"), "part": "top"}
+    sorcerer = {"name": "Sorcerer", "image_url": IMG.format("role"), "part": "bottom"}
+    for item in (monster, monster, sorcerer):
+        assert client.post("/api/tokens", json=item).status_code == 201
+    by_name = {t["name"]: t for t in tokens(client)}
+    assert (by_name["Monster"]["count"], by_name["Monster"]["part"]) == (2, "top")
+    assert (by_name["Sorcerer"]["count"], by_name["Sorcerer"]["part"]) == (1, "bottom")
+    assert client.post("/api/tokens", json={**monster, "part": "middle"}).status_code == 422
+    assert tokens(client)[0]["part"] in ("top", "bottom")

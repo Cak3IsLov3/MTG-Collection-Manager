@@ -93,6 +93,11 @@ Each shows which of your cards makes it. The deck stays there after a restart
 (saved in `stream-state-deck.json`); **Rescan** after you change the deck, **Forget
 deck** to remove it. The deck has to be public.
 
+**Two tokens on one picture** (the Roles of Wilds of Eldraine: Monster // Sorcerer, the second one
+printed upside down below the first) are split: each is its own button and its own stack on the board,
+shown as a half card, the second one turned the right way up, without the name plate (the name is
+printed on the token already). The same goes for the results when you search for a token.
+
 ## Placing cards anywhere (drag & drop)
 
 The control panel has a **Layout** section with a live, scaled-down copy of

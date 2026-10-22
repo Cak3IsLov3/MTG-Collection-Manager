@@ -111,11 +111,10 @@ async def deck_for_stream(session: Session, deck: Deck) -> dict:
     cards = await asyncio.to_thread(_cards_for, ids) if ids else []
     merged: dict[tuple, dict] = {}
     for card in cards:
-        info = server.token_info(card)
-        if not info:
-            continue
-        key = (info["name"], info["power"], info["toughness"], info["text"])
-        merged.setdefault(key, {**info, "made_by": made_by.get(name_key(info["name"]), [])})
+        for info in server.token_infos(card):
+            key = (info["name"], info["power"], info["toughness"], info["text"], info["part"])
+            makers = made_by.get(name_key(card.get("name", ""))) or made_by.get(name_key(info["name"]), [])
+            merged.setdefault(key, {**info, "made_by": makers})
     entries = session.exec(select(DeckEntry).where(DeckEntry.deck_id == deck.id)).all()
     return {
         "name": deck.name,

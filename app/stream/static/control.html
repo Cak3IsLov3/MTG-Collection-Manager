@@ -240,6 +240,13 @@
   }
   .board li:hover { border-color: var(--line-2); background: #20232b; }
   .board li.is-tapped { background: linear-gradient(90deg, rgba(231, 179, 67, .08), transparent 40%), var(--panel-2); }
+  /* A token cut out of a picture with two tokens on it. */
+  .crop { position: relative; display: block; overflow: hidden; aspect-ratio: 488 / 340; border-radius: 4px; background: var(--panel-3); }
+  .crop > img, .board .crop > img, .result .crop > img { position: absolute; left: 0; top: 0; width: 100%; height: 200%; aspect-ratio: auto; border-radius: 0; box-shadow: none; transition: none; }
+  .crop.bottom > img, .board .crop.bottom > img, .result .crop.bottom > img { transform: rotate(180deg); }
+  .board .crop { width: 46px; flex: none; box-shadow: 0 2px 8px rgba(0, 0, 0, .5); }
+  .board li.is-tapped .crop { transform: rotate(90deg) scale(.82); filter: brightness(.8); }
+  .result .crop { width: 100%; border-radius: 7px; }
   .board img {
     width: 46px;
     aspect-ratio: 488 / 680;
@@ -1230,6 +1237,14 @@
 
   // ---------------------------------------------------------- helpers
 
+  // A token picture; the top or bottom token of a picture with two on it is cut out (the bottom one turned upright).
+  function picture(src, part, alt, lazy) {
+    const img = el("img", { src, alt: alt || "" });
+    if (lazy) img.loading = "lazy";
+    if (part !== "top" && part !== "bottom") return img;
+    return el("span", { class: `crop ${part}` }, img);
+  }
+
   function el(tag, props = {}, ...children) {
     const node = document.createElement(tag);
     for (const [k, v] of Object.entries(props)) {
@@ -1306,6 +1321,23 @@
     return m[1] || `— ${m[2].trim()}`;
   }
 
+  // Two tokens on one picture (Monster // Sorcerer, the second upside down below it): both, apart.
+  function cardInfos(card) {
+    const info = cardInfo(card);
+    if (!info) return [];
+    const faces = card.card_faces || [];
+    if (card.layout !== "flip" || !card.image_uris || faces.length !== 2) return [{ ...info, part: "whole" }];
+    return faces.map((face, i) => {
+      const text = face.oracle_text || "";
+      const keywords = (card.keywords || []).filter((k) => text.toLowerCase().includes(k.toLowerCase()))
+        .map((k) => (k === "Ward" && wardCost(text) ? `Ward ${wardCost(text)}` : k));
+      return { ...info, name: face.name || info.name, part: i === 0 ? "top" : "bottom",
+               power: face.power ?? null, toughness: face.toughness ?? null,
+               pt: face.power != null ? `${face.power}/${face.toughness}` : "",
+               abilities: abilityText(text), fullText: text, keywords };
+    });
+  }
+
   function cardInfo(card) {
     const face = faceOf(card);
     if (!face) return null;
@@ -1369,7 +1401,7 @@
         return;
       }
       const data = await res.json();
-      const cards = (data.data || []).map(cardInfo).filter((c) => c && c.image.startsWith(SCRYFALL_IMG));
+      const cards = (data.data || []).flatMap(cardInfos).filter((c) => c && c.image.startsWith(SCRYFALL_IMG));
       info.textContent = (label ? `${label}: ` : "") + `${data.total_cards} results` +
         (data.has_more ? ` (showing first ${cards.length})` : "");
       results.replaceChildren(...cards.map(resultTile));
@@ -1386,7 +1418,7 @@
         onclick: async (e) => {
           const tile = e.currentTarget;
           const ok = await api("POST", ROOT + "/api/tokens", {
-            name: c.name, image_url: c.image, power: c.power, toughness: c.toughness,
+            name: c.name, image_url: c.image, part: c.part || "whole", power: c.power, toughness: c.toughness,
             keywords: c.keywords,
           });
           if (!ok) return;
@@ -1396,7 +1428,7 @@
           toast(`Added ${c.name}`);
         },
       },
-      el("img", { src: c.thumb, alt: c.name, loading: "lazy" }),
+      picture(c.thumb, c.part, c.name, true),
       el("div", { class: "name", text: c.name }),
       el("div", { class: "abil", text: [c.color, c.abilities].filter(Boolean).join(" · ") }),
       el("div", { class: "meta" }, el("span", { text: c.pt }), el("span", { text: c.set })),
@@ -1644,7 +1676,7 @@
 
     const sameKind = (a, b) =>
       a.kind === b.kind && a.name === b.name && a.value === b.value &&
-      a.image_url === b.image_url && a.tapped === b.tapped && a.counters === b.counters &&
+      a.image_url === b.image_url && a.part === b.part && a.tapped === b.tapped && a.counters === b.counters &&
       a.set_power === b.set_power && a.set_toughness === b.set_toughness;
 
     // Keep focus and typed text in an input when the list re-renders (other
@@ -1717,7 +1749,7 @@
         const c = t.counters || 0;
         return el("li", { class: (t.tapped ? "is-tapped" : "") + (t.id === selectedId ? " selected" : ""),
                           data: { id: t.id } },
-          el("img", { src: t.image_url, alt: "" }),
+          picture(t.image_url, t.part, ""),
           el("div", { class: "info" },
             el("span", { class: "name", text: t.name, title: t.name }),
             el("span", { class: "sub", text: [
@@ -2330,7 +2362,8 @@
         onclick: async (e) => {
           const tile = e.currentTarget;
           const ok = await api("POST", ROOT + "/api/tokens", {
-            name: t.name, image_url: t.image_url, power: t.power, toughness: t.toughness, keywords: t.keywords,
+            name: t.name, image_url: t.image_url, part: t.part || "whole", power: t.power, toughness: t.toughness,
+            keywords: t.keywords,
           });
           if (!ok) return;
           tile.classList.remove("added");
@@ -2339,7 +2372,7 @@
           toast(`Added ${t.name}`);
         },
       },
-      el("img", { src: t.image_url.replace("/normal/", "/small/"), alt: t.name, loading: "lazy" }),
+      picture(t.image_url.replace("/normal/", "/small/"), t.part, t.name, true),
       el("div", { class: "name", text: t.name }),
       el("div", { class: "abil", text: [t.keywords.join(", "), t.text && !t.keywords.length ? abilityText(t.text) : ""]
         .filter(Boolean).join(" · ") }),

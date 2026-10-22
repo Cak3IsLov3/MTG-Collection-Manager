@@ -91,6 +91,12 @@
     /* Rotate around the centre and shift so the card sits at the bottom of the slot. */
     transform: translate(var(--shift), var(--shift)) rotate(90deg);
   }
+  /* Two tokens on one picture (the Roles): each is a half card, the second one turned the right way up. */
+  .token.half { --h: calc(var(--hf) / 2); --shift: calc((var(--hf) / 2 - var(--w)) / 2); }
+  .token.half .card { overflow: hidden; box-shadow: 0 0 0 max(2px, calc(var(--w) * 0.012)) rgba(255, 255, 255, .92), 0 2px 4px rgba(0, 0, 0, .5), 0 10px 26px rgba(0, 0, 0, .6); }
+  body.no-outline .token.half .card { box-shadow: 0 2px 4px rgba(0, 0, 0, .5), 0 10px 26px rgba(0, 0, 0, .6); }
+  .token.half .card img { height: 200%; box-shadow: none; }
+  .token.half.bottom .card img { transform: rotate(180deg); }
   .card img {
     width: 100%;
     height: 100%;
@@ -746,6 +752,7 @@
   rootStyle.setProperty("--w", `${W}px`);
   rootStyle.setProperty("--h", `${H}px`);
   rootStyle.setProperty("--shift", `${(H - W) / 2}px`);
+  rootStyle.setProperty("--hf", `${H}px`);   // the height of a whole card; a half token is half of it
   const C = 2 * Math.round(W * 0.3);  // counter chip diameter, whole and even
   rootStyle.setProperty("--c", `${C}px`);
   rootStyle.setProperty("--kh", `${2 * Math.round(W * 0.15)}px`);  // keyword pill height
@@ -833,7 +840,7 @@
 
   function createToken(t, after) {
     const el = document.createElement("div");
-    el.className = "token";
+    el.className = "token" + (t.part === "top" || t.part === "bottom" ? ` half ${t.part}` : "");
     el.dataset.id = t.id;
     const card = document.createElement("div");
     card.className = "card";
@@ -871,7 +878,7 @@
     el.append(card, face);
     insertAfter(el, after);
 
-    const entry = { name: t.name, el, badge, pt, stats, kw, count: null, ptText: null, statsText: null, kwText: null,
+    const entry = { name: t.name, el, plate, half: t.part === "top" || t.part === "bottom", badge, pt, stats, kw, count: null, ptText: null, statsText: null, kwText: null,
                     tapped: null, pos: undefined };
     elements.set(t.id, entry);
     return entry;
@@ -948,6 +955,8 @@
       entry.kw.textContent = kwText;
       entry.kw.hidden = !kwText;
     }
+    // The name is printed on a half token already: the plate only shows when it has more to say.
+    if (entry.half) entry.plate.style.display = stats || kwText ? "" : "none";
     if (entry.tapped !== !!t.tapped) {
       entry.tapped = !!t.tapped;
       entry.el.classList.toggle("tapped", entry.tapped);

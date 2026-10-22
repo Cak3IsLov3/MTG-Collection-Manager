@@ -131,6 +131,9 @@ class Token(BaseModel):
     kind: Literal["card", "counter"] = "card"
     name: str
     image_url: str
+    # Two tokens on one picture (the Roles of Wilds of Eldraine): this one is its "top" half, or the
+    # "bottom" half, which is printed upside down.
+    part: Literal["whole", "top", "bottom"] = "whole"
     count: int
     tapped: bool = False
     # Net number of counters: positive = +1/+1, negative = -1/-1. In MTG
@@ -152,6 +155,7 @@ class Token(BaseModel):
 class TokenIn(BaseModel):
     name: str = Field(min_length=1, max_length=100)
     image_url: str = Field(max_length=500)
+    part: Literal["whole", "top", "bottom"] = "whole"
     power: str | None = Field(default=None, max_length=5)
     toughness: str | None = Field(default=None, max_length=5)
     keywords: list[str] = Field(default_factory=list, max_length=MAX_KEYWORDS)
@@ -361,6 +365,7 @@ def same_kind(a: Token, b: Token) -> bool:
         a.kind == b.kind
         and a.name == b.name
         and a.image_url == b.image_url
+        and a.part == b.part
         and a.tapped == b.tapped
         and a.counters == b.counters
         and a.set_power == b.set_power
@@ -417,7 +422,7 @@ class TokenStore:
         # A new token enters untapped and without counters, so only add it to
         # a stack in that state.
         for t in self.tokens:
-            if t.kind == "card" and t.image_url == item.image_url and not t.tapped and t.counters == 0:
+            if t.kind == "card" and t.image_url == item.image_url and t.part == item.part and not t.tapped and t.counters == 0:
                 t.count = min(t.count + 1, MAX_COUNT)
                 self._save()
                 return t
@@ -573,7 +578,7 @@ class TokenStore:
         if token.kind != "card":
             raise TypeError
         for t in self.tokens:
-            if t.kind == "card" and t.image_url == token.image_url and not t.tapped and t.counters == 0:
+            if t.kind == "card" and t.image_url == token.image_url and t.part == token.part and not t.tapped and t.counters == 0:
                 t.count = min(t.count + count, MAX_COUNT)
                 self._save()
                 return t
@@ -811,6 +816,27 @@ def token_info(card: dict) -> dict | None:
     }
 
 
+def token_infos(card: dict) -> list[dict]:
+    """The tokens of a Scryfall card for the control panel: one, or for two tokens on one picture
+    (Monster // Sorcerer, the second upside down below the first) both, each with its part."""
+    info = token_info(card)
+    if not info:
+        return []
+    faces = card.get("card_faces") or []
+    if card.get("layout") == "flip" and card.get("image_uris") and len(faces) == 2:
+        out = []
+        for part, face in zip(("top", "bottom"), faces):
+            text = face.get("oracle_text") or ""
+            keywords = [k for k in card.get("keywords", []) if k.lower() in text.lower()]
+            keywords = [f"Ward {ward_cost(text)}" if k == "Ward" and ward_cost(text) else k for k in keywords]
+            out.append({**info, "name": face.get("name") or info["name"], "part": part,
+                        "power": face.get("power"), "toughness": face.get("toughness"),
+                        "keywords": keywords[:MAX_KEYWORDS], "text": text,
+                        "type_line": face.get("type_line") or info["type_line"]})
+        return out
+    return [{**info, "part": "whole"}]
+
+
 def find_deck_tokens(url: str) -> dict:
     source, deck_id = parse_deck_url(url)
     name, ids = deck_cards(source, deck_id)
@@ -824,12 +850,10 @@ def find_deck_tokens(url: str) -> dict:
     # One entry per distinct token (same name and rules), with every card that makes it.
     merged: dict[tuple, dict] = {}
     for card in scryfall_cards(list(makers)):
-        info = token_info(card)
-        if not info:
-            continue
-        key = (info["name"], info["power"], info["toughness"], info["text"])
-        entry = merged.setdefault(key, {**info, "made_by": set()})
-        entry["made_by"] |= makers.get(card["id"], set())
+        for info in token_infos(card):
+            key = (info["name"], info["power"], info["toughness"], info["text"], info["part"])
+            entry = merged.setdefault(key, {**info, "made_by": set()})
+            entry["made_by"] |= makers.get(card["id"], set())
     tokens = sorted(merged.values(), key=lambda t: (t["name"].lower(), t["text"]))
     for t in tokens:
         t["made_by"] = sorted(t["made_by"])
