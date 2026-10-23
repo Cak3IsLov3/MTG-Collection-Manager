@@ -1208,3 +1208,20 @@ def test_the_parts_of_a_picture_are_separate_stacks(client):
     assert (by_name["Sorcerer"]["count"], by_name["Sorcerer"]["part"]) == (1, "bottom")
     assert client.post("/api/tokens", json={**monster, "part": "middle"}).status_code == 422
     assert tokens(client)[0]["part"] in ("top", "bottom")
+
+
+def test_the_ring_emblem_is_a_name_bar(client):
+    from app.stream.server import token_infos
+
+    ring = {"id": "ring", "name": "The Ring // The Ring Tempts You", "layout": "double_faced_token",
+            "card_faces": [{"name": "The Ring", "type_line": "Emblem", "image_uris": {"normal": IMG.format("ring")},
+                            "oracle_text": "Your Ring-bearer is legendary."},
+                           {"name": "The Ring Tempts You", "type_line": "Card", "image_uris": {"normal": IMG.format("ring-back")}}]}
+    [info] = token_infos(ring)
+    assert info["name"] == "The Ring" and info["part"] == "whole" and info["bar"] == 0.44
+    assert "bar" not in token_infos({"id": "t", "name": "Treasure", "image_uris": {"normal": IMG.format("t")}})[0]
+
+    assert client.post("/api/tokens", json={"name": "The Ring", "image_url": IMG.format("ring"), "bar": 0.44}).status_code == 201
+    [t] = tokens(client)
+    assert t["bar"] == 0.44 and t["part"] == "whole"
+    assert client.post("/api/tokens", json={"name": "Bad", "image_url": IMG.format("x"), "bar": 3}).status_code == 422

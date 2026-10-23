@@ -134,6 +134,9 @@ class Token(BaseModel):
     # Two tokens on one picture (the Roles of Wilds of Eldraine): this one is its "top" half, or the
     # "bottom" half, which is printed upside down.
     part: Literal["whole", "top", "bottom"] = "whole"
+    # Show only the name bar on the overlay: the middle of that bar as a fraction of the picture's
+    # height (None: the whole token, or the bar of a "top"/"bottom" part).
+    bar: float | None = None
     count: int
     tapped: bool = False
     # Net number of counters: positive = +1/+1, negative = -1/-1. In MTG
@@ -156,6 +159,7 @@ class TokenIn(BaseModel):
     name: str = Field(min_length=1, max_length=100)
     image_url: str = Field(max_length=500)
     part: Literal["whole", "top", "bottom"] = "whole"
+    bar: float | None = Field(default=None, ge=0, le=1)
     power: str | None = Field(default=None, max_length=5)
     toughness: str | None = Field(default=None, max_length=5)
     keywords: list[str] = Field(default_factory=list, max_length=MAX_KEYWORDS)
@@ -816,6 +820,10 @@ def token_info(card: dict) -> dict | None:
     }
 
 
+# Tokens that are only a name on stream: where the name bar is, as a fraction of the picture's height.
+NAME_BAR_AT = {"The Ring": 0.44}
+
+
 def token_infos(card: dict) -> list[dict]:
     """The tokens of a Scryfall card for the control panel: one, or for two tokens on one picture
     (Monster // Sorcerer, the second upside down below the first) both, each with its part."""
@@ -834,7 +842,8 @@ def token_infos(card: dict) -> list[dict]:
                         "keywords": keywords[:MAX_KEYWORDS], "text": text,
                         "type_line": face.get("type_line") or info["type_line"]})
         return out
-    return [{**info, "part": "whole"}]
+    bar = NAME_BAR_AT.get(info["name"])
+    return [{**info, "part": "whole", **({"bar": bar} if bar is not None else {})}]
 
 
 def find_deck_tokens(url: str) -> dict:

@@ -99,6 +99,8 @@ shown in the control panel as a half card. On stream only the name bar of each i
 "Sorcerer"), the second one turned the right way up, without the name plate (the name is printed on the
 bar already). The bar scales with the card size. The same goes for the results when you search for a token.
 
+**The Ring** (the emblem when a card says "the Ring tempts you") is shown the same way: only its name bar, "The Ring".
+
 ## Placing cards anywhere (drag & drop)
 
 The control panel has a **Layout** section with a live, scaled-down copy of

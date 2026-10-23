@@ -96,8 +96,9 @@
   .token.half { --h: calc(var(--w) * 0.127); --shift: calc((var(--w) * 0.127 - var(--w)) / 2); }
   .token.half .card { overflow: hidden; box-shadow: 0 0 0 max(2px, calc(var(--w) * 0.012)) rgba(255, 255, 255, .92), 0 2px 4px rgba(0, 0, 0, .5), 0 10px 26px rgba(0, 0, 0, .6); }
   body.no-outline .token.half .card { box-shadow: 0 2px 4px rgba(0, 0, 0, .5), 0 10px 26px rgba(0, 0, 0, .6); }
-  .token.half .card img { position: absolute; left: 0; top: calc(var(--w) * -0.0405); width: 100%; height: calc(var(--w) * 1.393); box-shadow: none; }
-  .token.half.bottom .card img { top: calc(var(--w) * -0.0885); transform: rotate(180deg); }
+  /* --bar: where the middle of the name bar is, as a fraction of the picture's height. */
+  .token.half .card img { position: absolute; left: 0; top: calc(var(--w) * (0.0635 - 1.393 * var(--bar))); width: 100%; height: calc(var(--w) * 1.393); box-shadow: none; }
+  .token.half.bottom .card img { transform: rotate(180deg); }
   .card img {
     width: 100%;
     height: 100%;
@@ -841,7 +842,10 @@
 
   function createToken(t, after) {
     const el = document.createElement("div");
-    el.className = "token" + (t.part === "top" || t.part === "bottom" ? ` half ${t.part}` : "");
+    const half = t.part === "top" || t.part === "bottom" || typeof t.bar === "number";
+    el.className = "token" + (half ? ` half ${t.part}` : "");
+    // Roles: the bar of the top token is at 7.5% of the picture, the one of the bottom token at 10.9% (upside down).
+    if (half) el.style.setProperty("--bar", String(typeof t.bar === "number" ? t.bar : t.part === "bottom" ? 0.1091 : 0.0748));
     el.dataset.id = t.id;
     const card = document.createElement("div");
     card.className = "card";
@@ -879,7 +883,7 @@
     el.append(card, face);
     insertAfter(el, after);
 
-    const entry = { name: t.name, el, plate, half: t.part === "top" || t.part === "bottom", badge, pt, stats, kw, count: null, ptText: null, statsText: null, kwText: null,
+    const entry = { name: t.name, el, plate, half, badge, pt, stats, kw, count: null, ptText: null, statsText: null, kwText: null,
                     tapped: null, pos: undefined };
     elements.set(t.id, entry);
     return entry;
