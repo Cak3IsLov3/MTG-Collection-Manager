@@ -17,8 +17,8 @@
     --line-2: #383d49;
     --text: #eceef3;
     --muted: #9599a8;
-    --accent: #e7b343;
-    --accent-2: #f3cc6e;
+    --accent: #fcd535;
+    --accent-2: #fde677;
     --danger: #e0434b;
     --ok: #3fb950;
     --plus: #23944a;
@@ -31,14 +31,14 @@
     margin: 0;
     min-height: 100vh;
     background:
-      radial-gradient(1200px 500px at 10% -10%, rgba(231, 179, 67, .07), transparent 60%),
+      radial-gradient(1200px 500px at 10% -10%, rgba(252, 213, 53, .07), transparent 60%),
       radial-gradient(900px 500px at 110% 0%, rgba(90, 120, 220, .07), transparent 60%),
       var(--bg);
     color: var(--text);
     font: 14px/1.45 "Inter", "Segoe UI", system-ui, sans-serif;
     -webkit-font-smoothing: antialiased;
   }
-  ::selection { background: rgba(231, 179, 67, .35); }
+  ::selection { background: rgba(252, 213, 53, .35); }
 
   /* ---- buttons */
   button {
@@ -65,7 +65,7 @@
     background: linear-gradient(180deg, var(--accent-2), var(--accent));
     border-color: #c9952a;
   }
-  button.primary:hover { background: linear-gradient(180deg, #f8d988, #eebd52); border-color: #d9a43a; }
+  button.primary:hover { background: linear-gradient(180deg, #fde677, #eebd52); border-color: #d9a43a; }
   button.danger { color: #ffb4b7; border-color: #5b2328; background: #2a1719; }
   button.danger:hover { color: #fff; background: var(--danger); border-color: var(--danger); }
   button.ghost { background: transparent; border-color: transparent; color: var(--muted); }
@@ -239,7 +239,7 @@
     transition: border-color .15s, background .15s;
   }
   .board li:hover { border-color: var(--line-2); background: #20232b; }
-  .board li.is-tapped { background: linear-gradient(90deg, rgba(231, 179, 67, .08), transparent 40%), var(--panel-2); }
+  .board li.is-tapped { background: linear-gradient(90deg, rgba(252, 213, 53, .08), transparent 40%), var(--panel-2); }
   /* A token cut out of a picture with two tokens on it. */
   .crop { position: relative; display: block; overflow: hidden; aspect-ratio: 488 / 340; border-radius: 4px; background: var(--panel-3); }
   .crop > img, .board .crop > img, .result .crop > img { position: absolute; left: 0; top: 0; width: 100%; height: 200%; aspect-ratio: auto; border-radius: 0; box-shadow: none; transition: none; }
@@ -317,9 +317,9 @@
     border-radius: 8px;
   }
   .board .split-box input { width: 56px; }
-  .board .manual-pt { border-color: rgba(231, 179, 67, .45); }
+  .board .manual-pt { border-color: rgba(252, 213, 53, .45); }
   .board .ward-cost { border-color: rgba(69, 184, 198, .5); }
-  .board .ward-cost.empty-cost { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(231, 179, 67, .15); }
+  .board .ward-cost.empty-cost { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(252, 213, 53, .15); }
   .board .ward-cost .label { color: #7fd3de; font-size: 12px; font-weight: 700; padding: 0 4px; }
   .board .ward-cost input {
     width: 130px;
@@ -332,7 +332,7 @@
     border-radius: 8px;
   }
   .board .manual-pt .label { color: var(--accent); font-size: 12px; font-weight: 700; padding: 0 4px; }
-  .board .manual-pt input { width: 54px; border-color: rgba(231, 179, 67, .6); }
+  .board .manual-pt input { width: 54px; border-color: rgba(252, 213, 53, .6); }
   .board .chip {
     width: 46px;
     height: 46px;
@@ -412,7 +412,7 @@
     outline: none;
     transition: border-color .15s, box-shadow .15s;
   }
-  #search:focus { border-color: var(--accent); box-shadow: 0 0 0 4px rgba(231, 179, 67, .15); }
+  #search:focus { border-color: var(--accent); box-shadow: 0 0 0 4px rgba(252, 213, 53, .15); }
   #suggest {
     position: absolute;
     left: 0;
@@ -664,8 +664,8 @@
   .show-bar .note { color: var(--muted); font-size: 13px; }
   .result-row { margin-top: 4px; }
   svg.icon { width: 1.15em; height: 1.15em; vertical-align: -0.2em; }
-  .result-btn.win { color: #1a1406; border-color: transparent; background: linear-gradient(180deg, #f8d988, #e7b343); }
-  .show-bar .tally-btn b { margin-left: 4px; color: var(--accent-2, #f3cc6e); font-variant-numeric: tabular-nums; }
+  .result-btn.win { color: #1a1406; border-color: transparent; background: linear-gradient(180deg, #fde677, #fcd535); }
+  .show-bar .tally-btn b { margin-left: 4px; color: var(--accent-2, #fde677); font-variant-numeric: tabular-nums; }
 
   /* ---- stacks: actions, counters pill, "more" menu */
   .board .actions { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
@@ -768,7 +768,7 @@
   /* selected stack (for keyboard shortcuts) */
   .board li.selected, .ctile.selected {
     border-color: var(--accent);
-    box-shadow: 0 0 0 2px rgba(231, 179, 67, .35);
+    box-shadow: 0 0 0 2px rgba(252, 213, 53, .35);
   }
 
   /* Treasure colour picker (in a "more"-style menu) */
@@ -873,7 +873,7 @@
     border: 1px solid var(--line-2);
     border-radius: 10px;
   }
-  .deck-form input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 4px rgba(231, 179, 67, .15); }
+  .deck-form input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 4px rgba(252, 213, 53, .15); }
   .deck-info { color: var(--muted); font-size: 13px; margin: 4px 2px 10px; }
   .deck-info.busy::before {
     content: "";
@@ -918,7 +918,7 @@
     margin: 2px -20px -12px;
     padding: 7px 20px;
     border-top: 1px solid var(--line);
-    background: linear-gradient(90deg, rgba(231, 179, 67, .07), transparent 60%);
+    background: linear-gradient(90deg, rgba(252, 213, 53, .07), transparent 60%);
   }
   .turn-strip[hidden] { display: none; }
   .turn-strip .spacer { flex: 1; }
@@ -950,6 +950,25 @@
   /* empty state */
   .board li.empty { flex-direction: column; gap: 6px; padding: 26px 12px; }
   .empty-icon { font-size: 26px; opacity: .8; }
+
+  /* ===== The Binance look, as in the rest of the app ===== */
+  :root { --bg: #0b0e11; --panel: #1e2329; --panel-2: #2b3139; --panel-3: #333a44; --line: #2b3139; --line-2: #3a424d;
+    --text: #eaecef; --muted: #929aa5; --accent: #fcd535; --accent-2: #fde677; --danger: #f6465d; --ok: #0ecb81; --radius: 12px; --shadow: none; }
+  body { background: var(--bg); font-variant-numeric: tabular-nums; }
+  button { border-radius: 6px; background: var(--panel-2); border-color: var(--panel-2); }
+  button:hover { background: var(--panel-3); border-color: var(--panel-3); }
+  button:disabled:hover { background: var(--panel-2); border-color: var(--panel-2); }
+  button.primary, .result-btn.win, .board button.view.on, .board button.tap.on, .board button.use:hover:not(:disabled) {
+    color: #181a20; background: var(--accent); border-color: var(--accent); }
+  button.primary:hover { background: #f0b90b; border-color: #f0b90b; }
+  button.danger { background: #2a1719; border-color: #5b2328; }
+  button.danger:hover { background: var(--danger); border-color: var(--danger); color: #fff; }
+  .panel { background: var(--panel); border-radius: 12px; }
+  .board li.is-tapped { background: var(--panel-2); box-shadow: inset 3px 0 0 var(--accent); }
+  .turn-strip { background: var(--panel); }
+  input, select, textarea { border-radius: 8px; }
+  .app-nav { background: var(--bg); }
+  .app-nav a.active { background: transparent; color: #fff; box-shadow: inset 0 -2px 0 var(--accent); border-radius: 0; }
 </style>
 </head>
 <body>
