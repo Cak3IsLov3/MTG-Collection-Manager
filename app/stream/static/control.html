@@ -1375,7 +1375,7 @@
   let searchTimer;
   let searchCtrl;
 
-  // query is Scryfall search syntax, prefixed with t:token. label (optional)
+  // query is Scryfall search syntax, prefixed with the kinds of tokens. label (optional)
   // describes a picked autocomplete variant in the result info line.
   async function search(query, label = "") {
     clearTimeout(searchTimer);
@@ -1391,7 +1391,8 @@
     info.textContent = "Searching…";
 
     const url = new URL("https://api.scryfall.com/cards/search");
-    url.searchParams.set("q", mode === "tokens" ? `t:token ${query}` : query);
+    // Tokens, emblems and helper cards (On an Adventure is a "Card" with the layout token).
+    url.searchParams.set("q", mode === "tokens" ? `(t:token or t:emblem or layout:token or layout:emblem or layout:double_faced_token) ${query}` : query);
     url.searchParams.set("unique", "art");
     url.searchParams.set("order", "name");
 

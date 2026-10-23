@@ -1280,3 +1280,23 @@ def test_deck_tokens_to_the_stream_without_visiting_the_deck_first(monkeypatch):
             assert {t["name"] for t in found["tokens"]} == {"Soldier", "Treasure"}
     finally:
         manager.dependency_overrides.clear()
+
+
+def test_scanning_a_deck_link_finds_emblems_and_helper_cards(client, fake_net, monkeypatch):
+    monkeypatch.setitem(SCRYFALL["pitiless"], "all_parts", [
+        {"component": "token", "id": "treasure"},
+        {"component": "combo_piece", "id": "adv", "name": "On an Adventure", "type_line": "Card"},
+        {"component": "combo_piece", "id": "ring", "name": "The Ring", "type_line": "Emblem // Card"},
+        {"component": "combo_piece", "id": "pitiless", "name": "Pitiless Plunderer", "type_line": "Creature — Human"},
+    ])
+    monkeypatch.setitem(SCRYFALL, "adv", {"id": "adv", "name": "On an Adventure", "keywords": [], "layout": "token",
+                                          "type_line": "Card", "oracle_text": "After an Adventure resolves...",
+                                          "image_uris": {"normal": IMG_A}})
+    monkeypatch.setitem(SCRYFALL, "ring", {"id": "ring", "name": "The Ring // The Ring Tempts You", "keywords": [],
+                                           "layout": "double_faced_token", "type_line": "Emblem // Card",
+                                           "card_faces": [{"name": "The Ring", "type_line": "Emblem", "image_uris": {"normal": IMG_B}},
+                                                          {"name": "The Ring Tempts You", "type_line": "Card", "image_uris": {"normal": IMG_A}}]})
+    deck = client.post("/api/deck", json={"url": "https://archidekt.com/decks/1234/krenko_goblins"}).json()
+    names = {t["name"]: t for t in deck["tokens"]}
+    assert {"On an Adventure", "The Ring", "Treasure"} <= set(names)
+    assert names["On an Adventure"]["plate"] is False and names["The Ring"]["bar"] == 0.44

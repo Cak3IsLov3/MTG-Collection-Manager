@@ -867,7 +867,10 @@ def find_deck_tokens(url: str) -> dict:
     makers: dict[str, set[str]] = {}
     for card in scryfall_cards(ids):
         for part in card.get("all_parts") or []:
-            if part.get("component") == "token" and part.get("id") and part["id"] != card.get("id"):
+            kind = part.get("type_line") or ""
+            # Tokens, emblems (The Ring) and helper cards ("On an Adventure", a combo piece of the type "Card").
+            if ((part.get("component") == "token" or kind.startswith("Emblem") or kind == "Card")
+                    and part.get("id") and part["id"] != card.get("id")):
                 makers.setdefault(part["id"], set()).add(card.get("name", ""))
     # One entry per distinct token (same name and rules), with every card that makes it.
     merged: dict[tuple, dict] = {}

@@ -102,7 +102,8 @@ bar already). The bar scales with the card size. The same goes for the results w
 **The Ring** (the emblem when a card says "the Ring tempts you") is shown the same way: only its name bar, "The Ring".
 
 **Helper cards** such as "On an Adventure" (the card you put an Adventure's exiled card on) are in the list of
-your deck's tokens too, one for all your Adventure cards, shown whole and without a name plate.
+your deck's tokens too, one for all your Adventure cards, shown whole and without a name plate. Emblems (The Ring)
+and helper cards are found when you scan a deck link and when you search for tokens, just like in a deck of your collection.
 
 **Name only or the whole token:** a token that shows as a name bar has a **Full token** button on the Board
 tab (and **Name only** to go back). A Role then shows as a half card (the name, the picture and the rules
