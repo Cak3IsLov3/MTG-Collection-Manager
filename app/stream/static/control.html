@@ -1330,7 +1330,8 @@
     const faces = card.card_faces || [];
     if (card.layout !== "flip" || !card.image_uris || faces.length !== 2) {
       // The Ring emblem is just its name bar on stream, like the Roles.
-      return [{ ...info, part: "whole", bar: info.name === "The Ring" ? 0.44 : null }];
+      return [{ ...info, part: "whole", bar: info.name === "The Ring" ? 0.44 : null,
+                plate: !["The Ring", "On an Adventure"].includes(info.name) }];
     }
     return faces.map((face, i) => {
       const text = face.oracle_text || "";
@@ -1338,7 +1339,7 @@
         .map((k) => (k === "Ward" && wardCost(text) ? `Ward ${wardCost(text)}` : k));
       return { ...info, name: face.name || info.name, part: i === 0 ? "top" : "bottom",
                power: face.power ?? null, toughness: face.toughness ?? null,
-               pt: face.power != null ? `${face.power}/${face.toughness}` : "",
+               plate: false, pt: face.power != null ? `${face.power}/${face.toughness}` : "",
                abilities: abilityText(text), fullText: text, keywords };
     });
   }
@@ -1423,8 +1424,8 @@
         onclick: async (e) => {
           const tile = e.currentTarget;
           const ok = await api("POST", ROOT + "/api/tokens", {
-            name: c.name, image_url: c.image, part: c.part || "whole", bar: c.bar ?? null, power: c.power,
-            toughness: c.toughness, keywords: c.keywords,
+            name: c.name, image_url: c.image, part: c.part || "whole", bar: c.bar ?? null, plate: c.plate !== false,
+            power: c.power, toughness: c.toughness, keywords: c.keywords,
           });
           if (!ok) return;
           tile.classList.remove("added");
@@ -2372,8 +2373,8 @@
         onclick: async (e) => {
           const tile = e.currentTarget;
           const ok = await api("POST", ROOT + "/api/tokens", {
-            name: t.name, image_url: t.image_url, part: t.part || "whole", bar: t.bar ?? null, power: t.power,
-            toughness: t.toughness, keywords: t.keywords,
+            name: t.name, image_url: t.image_url, part: t.part || "whole", bar: t.bar ?? null, plate: t.plate !== false,
+            power: t.power, toughness: t.toughness, keywords: t.keywords,
           });
           if (!ok) return;
           tile.classList.remove("added");

@@ -856,7 +856,7 @@
     el.classList.toggle("bottom", t.part === "bottom");
     // Roles: the bar of the top token is at 7.5% of the picture, the one of the bottom token at 10.9% (upside down).
     if (bar) el.style.setProperty("--bar", String(typeof t.bar === "number" ? t.bar : t.part === "bottom" ? 0.1091 : 0.0748));
-    return capable;   // the name is printed on these: no name plate, whole or not
+    return capable || t.plate === false;   // the name is printed on these: no name plate, whole or not
   }
 
   function createToken(t, after) {

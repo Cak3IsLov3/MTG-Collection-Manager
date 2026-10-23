@@ -134,7 +134,9 @@ class ScryfallCard:
             flip=data.get("layout") == "flip" and bool(data.get("image_uris")),
             token_parts=[
                 (part["id"], part["name"]) for part in data.get("all_parts") or []
-                if (part.get("component") == "token" or (part.get("type_line") or "").startswith("Emblem"))
+                # Helper cards such as "On an Adventure" are listed as a combo piece with the type "Card".
+                if (part.get("component") == "token" or (part.get("type_line") or "").startswith("Emblem")
+                    or (part.get("type_line") or "") == "Card")
                 and part.get("id") and part.get("id") != data["id"]
             ],
         )

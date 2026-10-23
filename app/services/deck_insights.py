@@ -105,11 +105,18 @@ def tokens_needed(oracle_text: str) -> int:
     return min(MAX_TOKENS_PER_CARD, once * 3 if _REPEATS.search(oracle_text) else once)
 
 
+# Emblems and helper cards you need just one of, however many cards point at them.
+ONE_ENOUGH = {"the ring", "on an adventure", "the monarch", "the initiative", "day // night"}
+
+
+def one_enough(name: str) -> bool:
+    return name.endswith(" Emblem") or name.casefold() in ONE_ENOUGH or name.casefold().split(" // ")[0] in ONE_ENOUGH
+
+
 def _token_parts(data: ScryfallCard) -> str:
     count = tokens_needed(data.oracle_text)
-    # One emblem is enough: a second one of the same does nothing new.
     return json.dumps([
-        {"id": token_id, "name": name, "count": 1 if name.endswith(" Emblem") else count}
+        {"id": token_id, "name": name, "count": 1 if one_enough(name) else count}
         for token_id, name in data.token_parts
     ])
 
@@ -341,6 +348,8 @@ def token_suggestions(session: Session, deck: Deck, include_standard: bool = Fal
                 continue
             suggestion = found.setdefault(name_key(part["name"]), TokenSuggestion(part["id"], part["name"], 0))
             suggestion.needed = min(MAX_TOKENS, suggestion.needed + part["count"] * entry.quantity)
+            if one_enough(part["name"]):
+                suggestion.needed = 1
             if entry.name not in suggestion.made_by:
                 suggestion.made_by.append(entry.name)
     listed = deck_tokens(session, deck)

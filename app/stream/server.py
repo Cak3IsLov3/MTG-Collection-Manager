@@ -137,6 +137,8 @@ class Token(BaseModel):
     # Show only the name bar on the overlay: the middle of that bar as a fraction of the picture's
     # height (None: the whole token, or the bar of a "top"/"bottom" part).
     bar: float | None = None
+    # False: the overlay leaves the name plate off (the name is printed on the token already).
+    plate: bool = True
     # Show the whole token instead of just its name bar (for the tokens that have a name bar).
     full: bool = False
     count: int
@@ -162,6 +164,7 @@ class TokenIn(BaseModel):
     image_url: str = Field(max_length=500)
     part: Literal["whole", "top", "bottom"] = "whole"
     bar: float | None = Field(default=None, ge=0, le=1)
+    plate: bool = True
     power: str | None = Field(default=None, max_length=5)
     toughness: str | None = Field(default=None, max_length=5)
     keywords: list[str] = Field(default_factory=list, max_length=MAX_KEYWORDS)
@@ -829,6 +832,8 @@ def token_info(card: dict) -> dict | None:
 
 # Tokens that are only a name on stream: where the name bar is, as a fraction of the picture's height.
 NAME_BAR_AT = {"The Ring": 0.44}
+# Helper cards with their name printed on them: shown whole, without a name plate.
+NAME_PRINTED = {"On an Adventure"}
 
 
 def token_infos(card: dict) -> list[dict]:
@@ -847,10 +852,11 @@ def token_infos(card: dict) -> list[dict]:
             out.append({**info, "name": face.get("name") or info["name"], "part": part,
                         "power": face.get("power"), "toughness": face.get("toughness"),
                         "keywords": keywords[:MAX_KEYWORDS], "text": text,
-                        "type_line": face.get("type_line") or info["type_line"]})
+                        "type_line": face.get("type_line") or info["type_line"], "plate": False})
         return out
     bar = NAME_BAR_AT.get(info["name"])
-    return [{**info, "part": "whole", **({"bar": bar} if bar is not None else {})}]
+    nameless = bar is not None or info["name"] in NAME_PRINTED
+    return [{**info, "part": "whole", "plate": not nameless, **({"bar": bar} if bar is not None else {})}]
 
 
 def find_deck_tokens(url: str) -> dict:

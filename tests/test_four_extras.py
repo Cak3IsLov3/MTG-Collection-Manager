@@ -266,7 +266,7 @@ def test_cardmarket_links_without_tracking_extras():
     with sqlite3.connect(path) as db:
         urls = [row[0] for row in db.execute("SELECT cardmarket_url FROM wishlistentry ORDER BY id")]
         assert urls == ["https://www.cardmarket.com/en/Magic/Products?idProduct=292863", plain]
-        assert db.execute("PRAGMA user_version").fetchone()[0] == 4
+        assert db.execute("PRAGMA user_version").fetchone()[0] == 5
 
 
 async def test_discord_price_alert_has_a_clean_cardmarket_link():

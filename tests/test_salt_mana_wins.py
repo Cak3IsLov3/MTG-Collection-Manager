@@ -188,3 +188,18 @@ def test_two_tokens_on_one_picture_are_split(client, session):
     assert both.count("half top") == 2 and both.count("half bottom") == 2  # two of each, cut in two
     only_top = client.get(f"/decks/{deck['id']}/tokens/print?top=true").text
     assert only_top.count("half top") == 2 and "half bottom" not in only_top
+
+
+def test_helper_cards_like_on_an_adventure_count_as_tokens(client, session):
+    """Scryfall lists "On an Adventure" as a combo piece of type "Card" on every Adventure; you need one."""
+    from app.scryfall import ScryfallCard
+    from app.services.deck_insights import _token_parts, one_enough
+
+    data = ScryfallCard.from_json({
+        "id": "bone", "name": "Bonecrusher Giant // Stomp", "oracle_text": "Stomp deals 2 damage to any target.",
+        "all_parts": [{"component": "combo_piece", "id": "adv", "name": "On an Adventure", "type_line": "Card"},
+                      {"component": "combo_piece", "id": "bone", "name": "Bonecrusher Giant // Stomp", "type_line": "Creature — Giant"}],
+    })
+    assert data.token_parts == [("adv", "On an Adventure")]
+    assert __import__("json").loads(_token_parts(data)) == [{"id": "adv", "name": "On an Adventure", "count": 1}]
+    assert one_enough("On an Adventure") and one_enough("The Ring") and one_enough("Elspeth Emblem") and not one_enough("Treasure")

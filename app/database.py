@@ -102,6 +102,12 @@ def run_data_migrations(target=None) -> None:
                     connection.exec_driver_sql("UPDATE wishlistentry SET cardmarket_url = ? WHERE id = ?",
                                                (clean_cardmarket_url(url), entry_id))
             connection.exec_driver_sql("PRAGMA user_version = 4")
+            version = 4
+        if version < 5:
+            # Helper cards such as "On an Adventure" are found too: look the Adventure cards up again.
+            if "deckentry" in tables:
+                connection.exec_driver_sql("UPDATE deckentry SET token_parts = NULL WHERE type_line LIKE '%Adventure%'")
+            connection.exec_driver_sql("PRAGMA user_version = 5")
 
 
 def init_db() -> None:

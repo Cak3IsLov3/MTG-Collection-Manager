@@ -1246,3 +1246,14 @@ def test_name_bar_or_whole_token(client):
         ("Monster", 1, True), ("Monster", 1, True), ("The Ring", 1, False)]
     assert client.patch(f"/api/tokens/{role['id']}", json={"full": False}).status_code == 200
     assert {t["id"]: t["full"] for t in tokens(client)}[role["id"]] is False
+
+
+def test_on_an_adventure_is_a_token_without_name_plate():
+    from app.stream.server import token_infos
+
+    helper = {"id": "adv", "name": "On an Adventure", "layout": "token", "type_line": "Card",
+              "image_uris": {"normal": IMG.format("adv")}}
+    [info] = token_infos(helper)
+    assert info["name"] == "On an Adventure" and info["plate"] is False and "bar" not in info
+    [plain] = token_infos({"id": "t", "name": "Treasure", "image_uris": {"normal": IMG.format("t")}})
+    assert plain["plate"] is True
