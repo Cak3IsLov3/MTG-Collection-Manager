@@ -696,7 +696,8 @@ async def show_deck_intro(deck_id: int, session: Session = Depends(get_session))
 
 
 @router.post("/decks/{deck_id}/stream")
-async def send_deck_to_stream(deck_id: int, session: Session = Depends(get_session)):
+async def send_deck_to_stream(deck_id: int, session: Session = Depends(get_session),
+                              scryfall: ScryfallClient = Depends(get_scryfall)):
     """Show the tokens of this deck in the control panel of the stream overlay, ready to put on the board."""
     from app.main import stream_app
     from app.services.stream_link import StreamLinkError, deck_for_stream
@@ -704,7 +705,7 @@ async def send_deck_to_stream(deck_id: int, session: Session = Depends(get_sessi
 
     deck = _saved_deck(session, deck_id)
     try:
-        found = await deck_for_stream(session, deck)
+        found = await deck_for_stream(session, deck, scryfall)
     except StreamLinkError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     await set_deck(stream_app, found)

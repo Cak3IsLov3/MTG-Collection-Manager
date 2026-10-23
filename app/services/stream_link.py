@@ -100,9 +100,18 @@ def spotlight_cards(session: Session, entries: list[DeckEntry]) -> list[dict]:
     return sorted(cards.values(), key=lambda c: c["name"].lower())
 
 
-async def deck_for_stream(session: Session, deck: Deck) -> dict:
+async def deck_for_stream(session: Session, deck: Deck, scryfall=None) -> dict:
     """The deck as the control panel shows a scanned deck: every token its cards make (the ones you
-    always bring too) and the tokens on its own token list, each once, with the cards that make it."""
+    always bring too) and the tokens on its own token list, each once, with the cards that make it.
+    With `scryfall`, the cards Scryfall was not asked about yet (or again) are looked up first."""
+    if scryfall is not None:
+        from app.scryfall import ScryfallError
+        from app.services.deck_insights import fill_card_info
+
+        try:
+            await fill_card_info(session, scryfall, deck.id)
+        except ScryfallError:
+            session.rollback()
     suggested = token_suggestions(session, deck, include_standard=True)
     made_by = {name_key(s.name): s.made_by for s in suggested}
     ids = [s.scryfall_id for s in suggested]

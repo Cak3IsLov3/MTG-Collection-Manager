@@ -291,7 +291,8 @@ def stream_page():
 
 
 @router.post("/decks/{deck_id}/stream")
-async def saved_deck_stream(deck_id: int, session: Session = Depends(get_session)):
+async def saved_deck_stream(deck_id: int, session: Session = Depends(get_session),
+                            scryfall: ScryfallClient = Depends(get_scryfall)):
     """Put the tokens of this deck in the stream overlay's control panel and open it."""
     from app.main import stream_app
     from app.services.stream_link import StreamLinkError, deck_for_stream
@@ -301,7 +302,7 @@ async def saved_deck_stream(deck_id: int, session: Session = Depends(get_session
     if deck is None:
         return redirect("/deck", "Deck not found", error=True)
     try:
-        await set_deck(stream_app, await deck_for_stream(session, deck), intro=True)
+        await set_deck(stream_app, await deck_for_stream(session, deck, scryfall), intro=True)
     except StreamLinkError as exc:
         return redirect(f"/decks/{deck_id}", f"Could not get the tokens from Scryfall: {exc}", error=True)
     return RedirectResponse("/stream/control#add", status_code=303)

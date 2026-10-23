@@ -1257,3 +1257,26 @@ def test_on_an_adventure_is_a_token_without_name_plate():
     assert info["name"] == "On an Adventure" and info["plate"] is False and "bar" not in info
     [plain] = token_infos({"id": "t", "name": "Treasure", "image_uris": {"normal": IMG.format("t")}})
     assert plain["plate"] is True
+
+
+def test_deck_tokens_to_the_stream_without_visiting_the_deck_first(monkeypatch):
+    """The cards of a deck Scryfall was not asked about yet are looked up when you send it to the stream."""
+    from fastapi.testclient import TestClient as AppClient
+
+    from app.deps import get_scryfall
+    from app.main import app as manager
+    from app.scryfall import ScryfallClient
+    from app.stream import server as stream_server
+    from tests.conftest import FakeScryfall
+
+    fake = FakeScryfall()
+    manager.dependency_overrides[get_scryfall] = lambda: ScryfallClient(transport=httpx.MockTransport(fake), min_interval=0)
+    monkeypatch.setattr(stream_server, "scryfall_cards", lambda ids: [
+        {**c, "image_uris": {"normal": f"https://cards.scryfall.io/normal/front/a/b/{c['id']}.jpg"}} for c in fake.cards if c["id"] in ids])
+    try:
+        with AppClient(manager) as c:
+            deck = c.post("/api/decks", json={"name": "Tokens", "decklist": "1 Pitiless Plunderer\n1 Raise the Alarm"}).json()
+            found = c.post(f"/api/decks/{deck['id']}/stream").json()  # the deck page was never opened
+            assert {t["name"] for t in found["tokens"]} == {"Soldier", "Treasure"}
+    finally:
+        manager.dependency_overrides.clear()
