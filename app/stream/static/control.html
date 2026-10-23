@@ -297,6 +297,8 @@
   .board .ctr-val.plus { color: #5fd47e; }
   .board .ctr-val.minus { color: #c78af0; }
   .board button.tap { min-width: 66px; }
+  .board button.view { min-width: 96px; }
+  .board button.view.on { color: #1a1406; background: linear-gradient(180deg, var(--accent-2), var(--accent)); border-color: #c9952a; }
   .board button.use { color: #ffe08a; background: #2b2410; border-color: #6b5718; }
   .board button.use:hover:not(:disabled) { color: #1a1406; background: linear-gradient(180deg, var(--accent-2), var(--accent)); border-color: #c9952a; }
   .board button.sac { color: #ffb38a; background: #2a1a12; border-color: #5e3420; }
@@ -1679,7 +1681,7 @@
 
     const sameKind = (a, b) =>
       a.kind === b.kind && a.name === b.name && a.value === b.value &&
-      a.image_url === b.image_url && a.part === b.part && a.tapped === b.tapped && a.counters === b.counters &&
+      a.image_url === b.image_url && a.part === b.part && a.full === b.full && a.tapped === b.tapped && a.counters === b.counters &&
       a.set_power === b.set_power && a.set_toughness === b.set_toughness;
 
     // Keep focus and typed text in an input when the list re-renders (other
@@ -1774,6 +1776,11 @@
           el("div", { class: "actions" },
             el("button", { class: "tap" + (t.tapped ? " on" : ""), type: "button",
                            text: t.tapped ? "Untap" : "Tap", onclick: () => patch({ tapped: !t.tapped }) }),
+            t.part === "top" || t.part === "bottom" || typeof t.bar === "number" ? el("button", {
+              class: "view" + (t.full ? " on" : ""), type: "button", text: t.full ? "Name only" : "Full token",
+              title: t.full ? "Show just the name bar on stream" : "Show the whole token on stream",
+              onclick: () => patch({ full: !t.full }),
+            }) : "",
             t.power != null ? el("button", {
               class: "attack", type: "button", text: "⚔ Attack", disabled: t.tapped,
               title: t.tapped ? "Already tapped" : "Attack (taps it, unless it has vigilance)",

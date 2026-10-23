@@ -1225,3 +1225,24 @@ def test_the_ring_emblem_is_a_name_bar(client):
     [t] = tokens(client)
     assert t["bar"] == 0.44 and t["part"] == "whole"
     assert client.post("/api/tokens", json={"name": "Bad", "image_url": IMG.format("x"), "bar": 3}).status_code == 422
+
+
+def test_name_bar_or_whole_token(client):
+    ring = {"name": "The Ring", "image_url": IMG.format("ring"), "bar": 0.44}
+    monster = {"name": "Monster", "image_url": IMG.format("role"), "part": "top"}
+    client.post("/api/tokens", json=ring)
+    client.post("/api/tokens", json=monster)
+    assert all(t["full"] is False for t in tokens(client))  # the name bar is the default
+    [role] = [t for t in tokens(client) if t["name"] == "Monster"]
+    assert client.patch(f"/api/tokens/{role['id']}", json={"full": True}).status_code == 200
+    assert {t["name"]: t["full"] for t in tokens(client)} == {"The Ring": False, "Monster": True}
+    # Another Monster joins the stack and the stack keeps its look.
+    client.post("/api/tokens", json=monster)
+    assert sorted((t["name"], t["count"], t["full"]) for t in tokens(client)) == [
+        ("Monster", 2, True), ("The Ring", 1, False)]
+    # A copy of a stack looks like it, and a split-off part too.
+    client.post(f"/api/tokens/{role['id']}/split", json={"count": 1})
+    assert sorted((t["name"], t["count"], t["full"]) for t in tokens(client)) == [
+        ("Monster", 1, True), ("Monster", 1, True), ("The Ring", 1, False)]
+    assert client.patch(f"/api/tokens/{role['id']}", json={"full": False}).status_code == 200
+    assert {t["id"]: t["full"] for t in tokens(client)}[role["id"]] is False

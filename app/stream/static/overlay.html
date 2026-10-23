@@ -99,6 +99,12 @@
   /* --bar: where the middle of the name bar is, as a fraction of the picture's height. */
   .token.half .card img { position: absolute; left: 0; top: calc(var(--w) * (0.0635 - 1.393 * var(--bar))); width: 100%; height: calc(var(--w) * 1.393); box-shadow: none; }
   .token.half.bottom .card img { transform: rotate(180deg); }
+  /* The whole Role token: a half card, the second one turned the right way up. */
+  .token.halfcard { --h: calc(var(--hf) / 2); --shift: calc((var(--hf) / 2 - var(--w)) / 2); }
+  .token.halfcard .card { overflow: hidden; box-shadow: 0 0 0 max(2px, calc(var(--w) * 0.012)) rgba(255, 255, 255, .92), 0 2px 4px rgba(0, 0, 0, .5), 0 10px 26px rgba(0, 0, 0, .6); }
+  body.no-outline .token.halfcard .card { box-shadow: 0 2px 4px rgba(0, 0, 0, .5), 0 10px 26px rgba(0, 0, 0, .6); }
+  .token.halfcard .card img { position: absolute; left: 0; top: 0; width: 100%; height: 200%; box-shadow: none; }
+  .token.halfcard.bottom .card img { transform: rotate(180deg); }
   .card img {
     width: 100%;
     height: 100%;
@@ -840,12 +846,23 @@
     return entry;
   }
 
+  // Roles and The Ring show as just their name bar; "full" shows the whole token (a Role as a half card).
+  function setView(el, t) {
+    const half = t.part === "top" || t.part === "bottom";
+    const capable = half || typeof t.bar === "number";
+    const bar = capable && !t.full;
+    el.classList.toggle("half", bar);
+    el.classList.toggle("halfcard", capable && !!t.full && half);
+    el.classList.toggle("bottom", t.part === "bottom");
+    // Roles: the bar of the top token is at 7.5% of the picture, the one of the bottom token at 10.9% (upside down).
+    if (bar) el.style.setProperty("--bar", String(typeof t.bar === "number" ? t.bar : t.part === "bottom" ? 0.1091 : 0.0748));
+    return capable && (bar || !!t.full && half);
+  }
+
   function createToken(t, after) {
     const el = document.createElement("div");
-    const half = t.part === "top" || t.part === "bottom" || typeof t.bar === "number";
-    el.className = "token" + (half ? ` half ${t.part}` : "");
-    // Roles: the bar of the top token is at 7.5% of the picture, the one of the bottom token at 10.9% (upside down).
-    if (half) el.style.setProperty("--bar", String(typeof t.bar === "number" ? t.bar : t.part === "bottom" ? 0.1091 : 0.0748));
+    el.className = "token";
+    setView(el, t);
     el.dataset.id = t.id;
     const card = document.createElement("div");
     card.className = "card";
@@ -883,7 +900,7 @@
     el.append(card, face);
     insertAfter(el, after);
 
-    const entry = { name: t.name, el, plate, half, badge, pt, stats, kw, count: null, ptText: null, statsText: null, kwText: null,
+    const entry = { name: t.name, el, plate, half: el.classList.contains("half") || el.classList.contains("halfcard"), full: !!t.full, badge, pt, stats, kw, count: null, ptText: null, statsText: null, kwText: null,
                     tapped: null, pos: undefined };
     elements.set(t.id, entry);
     return entry;
@@ -916,6 +933,11 @@
   }
 
   function update(entry, t, isNew) {
+    if (entry.full !== !!t.full) {      // whole token or just the name bar
+      entry.full = !!t.full;
+      entry.half = setView(entry.el, t);
+      layoutPlaced(entry.el);
+    }
     if (entry.count !== t.count) {
       // One taken off the stack (sacrificed, died): a small burst.
       if (!isNew && entry.count !== null && t.count < entry.count && !recentlySacrificed(entry)) {
@@ -961,7 +983,7 @@
       entry.kw.hidden = !kwText;
     }
     // The name is printed on a half token already: the plate only shows when it has more to say.
-    if (entry.half) entry.plate.style.display = stats || kwText ? "" : "none";
+    entry.plate.style.display = entry.half && !stats && !kwText ? "none" : "";
     if (entry.tapped !== !!t.tapped) {
       entry.tapped = !!t.tapped;
       entry.el.classList.toggle("tapped", entry.tapped);

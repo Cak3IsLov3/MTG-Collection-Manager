@@ -137,6 +137,8 @@ class Token(BaseModel):
     # Show only the name bar on the overlay: the middle of that bar as a fraction of the picture's
     # height (None: the whole token, or the bar of a "top"/"bottom" part).
     bar: float | None = None
+    # Show the whole token instead of just its name bar (for the tokens that have a name bar).
+    full: bool = False
     count: int
     tapped: bool = False
     # Net number of counters: positive = +1/+1, negative = -1/-1. In MTG
@@ -197,6 +199,8 @@ class TokenPatch(BaseModel):
     # Set the number directly (typed in the control panel); 0 removes the stack.
     count: int | None = Field(default=None, ge=0, le=MAX_COUNT)
     tapped: bool | None = None
+    # Whole token or just the name bar, for tokens that have one (the Roles, The Ring).
+    full: bool | None = None
     counter_delta: int | None = Field(default=None, ge=-MAX_COUNTERS, le=MAX_COUNTERS)
     # Send {"pos": {"x": .., "y": ..}} to place a stack, {"pos": null} to put
     # it back in the row. Leaving the field out keeps the position.
@@ -370,6 +374,7 @@ def same_kind(a: Token, b: Token) -> bool:
         and a.name == b.name
         and a.image_url == b.image_url
         and a.part == b.part
+        and a.full == b.full
         and a.tapped == b.tapped
         and a.counters == b.counters
         and a.set_power == b.set_power
@@ -458,6 +463,8 @@ class TokenStore:
         token = self._find(token_id)
         if patch.tapped is not None:
             token.tapped = patch.tapped
+        if patch.full is not None:
+            token.full = patch.full
         if patch.counter_delta:
             token.counters = max(-MAX_COUNTERS, min(token.counters + patch.counter_delta, MAX_COUNTERS))
         if "pos" in patch.model_fields_set:
