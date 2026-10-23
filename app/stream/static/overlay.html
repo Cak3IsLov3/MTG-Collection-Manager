@@ -856,7 +856,7 @@
     el.classList.toggle("bottom", t.part === "bottom");
     // Roles: the bar of the top token is at 7.5% of the picture, the one of the bottom token at 10.9% (upside down).
     if (bar) el.style.setProperty("--bar", String(typeof t.bar === "number" ? t.bar : t.part === "bottom" ? 0.1091 : 0.0748));
-    return capable && (bar || !!t.full && half);
+    return capable;   // the name is printed on these: no name plate, whole or not
   }
 
   function createToken(t, after) {
@@ -900,7 +900,7 @@
     el.append(card, face);
     insertAfter(el, after);
 
-    const entry = { name: t.name, el, plate, half: el.classList.contains("half") || el.classList.contains("halfcard"), full: !!t.full, badge, pt, stats, kw, count: null, ptText: null, statsText: null, kwText: null,
+    const entry = { name: t.name, el, plate, half: setView(el, t), full: !!t.full, badge, pt, stats, kw, count: null, ptText: null, statsText: null, kwText: null,
                     tapped: null, pos: undefined };
     elements.set(t.id, entry);
     return entry;
