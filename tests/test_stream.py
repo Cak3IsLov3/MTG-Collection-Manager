@@ -321,10 +321,17 @@ def test_add_loose_counters(client):
     client.post("/api/counters", json={"type": "+1/+1"})
     client.post("/api/counters", json={"type": "-1/-1"})
     stacks = tokens(client)
+    # A +1/+1 or -1/-1 counter is a counter of its own every time; other counters pile up.
     assert [(t["kind"], t["name"], t["count"], t["image_url"]) for t in stacks] == [
-        ("counter", "+1/+1", 2, ""),
+        ("counter", "+1/+1", 1, ""),
+        ("counter", "+1/+1", 1, ""),
         ("counter", "-1/-1", 1, ""),
     ]
+    client.post("/api/counters", json={"type": "Flying"})
+    client.post("/api/counters", json={"type": "Flying"})
+    client.post("/api/counters", json={"type": "R"})
+    client.post("/api/counters", json={"type": "R"})
+    assert [(t["name"], t["count"]) for t in tokens(client)][3:] == [("Flying", 2), ("R", 2)]
 
 
 @pytest.mark.parametrize("body", [{"type": "poison"}, {"type": ""}, {}])

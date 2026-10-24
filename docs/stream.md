@@ -136,8 +136,9 @@ your overlay.
 For counters you put on physical cards, add loose counters without a card:
 
 - **+ +1/+1 counter** and **+ −1/−1 counter** (next to "On stream now") add
-  one counter each click. The overlay shows a round chip (green / purple) with
-  the number next to it.
+  one counter each click, and every click is a counter of its own: three clicks
+  give three green (or purple) chips, as you put each one on a creature by itself.
+  Keyword counters and mana still pile up with a number next to them.
 - **+ Keyword counter…** adds keyword counters: Flying, First strike, Double
   strike, Deathtouch, Defender, Haste, Hexproof, Indestructible, Lifelink,
   Menace, Reach, Shroud, Trample, Vigilance and Ward. These show as pills.

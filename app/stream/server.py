@@ -442,11 +442,12 @@ class TokenStore:
 
     @mutating
     def add_counter(self, counter_type: str, value: str | None = None) -> Token:
-        """Add one loose counter to the first pile with the same type and value."""
-        return self._put_counter(counter_type, value)
+        """Add one loose counter to the first pile with the same type and value. A +1/+1 or -1/-1 counter
+        always starts a counter of its own: each is put on a creature by itself."""
+        return self._put_counter(counter_type, value, merge=counter_type not in PT_COUNTERS)
 
-    def _put_counter(self, counter_type: str, value: str | None = None) -> Token:
-        for t in self.tokens:
+    def _put_counter(self, counter_type: str, value: str | None = None, merge: bool = True) -> Token:
+        for t in self.tokens if merge else ():
             if t.kind == "counter" and t.name == counter_type and t.value == value:
                 t.count = min(t.count + 1, MAX_COUNT)
                 self._save()
