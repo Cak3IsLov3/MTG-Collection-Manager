@@ -1307,3 +1307,9 @@ def test_scanning_a_deck_link_finds_emblems_and_helper_cards(client, fake_net, m
     names = {t["name"]: t for t in deck["tokens"]}
     assert {"On an Adventure", "The Ring", "Treasure"} <= set(names)
     assert names["On an Adventure"]["plate"] is False and names["The Ring"]["bar"] == 0.44
+
+
+def test_the_version_tells_the_control_panel_when_its_page_changed(client):
+    info = client.get("/api/version").json()
+    assert info["outdated"] is False and len(info["page"]) == 10
+    assert client.get("/api/version").json()["page"] == info["page"]

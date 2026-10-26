@@ -1055,7 +1055,11 @@ def create_app(state_path: Path | str = DEFAULT_STATE_PATH) -> FastAPI:
         # The pages are read from disk on every load, but main.py only when the
         # server starts. If it changed since, the server needs a restart.
         on_disk = code_fingerprint()
-        return {"running": running_code, "on_disk": on_disk, "outdated": on_disk != running_code}
+        try:  # the control panel reloads itself when its own page changed (an OBS dock never reloads on its own)
+            page = hashlib.sha1((STATIC_DIR / "control.html").read_bytes()).hexdigest()[:10]
+        except OSError:
+            page = ""
+        return {"running": running_code, "on_disk": on_disk, "outdated": on_disk != running_code, "page": page}
 
     @app.get("/api/state")
     def get_state():

@@ -2339,11 +2339,14 @@
   // Warn when the running server is older than the code on disk (main.py
   // changed and the server wasn't restarted). A server from before this check
   // existed doesn't have /api/version at all, which also means outdated.
+  let pageStamp = null;
   async function checkVersion() {
     try {
       const res = await fetch(ROOT + "/api/version", { cache: "no-store" });
-      const outdated = res.status === 404 || (res.ok && (await res.json()).outdated);
-      $("outdated").hidden = !outdated;
+      const info = res.ok ? await res.json() : {};
+      $("outdated").hidden = !(res.status === 404 || info.outdated);
+      // A new version of this page (a new .exe, say): load it. An OBS dock keeps showing the page it opened with.
+      if (info.page) { if (pageStamp === null) pageStamp = info.page; else if (info.page !== pageStamp) location.reload(); }
     } catch {}                         // server unreachable: the status pill shows that
   }
   checkVersion();
