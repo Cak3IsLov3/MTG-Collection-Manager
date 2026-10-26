@@ -144,6 +144,10 @@ they are all tapped; the menu is the one of its front card.
 
 The game is kept in `stream-state-play.json` and survives a restart.
 
+![The playtest page](playtest.jpg)
+
+![The overlay with the playtest table](playtest-overlay.jpg)
+
 ## Placing cards anywhere (drag & drop)
 
 The control panel has a **Layout** section with a live, scaled-down copy of

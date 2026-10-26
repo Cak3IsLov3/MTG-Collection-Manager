@@ -12,6 +12,8 @@ price.
 
 ![Dashboard: a banner with the deck you played last, your week and your newest achievement; collection value, wishlist cost and what you paid, and tabs for the value over time, the top cards and movers, alerts and backups](docs/dashboard.jpg)
 
+![The Colours tab: how your collection is spread over the five colours, with the weakest and the strongest one](docs/dashboard-colours.jpg)
+
 | Top cards and weekly movers | Wishlist with targets, sorted by current price |
 | --- | --- |
 | ![The "Top cards & movers" tab: the 10 most valuable cards, with risers and fallers below](docs/dashboard-cards.jpg) | ![The wishlist: the cards you watch, with tabs to add a card and for the alert history](docs/wishlist.jpg) |
@@ -43,6 +45,10 @@ Press **▶ Play** on a deck and the stream screen opens with every token that d
 | ![The deck intro on stream: Kess art, "Now playing Grixis Storm", Bracket 4 and 4 W · 3 L](docs/stream-intro.jpg) | ![Rhystic Study big in the middle of the stream; commander tax +4 and storm 6 next to the turn tracker](docs/stream-spotlight.jpg) |
 
 ![Victory! in gold with confetti over the stream, with the deck and its new record](docs/stream-victory.jpg)
+
+| The playtest page: your hand is only here | What the stream shows: no hand, only the battlefield |
+| --- | --- |
+| ![The playtest page: creatures, other permanents and lands on the battlefield with four Islands in one stack, the hand below, and the library, graveyard, exile and command zone](docs/playtest.jpg) | ![The overlay with the playtest table: the battlefield and your life, and only how many cards you hold](docs/playtest-overlay.jpg) |
 
 | The Stream Deck page: 32 keys, row by row | A ready-made profile, or one key at a time |
 | --- | --- |
@@ -89,6 +95,10 @@ Press **▶ Play** on a deck and the stream screen opens with every token that d
 ![The saved decks filtered on bracket 3: two of the six decks are left](docs/decks-filter.jpg)
 
 ![The saved decks filtered on colour: the decks with green in them, each with its colours](docs/decks-colors.jpg)
+
+![Colour groups: every deck shows the name of its colours (Azorius, Grixis, Selesnya...), and the groups you have no deck in yet are listed above the decks; all 32 groups with the number of decks in each can be opened, and the list can be filtered and sorted on colour group](docs/decks-colour-groups.jpg)
+
+![A colour group you do not play yet (Dimir): the commanders you already own in exactly those colours, and the most played ones, each with how many of its 60 most played cards you own](docs/colour-group.jpg)
 
 ![The saved decks sorted on missing cards: the decks closest to done first](docs/decks-sorted.jpg)
 
