@@ -997,3 +997,14 @@ td.num, .num, .price { font-weight: 500; }
 .flash { border-radius: 8px; }
 .up, .stat .up { color: var(--up); }
 .down { color: var(--down); }
+
+/* colour groups: the name of a deck's colours (Selesnya, Jund...) and the groups you have no deck in yet */
+.badge.colour-group { border-color: var(--accent); color: var(--accent); }
+.deck-colour-line { margin: 2px 0 6px; display: flex; align-items: center; gap: 6px; }
+.colour-groups { margin: 0 0 12px; }
+.group-chips, .group-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 4px 0; }
+.group-row > span.muted { min-width: 170px; }
+.group-chip { display: inline-flex; align-items: center; gap: 5px; padding: 2px 9px 2px 6px; border-radius: 999px; font-size: 12px;
+  border: 1px dashed var(--border); color: var(--muted); }
+.group-chip.have { border-style: solid; border-color: var(--up); color: var(--text); }
+.group-chip b { color: var(--accent); }

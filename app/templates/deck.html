@@ -56,6 +56,7 @@
     <div>
       <a class="back-link" href="/deck">← All decks</a>
       <h1>{{ deck.name }}</h1>
+      {% set gname = colour_group(deck.colors) %}{% if gname %}<div class="deck-colour-line">{{ pips(deck.colors) }} <span class="badge colour-group" title="The colour group of this deck">{{ gname }}</span></div>{% endif %}
       {% set won = (deck_achievements | default([])) | selectattr('unlocked') | list %}
       {% if won %}<div class="hero-badges">{% for a in won %}<span class="ach-pill unlocked" title="{{ a.text }} · {{ a.unlocked_on.strftime('%d %b %Y') }}">{{ icon(a.icon) }} {{ a.title }}</span>{% endfor %}</div>{% endif %}
       <label class="muted commander-pick">Commander
@@ -116,6 +117,22 @@
 <div class="panel table-wrap" data-tab-panel="decks">
   {% set complete = summaries | selectattr('complete') | list | length %}
   <h2>Your saved decks ({{ summaries | length }}) <span class="muted">· {{ complete }} complete, {{ summaries | length - complete }} still missing cards</span></h2>
+  {% set missing_groups = group_overview | selectattr('missing') | list %}
+  <div class="colour-groups">
+    <p class="small"><b>Colour groups:</b> you have decks in {{ group_overview | length - missing_groups | length }} of {{ group_overview | length }}
+      {% if missing_groups %}<span class="muted">· {{ missing_groups | length }} still missing</span>{% else %}<span class="up">· every group!</span>{% endif %}</p>
+    {% if missing_groups %}
+    <div class="group-chips" aria-label="Colour groups you have no deck in yet">{% for g in missing_groups %}<span class="group-chip">{{ pips(g.colors) }} {{ g.name }}</span>{% endfor %}</div>
+    {% endif %}
+    <details class="small">
+      <summary class="muted">All colour groups</summary>
+      {% for label, items in group_kinds %}
+      <div class="group-row"><span class="muted">{{ label }}</span>
+        {% for g in items %}<span class="group-chip{{ ' have' if not g.missing }}" title="{{ g.decks }} deck{{ 's' if g.decks != 1 }}">{{ pips(g.colors) }} {{ g.name }}{% if g.decks %} <b>{{ g.decks }}</b>{% endif %}</span>{% endfor %}
+      </div>
+      {% endfor %}
+    </details>
+  </div>
   <div class="toolbar search-bar">
     <input id="deck-list-search" type="search" size="40" autocomplete="off" value="{{ request.query_params.get('q', '') }}"
            placeholder="Search by deck name or card…" aria-label="Search your decks by name or by a card in them">
@@ -158,7 +175,7 @@
         {% set p = (plays | default({})).get(s.deck.id) %}data-played="{{ p.played if p else 0 }}">
       <td class="deck-name-cell" style="--deck-colours: linear-gradient(180deg, {{ colour_gradient(s.deck.colors) }})">{% if s.deck.commander_image %}<img class="thumb commander-thumb" src="{{ s.deck.commander_image }}" alt="" loading="lazy" title="{{ s.deck.commander }}">{% else %}<span class="commander-thumb empty"></span>{% endif %}
         <div><a href="/decks/{{ s.deck.id }}">{{ s.deck.name }}</a>
-        {{ pips(s.deck.colors) }}
+        {{ pips(s.deck.colors) }}{% set gname = colour_group(s.deck.colors) %}{% if gname %} <span class="badge colour-group" title="Colour group of this deck">{{ gname }}</span>{% endif %}
         <div class="muted small deck-hit" hidden></div>{% if s.deck.archidekt_id %} <span class="badge linked" title="Follows its deck on Archidekt">↻ Archidekt</span>{% endif %}
         {% if s.uses_tokens %}<span class="badge tokens" title="You have the tokens of this deck{% if s.tokens %} ({{ s.tokens }} on its list){% endif %}">✓ tokens owned</span>{% endif %}</div></td>
       {% set warning = (bracket_warnings | default({})).get(s.deck.id) %}

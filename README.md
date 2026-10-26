@@ -264,6 +264,7 @@ Press **▶ Play** on a deck and the stream screen opens with every token that d
 - Follow an Archidekt deck: a deck saved from an Archidekt link (or given one later) is brought up to date when the deck changes there, automatically every few hours or with "Sync now"; printings you chose and cards you took out are kept
 - The printing from the deck list comes along: an Archidekt deck (or a text list with sets) knows the set and card number of every card. If you own that printing it goes to that deck, also when another deck had taken it only because any copy would do, and missing cards go on the wishlist in that printing
 - Choose the printing: if you own a card in several printings you pick which one is in the deck (say, the foil); otherwise the cheapest free copy is used
+- Colour groups: every deck shows the name of its colours (Selesnya, Jund, Mono-blue, Glint-Eye...), and the deck list shows which of the 32 colour groups you have no deck in yet
 - Deck value: every saved deck shows what the copies in it are worth, and a chart of their value over time
 
 ## Quick start

@@ -24,7 +24,7 @@ from app.edhrec import EdhrecClient, EdhrecError
 from app.models import Card, CollectionEntry, Deck, WishlistEntry
 from app.routers.api import load_deck
 from app.scryfall import CardRef, ScryfallClient, ScryfallError, name_key
-from app.services import achievements, collection, combos, deck_insights, decks, edhrec_compare, games, mana_base, reprints, stats, suggestions, wishlist
+from app.services import achievements, collection, colour_groups, combos, deck_insights, decks, edhrec_compare, games, mana_base, reprints, stats, suggestions, wishlist
 from app.spellbook import SpellbookClient, SpellbookError
 from app.services.exports import collection_csv, wishlist_csv
 
@@ -47,6 +47,7 @@ def asset_version() -> int:
 
 templates.env.globals["asset_version"] = asset_version
 templates.env.globals["icon"] = icon
+templates.env.globals["colour_group"] = colour_groups.group_name  # "WG" -> "Selesnya"
 # Long lists (the collection): the indentation of the template is left out of the page.
 templates.env.filters["squeeze"] = lambda html: Markup(re.sub(r"\n[ \t]*\n?[ \t]*", "\n", str(html)))
 
@@ -592,7 +593,9 @@ async def deck_page(
     summaries = decks.deck_summaries(session)
     plays = games.deck_plays(session)
     warnings = deck_insights.bracket_warnings(session, [s.deck for s in summaries], await _game_changers(scryfall))
+    groups = colour_groups.overview([s.deck.colors for s in summaries])
     return render(request, "deck.html", rows=None, deck=None, summaries=summaries, brackets=decks.BRACKETS,
+                  group_overview=groups, group_kinds=colour_groups.by_kind(groups),
                   deck_data=_deck_data(summaries, plays), card_names=decks.deck_card_names(session), plays=plays,
                   bracket_warnings=warnings)
 
