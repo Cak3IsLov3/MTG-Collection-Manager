@@ -106,8 +106,9 @@ class FakeNotifier:
     def __init__(self):
         self.sent = []
 
-    async def send_weekly_summary(self, lines, period):
+    async def send_weekly_summary(self, lines, period, title="Your week in Magic"):
         self.sent.append((lines, period))
+        self.title = title
         return True
 
 

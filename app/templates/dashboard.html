@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from "_empty.html" import empty %}
+{% from "_colour_filter.html" import pips %}
 {% block title %}Dashboard · MTG Collection Manager{% endblock %}
 
 {% macro mover_table(movers, direction) %}
@@ -73,6 +74,7 @@
   <nav class="tabs" role="tablist">
     <button type="button" data-tab="overview" role="tab">Overview</button>
     <button type="button" data-tab="cards" role="tab">Top cards &amp; movers</button>
+    <button type="button" data-tab="colours" role="tab">Colours</button>
     <button type="button" data-tab="alerts" role="tab">Alerts{% set alert_count = (alerts | length) + (drop_alerts | length) + (rise_alerts | length) + (reprint_alerts | length) %}{% if alert_count %} <span class="tab-count">{{ alert_count }}</span>{% endif %}</button>
     <button type="button" data-tab="backups" role="tab">Backups</button>
   </nav>
@@ -93,9 +95,34 @@
       {% set diff = week.collection_value - week.value_before %}<span class="{{ 'up' if diff >= 0 else 'down' }}">{{ '%+.2f' | format(diff) }} ({{ '%+.1f' | format(diff / week.value_before * 100) }}%)</span>{% endif %}</li>
     {% if week.new_copies %}<li>{{ week.new_copies }} new card{{ 's' if week.new_copies != 1 }} added</li>{% endif %}
     <li>{% if week.games %}{{ week.games }} game{{ 's' if week.games != 1 }} played, {{ week.wins }} won · {% for name, played in week.decks_played[:3] %}{{ name }} {{ played[0] }}×{{ ', ' if not loop.last }}{% endfor %}{% else %}No games logged this week · <a href="/games">log one</a>{% endif %}</li>
+    {% if week.new_cards %}<li class="muted">Most valuable new: {% for c in week.new_cards %}{{ c.name }}{{ ' ×%d' | format(c.quantity) if c.quantity > 1 }} ({{ c.value | eur }}){{ ', ' if not loop.last }}{% endfor %}</li>{% endif %}
+    {% if week.deck_gains or week.deck_losses %}<li>Decks:
+      {% for d in week.deck_gains %}<span class="up">{{ d.name }} {{ '%+.2f' | format(d.change) }}</span>{{ ' · ' if not loop.last or week.deck_losses }}{% endfor %}
+      {% for d in week.deck_losses %}<span class="down">{{ d.name }} {{ '%+.2f' | format(d.change) }}</span>{{ ' · ' if not loop.last }}{% endfor %}</li>{% endif %}
     {% if week.price_rises %}<li>{{ week.price_rises }} price rise alert{{ 's' if week.price_rises != 1 }}</li>{% endif %}
+    {% if week.price_drops %}<li>{{ week.price_drops }} wishlist price drop{{ 's' if week.price_drops != 1 }}</li>{% endif %}
+    {% if week.top_card %}<li class="muted">Most valuable card: <a href="/cards/{{ week.top_card.id }}">{{ week.top_card.name }}</a> {{ week.top_card.price | eur }}</li>{% endif %}
   </ul>
-  <p class="muted small">{% if settings.weekly_summary_day %}This summary goes to Discord every {{ settings.weekly_summary_day | capitalize }} at {{ settings.weekly_summary_hour }}:00.{% else %}The weekly Discord summary is off (WEEKLY_SUMMARY_DAY).{% endif %}</p>
+  <p class="muted small">{% if settings.weekly_summary_day == "daily" %}A summary of the last day goes to Discord every day at {{ settings.weekly_summary_hour }}:00.{% elif settings.weekly_summary_day %}This summary goes to Discord every {{ settings.weekly_summary_day | capitalize }} at {{ settings.weekly_summary_hour }}:00.{% else %}The weekly Discord summary is off (WEEKLY_SUMMARY_DAY).{% endif %}</p>
+</div>
+
+<div class="panel colour-spread" data-tab-panel="colours">
+  <h2>Your collection in colours <span class="muted">· {{ colour_spread.copies }} card{{ 's' if colour_spread.copies != 1 }}</span></h2>
+  {% if colour_spread.copies %}
+  <p class="muted small">A card of two colours counts for both. The bar shows how a colour compares with your strongest one.</p>
+  {% for c in colour_spread.colours %}
+  <div class="colour-row">
+    <span class="colour-label">{{ pips(c.letter) }} {{ c.name }}</span>
+    <div class="colour-bar"><i class="bar-{{ c.letter }}" style="width: {{ c.bar }}%"></i></div>
+    <span class="colour-figures"><b>{{ c.copies }}</b> cards · {{ c.unique }} different · {{ c.value | eur }} · {{ c.share }}%</span>
+  </div>
+  {% endfor %}
+  <p class="small">Multicolour: <b>{{ colour_spread.multicolour }}</b> · Colourless: <b>{{ colour_spread.colourless }}</b>{% if colour_spread.unknown %} · Not looked up yet: <b>{{ colour_spread.unknown }}</b>{% endif %}</p>
+  {% if colour_spread.weakest %}
+  <p>Your collection is <b>weakest in {{ colour_spread.weakest.name | lower }}</b> ({{ colour_spread.weakest.copies }} cards, {{ colour_spread.weakest.share }}% of everything) and
+    <b>strongest in {{ colour_spread.strongest.name | lower }}</b> ({{ colour_spread.strongest.copies }}). Look there first for cards to buy or trade for.</p>
+  {% endif %}
+  {% else %}{{ empty("C", "No cards yet", "Add cards to your collection to see how they are spread over the colours.", "/collection", "Open the collection") }}{% endif %}
 </div>
 
 <div class="panel" data-tab-panel="cards">

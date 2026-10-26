@@ -113,16 +113,73 @@ def recent_price_rise_alerts(session: Session, limit: int = 10) -> list[tuple[Pr
     return list(session.exec(statement))
 
 
-def weekly_summary(session: Session, today: dt.date | None = None) -> dict:
-    """The week in short, for the dashboard and the weekly Discord message."""
+COLOUR_NAMES = {"W": "White", "U": "Blue", "B": "Black", "R": "Red", "G": "Green"}
+
+
+def colour_spread(session: Session) -> dict:
+    """How the collection is spread over the five colours: copies, different cards and value per colour (a
+    card of two colours counts for both), and the cards that are colourless, multicolour or not looked up yet."""
+    per = {letter: {"copies": 0, "names": set(), "value": 0.0} for letter in COLOUR_NAMES}
+    multi = colourless = unknown = copies = 0
+    for row in collection_rows(session):
+        quantity = row.entry.quantity
+        copies += quantity
+        have = row.card.colors
+        if have is None:
+            unknown += quantity
+            continue
+        if not have:
+            colourless += quantity
+        elif len(have) > 1:
+            multi += quantity
+        worth = (row.unit_price or 0.0) * quantity
+        for letter in have:
+            if letter in per:
+                per[letter]["copies"] += quantity
+                per[letter]["names"].add(row.card.name)
+                per[letter]["value"] += worth
+    biggest = max((entry["copies"] for entry in per.values()), default=0)
+    colours = [
+        {"letter": letter, "name": COLOUR_NAMES[letter], "copies": entry["copies"], "unique": len(entry["names"]),
+         "value": round(entry["value"], 2), "share": round(entry["copies"] / copies * 100) if copies else 0,
+         "bar": round(entry["copies"] / biggest * 100) if biggest else 0}
+        for letter, entry in per.items()
+    ]
+    ranked = sorted(colours, key=lambda colour: (colour["copies"], colour["letter"]))
+    return {"colours": colours, "copies": copies, "multicolour": multi, "colourless": colourless, "unknown": unknown,
+            "weakest": ranked[0] if copies and biggest else None, "strongest": ranked[-1] if copies and biggest else None}
+
+
+def deck_value_moves(session: Session, days: int = 7, limit: int = 3) -> tuple[list[tuple[str, float]], list[tuple[str, float]]]:
+    """The decks whose copies gained and lost the most value over the last `days` days: (name, euro) each."""
+    from app.services.decks import deck_usage
+
+    latest = latest_snapshots(session, SCRYFALL)
+    reference = earliest_snapshots(session, SCRYFALL, dt.date.today() - dt.timedelta(days=days))
+    used = deck_usage(session)
+    change: dict[str, float] = {}
+    for row in collection_rows(session):
+        new = price_for(latest.get(row.card.id), row.entry.is_foil)
+        old = price_for(reference.get(row.card.id), row.entry.is_foil)
+        if new is None or not old or new == old:
+            continue
+        for deck, copies in used.get(row.entry.id, []):
+            change[deck.name] = change.get(deck.name, 0.0) + (new - old) * copies
+    ordered = sorted(((name, round(value, 2)) for name, value in change.items() if abs(value) >= 0.005), key=lambda item: item[1])
+    return [item for item in reversed(ordered) if item[1] > 0][:limit], [item for item in ordered if item[1] < 0][:limit]
+
+
+def weekly_summary(session: Session, today: dt.date | None = None, days: int = 7) -> dict:
+    """The week (or, with `days`, any number of days) in short, for the dashboard and the Discord message."""
     today = today or dt.date.today()
-    week_ago = today - dt.timedelta(days=7)
+    week_ago = today - dt.timedelta(days=days)
     rows = collection_rows(session)
     value = collection_value(rows)
     before = session.exec(
         select(DailyTotal).where(DailyTotal.date <= week_ago).order_by(DailyTotal.date.desc())
     ).first() or session.exec(select(DailyTotal).order_by(DailyTotal.date)).first()
-    risers, fallers = movers(session, rows, days=7, limit=3)
+    risers, fallers = movers(session, rows, days=days, limit=3)
+    deck_gains, deck_losses = deck_value_moves(session, days=days)
     games = list(session.exec(select(Game).where(Game.played_on > week_ago)))
     names = {deck.id: deck.name for deck in session.exec(select(Deck))}
     per_deck: dict[str, list[int]] = {}
@@ -130,14 +187,19 @@ def weekly_summary(session: Session, today: dt.date | None = None) -> dict:
         played = per_deck.setdefault(names.get(game.deck_id, game.deck_name), [0, 0])
         played[0] += 1
         played[1] += game.result == "win"
-    since = utcnow() - dt.timedelta(days=7)
-    new_copies = sum(
-        entry.quantity for entry in session.exec(select(CollectionEntry).where(CollectionEntry.added_at >= since))
-    )
+    since = utcnow() - dt.timedelta(days=days)
+    added = list(session.exec(select(CollectionEntry).where(CollectionEntry.added_at >= since)))
+    new_copies = sum(entry.quantity for entry in added)
+    by_id = {row.entry.id: row for row in rows}
+    newest = sorted(((by_id[e.id].card.name, e.quantity, (by_id[e.id].unit_price or 0.0) * e.quantity) for e in added if e.id in by_id),
+                    key=lambda item: -item[2])[:3]
+    priced = [row for row in rows if row.unit_price is not None]
+    top = max(priced, key=lambda row: row.unit_price, default=None)
     wishlist = wishlist_rows(session)
     return {
         "from": week_ago.isoformat(),
         "to": today.isoformat(),
+        "days": days,
         "collection_value": value,
         "value_before": before.collection_value if before and before.date < today else None,
         "wishlist_cost": wishlist_cost(wishlist),
@@ -148,21 +210,32 @@ def weekly_summary(session: Session, today: dt.date | None = None) -> dict:
         "wins": sum(game.result == "win" for game in games),
         "decks_played": sorted(per_deck.items(), key=lambda item: -item[1][0]),
         "new_copies": new_copies,
+        "new_cards": [{"name": name, "quantity": quantity, "value": round(value, 2)} for name, quantity, value in newest],
         "price_rises": len(session.exec(select(PriceRiseAlert).where(PriceRiseAlert.sent_at >= since)).all()),
+        "price_drops": len(session.exec(select(PriceDropAlert).where(PriceDropAlert.sent_at >= since)).all()),
+        "deck_gains": [{"name": name, "change": change} for name, change in deck_gains],
+        "deck_losses": [{"name": name, "change": change} for name, change in deck_losses],
+        "top_card": {"name": top.card.name, "price": top.unit_price, "id": top.card.id} if top else None,
     }
 
 
 def weekly_lines(summary: dict) -> list[str]:
     """The weekly summary as short lines (Discord markdown)."""
     value, before = summary["collection_value"], summary["value_before"]
+    when = "today" if summary.get("days") == 1 else "this week"
     change = ""
     if before:
         diff = value - before
-        change = f" ({'+' if diff >= 0 else '−'}€{abs(diff):.2f}, {diff / before * 100:+.1f}% this week)"
+        change = f" ({'+' if diff >= 0 else '−'}€{abs(diff):.2f}, {diff / before * 100:+.1f}% {when})"
     lines = [f"**Collection** €{value:,.2f}{change}",
              f"**Wishlist** €{summary['wishlist_cost']:,.2f} still to buy · {summary['wishlist_hits']} at or below target"]
     if summary["new_copies"]:
-        lines.append(f"**New cards** {summary['new_copies']} added this week")
+        best = ", ".join(f"{c['name']}{f' ×{c['quantity']}' if c['quantity'] > 1 else ''}" for c in summary.get("new_cards", []))
+        lines.append(f"**New cards** {summary['new_copies']} added {when}" + (f" · most valuable: {best}" if best else ""))
+    if summary.get("deck_gains") or summary.get("deck_losses"):
+        parts = [f"{d['name']} +€{d['change']:.2f}" for d in summary.get("deck_gains", [])]
+        parts += [f"{d['name']} −€{abs(d['change']):.2f}" for d in summary.get("deck_losses", [])]
+        lines.append("**Decks** " + " · ".join(parts))
     if summary["risers"]:
         lines.append("**Risers** " + " · ".join(f"{m.card.name} +€{m.change:.2f}" for m in summary["risers"]))
     if summary["fallers"]:
@@ -171,7 +244,14 @@ def weekly_lines(summary: dict) -> list[str]:
         decks = ", ".join(f"{name} {played}×" for name, (played, _) in summary["decks_played"][:3])
         lines.append(f"**Games** {summary['games']} played, {summary['wins']} won · {decks}")
     else:
-        lines.append("**Games** none logged this week")
+        lines.append(f"**Games** none logged {when}")
+    alerts = [f"{summary['price_drops']} wishlist price drop{'s' if summary['price_drops'] != 1 else ''}"] if summary.get("price_drops") else []
+    if summary.get("price_rises"):
+        alerts.append(f"{summary['price_rises']} price rise{'s' if summary['price_rises'] != 1 else ''} in your collection")
+    if alerts:
+        lines.append("**Alerts** " + " · ".join(alerts))
+    if summary.get("top_card"):
+        lines.append(f"**Most valuable card** {summary['top_card']['name']} €{summary['top_card']['price']:.2f}")
     return lines
 
 
@@ -197,6 +277,7 @@ def dashboard(session: Session) -> dict:
         "drop_alerts": recent_price_drop_alerts(session),
         "purchases": purchase_summary(rows),
         "week": weekly_summary(session),
+        "colour_spread": colour_spread(session),
         "history": {
             "labels": [total.date.isoformat() for total in history],
             "collection": [total.collection_value for total in history],

@@ -78,11 +78,11 @@ class DiscordNotifier:
         ]
         return await self._post({"embeds": embeds})
 
-    async def send_weekly_summary(self, lines: list[str], period: str) -> bool:
-        """Post the weekly summary; False (never raises) when delivery fails."""
+    async def send_weekly_summary(self, lines: list[str], period: str, title: str = "Your week in Magic") -> bool:
+        """Post the weekly (or daily) summary; False (never raises) when delivery fails."""
         if not self.webhook_url:
             return False
-        embed = {"title": f"Your week in Magic · {period}", "description": "\n".join(lines), "color": 0x4C9AFF}
+        embed = {"title": f"{title} · {period}", "description": "\n".join(lines)[:4000], "color": 0x4C9AFF}
         return await self._post({"embeds": [embed]})
 
     async def _post(self, payload: dict) -> bool:

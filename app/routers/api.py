@@ -730,6 +730,18 @@ async def send_deck_to_playtest(deck_id: int, session: Session = Depends(get_ses
     return {"deck": found["name"], "cards": sum(c["count"] for c in found["cards"]), "skipped": found["skipped"]}
 
 
+@router.get("/commanders/coverage")
+async def commander_coverage(name: str, session: Session = Depends(get_session), edhrec: EdhrecClient = Depends(get_edhrec)):
+    """How many of the cards that decks with this commander play most you own (for the colour group pages)."""
+    from app.services import colour_groups
+
+    try:
+        page = await edhrec.commander(name)
+    except EdhrecError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    return colour_groups.commander_coverage(session, name, page)
+
+
 @router.get("/decks/{deck_id}/edhrec")
 async def deck_edhrec(
     deck_id: int, session: Session = Depends(get_session), edhrec: EdhrecClient = Depends(get_edhrec)

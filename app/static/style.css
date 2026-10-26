@@ -1008,3 +1008,19 @@ td.num, .num, .price { font-weight: 500; }
   border: 1px dashed var(--border); color: var(--muted); }
 .group-chip.have { border-style: solid; border-color: var(--up); color: var(--text); }
 .group-chip b { color: var(--accent); }
+.group-chip { text-decoration: none; }
+a.group-chip:hover { border-color: var(--accent); color: var(--text); }
+.commander-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 12px; margin-top: 12px; }
+.commander-card { display: flex; gap: 14px; align-items: flex-start; }
+.commander-card img { width: 120px; aspect-ratio: 488 / 680; border-radius: 8px; flex: none; }
+.commander-card h3 { margin: 0 0 2px; }
+.commander-card .progress { margin: 6px 0; }
+.commander-card .links { display: flex; gap: 12px; margin-top: 6px; }
+.colour-row { display: grid; grid-template-columns: 150px 1fr 330px; gap: 12px; align-items: center; margin: 6px 0; }
+.colour-label { display: inline-flex; align-items: center; gap: 6px; }
+.colour-bar { height: 12px; border-radius: 6px; background: var(--bg); overflow: hidden; }
+.colour-bar i { display: block; height: 100%; border-radius: 6px; }
+.colour-bar .bar-W { background: #f3e3b5; } .colour-bar .bar-U { background: #3a8fdc; } .colour-bar .bar-B { background: #8e7d97; }
+.colour-bar .bar-R { background: #e2473d; } .colour-bar .bar-G { background: #2fa36a; }
+.colour-figures { color: var(--muted); font-size: 13px; }
+@media (max-width: 720px) { .colour-row { grid-template-columns: 1fr; gap: 2px; } }

@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% from "_colour_filter.html" import pips %}
+{% block title %}{{ name }} · Commanders · MTG Collection Manager{% endblock %}
+
+{# One commander: its picture, what EDHREC says about how much of its deck you own (filled in by the script below). #}
+{% macro commander_card(c, owned_list=False) %}
+<div class="panel commander-card" data-name="{{ c.name }}">
+  {% if c.image_url %}<img src="{{ c.image_url }}" alt="{{ c.name }}" loading="lazy">{% endif %}
+  <div>
+    <h3>{{ c.name }}</h3>
+    <div class="muted small">{{ c.type_line }}{% if c.rank %} · #{{ c.rank }} on EDHREC{% endif %}</div>
+    {% if owned_list %}
+    <div class="small">You own <b>{{ c.copies }}</b> cop{{ 'y' if c.copies == 1 else 'ies' }} ·
+      {% if c.deck %}it is the commander of <a href="/decks/{{ c.deck.id }}">{{ c.deck.name }}</a>{% else %}<span class="up">no deck has it as its commander yet</span>{% endif %}</div>
+    {% elif c.owned %}
+    <div class="small"><span class="badge hit">✓ in your collection</span></div>
+    {% endif %}
+    <div class="coverage muted">Checking EDHREC…</div>
+    <div class="progress slim" hidden><div style="width: 0"></div></div>
+    <div class="small links">{% if c.scryfall_uri %}<a href="{{ c.scryfall_uri }}" target="_blank" rel="noopener">Scryfall</a>{% endif %}
+      <a class="edhrec-link" href="#" target="_blank" rel="noopener" hidden>EDHREC</a></div>
+  </div>
+</div>
+{% endmacro %}
+
+{% block content %}
+<a class="back-link" href="/deck">← All decks</a>
+<h1>{{ pips(key) }} {{ name }} <span class="muted">· colour group</span></h1>
+
+{% if decks %}
+<p>You play this group in {{ decks | length }} deck{{ 's' if decks | length != 1 }}:
+  {% for d in decks %}<a href="/decks/{{ d.id }}">{{ d.name }}</a>{{ ', ' if not loop.last }}{% endfor %}.</p>
+{% else %}
+<p>You have <b>no deck in this group yet</b>.</p>
+{% endif %}
+<p class="muted">Your collection holds <b>{{ pool.unique }}</b> different cards ({{ pool.copies }} copies) that fit these colours.
+  {% if known %}Scryfall knows {{ known }} commander{{ 's' if known != 1 }} with exactly these colours.{% endif %}
+  Under each commander is how many of the {{ top }} cards the decks with that commander play most you already own.</p>
+
+{% if error %}<p class="down">Could not get the commanders from Scryfall: {{ error }}</p>{% endif %}
+
+<h2>Commanders you already own <span class="muted">· {{ owned | length + owned_more }}</span></h2>
+{% if owned %}
+<p class="muted small">Legendary cards in your collection that can lead a deck in these colours, the most played first.</p>
+<div class="commander-grid">{% for c in owned %}{{ commander_card(c, True) }}{% endfor %}</div>
+{% if owned_more %}<p class="muted small">… and {{ owned_more }} more, less played ones.</p>{% endif %}
+{% elif not error %}
+<p class="muted">You own no card that can be a commander in exactly these colours.</p>
+{% endif %}
+
+<h2>Most played commanders</h2>
+{% if commanders %}
+<p class="muted small">The commanders that most decks play in these colours, whether you own them or not.</p>
+<div class="commander-grid">{% for c in commanders %}{{ commander_card(c) }}{% endfor %}</div>
+{% elif not error %}
+<p class="muted">Scryfall knows no commander with exactly these colours.</p>
+{% endif %}
+{% endblock %}
+{% block scripts %}
+<script>
+  // One commander at a time: EDHREC allows only a request a second, and the answers are kept for a day.
+  (async () => {
+    for (const card of document.querySelectorAll(".commander-card")) {
+      const box = card.querySelector(".coverage");
+      try {
+        const res = await fetch("/api/commanders/coverage?name=" + encodeURIComponent(card.dataset.name));
+        if (!res.ok) throw new Error((await res.json()).detail || res.statusText);
+        const c = await res.json();
+        box.classList.remove("muted");
+        box.innerHTML = c.of ? `You own <b>${c.owned}</b> of the ${c.of} most played cards (${c.percent}%)` : "EDHREC lists no cards yet";
+        const bar = card.querySelector(".progress");
+        bar.hidden = !c.of;
+        bar.firstElementChild.style.width = c.percent + "%";
+        const link = card.querySelector(".edhrec-link");
+        link.href = c.url;
+        link.hidden = false;
+      } catch (error) {
+        box.textContent = error.message || "EDHREC could not be reached";
+      }
+    }
+  })();
+</script>
+{% endblock %}

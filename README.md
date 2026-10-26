@@ -264,7 +264,7 @@ Press **▶ Play** on a deck and the stream screen opens with every token that d
 - Follow an Archidekt deck: a deck saved from an Archidekt link (or given one later) is brought up to date when the deck changes there, automatically every few hours or with "Sync now"; printings you chose and cards you took out are kept
 - The printing from the deck list comes along: an Archidekt deck (or a text list with sets) knows the set and card number of every card. If you own that printing it goes to that deck, also when another deck had taken it only because any copy would do, and missing cards go on the wishlist in that printing
 - Choose the printing: if you own a card in several printings you pick which one is in the deck (say, the foil); otherwise the cheapest free copy is used
-- Colour groups: every deck shows the name of its colours (Selesnya, Jund, Mono-blue, Glint-Eye...), and the deck list shows which of the 32 colour groups you have no deck in yet
+- Colour groups: every deck shows the name of its colours (Selesnya, Jund, Mono-blue, Glint-Eye...), and the deck list shows which of the 32 colour groups you have no deck in yet. A click on a group opens two lists: the commanders you already own in exactly those colours (and which deck, if any, has them as its commander), and the commanders that most decks play, each with how many of their 60 most played cards you already own (EDHREC). The deck list can be filtered and sorted on colour group, and the dashboard has a Colours tab with how your whole collection is spread over the five colours and in which you are weakest
 - Deck value: every saved deck shows what the copies in it are worth, and a chart of their value over time
 
 ## Quick start
@@ -325,7 +325,7 @@ All settings are environment variables (see [.env.example](.env.example)).
 | `BACKUP_DIR` | `backups` | Folder of the daily database backups |
 | `BACKUP_KEEP` | `14` | How many backups are kept (`0` turns backups off) |
 | `BACKUP_HOUR` | `3` | Hour of the daily backup |
-| `WEEKLY_SUMMARY_DAY` | `mon` | Day of the weekly Discord summary (`mon` … `sun`; empty turns it off) |
+| `WEEKLY_SUMMARY_DAY` | `mon` | Day of the weekly Discord summary (`mon` … `sun`; `daily` for a summary of the last day every day; empty turns it off) |
 | `WEEKLY_SUMMARY_HOUR` | `9` | Hour of the weekly summary |
 | `SCRYFALL_MIN_INTERVAL` | `0.1` | Seconds between Scryfall requests (their limit is 10/s) |
 | `SCRYFALL_SLOW_INTERVAL` | `0.6` | Seconds between Scryfall name lookups and bulk requests, which have a much lower limit |

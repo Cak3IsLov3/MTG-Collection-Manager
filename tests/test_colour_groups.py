@@ -36,3 +36,135 @@ def test_the_deck_pages_show_the_group_and_what_is_missing(client):
     assert "Selesnya" in missing and "Jund" in missing and "Grixis" not in missing and "Colourless" not in missing
     detail = client.get(f"/decks/{grixis['id']}").text
     assert 'class="deck-colour-line"' in detail and ">Grixis</span>" in detail
+
+
+def test_the_collection_that_fits_a_colour_group(client, session):
+    client.post("/api/collection", json={"name": "Lim-Dûl's Vault", "quantity": 2})  # UBR
+    client.post("/api/collection", json={"name": "Sol Ring"})  # colourless
+    client.post("/api/collection", json={"name": "Fire // Ice"})  # UR
+    pool = colour_groups.fitting_pool(session, "UBR")
+    assert (pool.unique, pool.copies) == (3, 4)
+    pool = colour_groups.fitting_pool(session, "UR")
+    assert (pool.unique, pool.copies) == (2, 2)  # the Vault needs black as well
+    assert colour_groups.fitting_pool(session, "").unique == 1  # only the colourless Sol Ring
+    assert colour_groups.group_key("ub") == "UB" and colour_groups.group_key("c") == "" and colour_groups.group_key("nonsense") is None
+    assert colour_groups.slug("UB") == "ub" and colour_groups.slug("") == "c"
+
+
+def test_a_colour_group_page_lists_the_most_played_commanders_and_the_ones_you_own(client, monkeypatch):
+    from app.scryfall import ScryfallClient
+    from app.services import colour_groups
+
+    asked = []
+    colour_groups._COMMANDERS.clear()
+
+    async def search(self, query, **params):
+        asked.append((query, params))
+        return [{"name": "Ezuri, Renegade Leader", "type_line": "Legendary Creature — Elf Warrior", "edhrec_rank": 99,
+                 "scryfall_uri": "https://scryfall.com/card/e", "image_uris": {"normal": "https://cards.scryfall.io/normal/front/e.jpg"}},
+                {"name": "Marwyn, the Nurturer", "type_line": "Legendary Creature — Elf Druid", "edhrec_rank": 1234,
+                 "scryfall_uri": "https://scryfall.com/card/x", "image_uris": {"normal": "https://cards.scryfall.io/normal/front/m.jpg"}},
+                {"name": "Marwyn, the Nurturer", "type_line": "again"},
+                {"name": "Ghalta", "card_faces": [{"image_uris": {"normal": "https://cards.scryfall.io/normal/front/g.jpg"}}]}]
+
+    monkeypatch.setattr(ScryfallClient, "search", search)
+    client.post("/api/collection", json={"name": "Lim-Dûl's Vault"})
+    client.post("/api/collection", json={"name": "Sol Ring", "set_code": "cmm"})
+    client.post("/api/collection", json={"name": "Marwyn, the Nurturer", "quantity": 2})
+    client.post("/api/decks", json={"name": "Marwyn, the Nurturer - Elves", "decklist": "1 Marwyn, the Nurturer"})
+    client.get("/api/decks")  # works out its commander
+    page = client.get("/deck/colours/g")
+    assert page.status_code == 200
+    assert asked == [("is:commander legal:commander id=g", {"order": "edhrec", "unique": "cards"})]
+    text = page.text
+    owned, popular = text.split("Commanders you already own")[1].split("Most played commanders")
+    # what you own: Marwyn (two copies, the commander of the deck Elves), not Ezuri or Ghalta
+    assert "Marwyn, the Nurturer" in owned and "Ezuri" not in owned and "Ghalta" not in owned
+    assert "You own <b>2</b> copies" in owned and "it is the commander of" in owned and "Marwyn, the Nurturer - Elves" in owned
+    # the most played, in EDHREC's order and without duplicates, with a mark on the one you own
+    assert popular.count('class="panel commander-card"') == 3 and popular.index("Ezuri") < popular.index("Marwyn")
+    assert "#1234 on EDHREC" in popular and "https://cards.scryfall.io/normal/front/g.jpg" in popular
+    assert popular.count("✓ in your collection") == 1
+    assert client.get("/deck/colours/g").status_code == 200 and len(asked) == 1  # one search a day per group
+    assert client.get("/deck/colours/c").status_code == 200 and asked[-1][0].endswith("id=c")
+    assert client.get("/deck/colours/xyz").status_code == 404
+
+    found = client.get("/api/commanders/coverage", params={"name": "Marwyn, the Nurturer"}).json()
+    assert (found["owned"], found["of"], found["percent"], found["decks"]) == (2, 3, 67, 1000)
+    assert found["url"] == "https://edhrec.com/commanders/marwyn-the-nurturer"
+    assert client.get("/api/commanders/coverage", params={"name": "Nobody"}).status_code == 502
+
+
+def test_no_owned_commander_is_said_so(client, monkeypatch):
+    from app.scryfall import ScryfallClient
+    from app.services import colour_groups
+
+    colour_groups._COMMANDERS.clear()
+
+    async def search(self, query, **params):
+        return [{"name": "Ezuri, Renegade Leader", "type_line": "Legendary Creature"}]
+
+    monkeypatch.setattr(ScryfallClient, "search", search)
+    text = client.get("/deck/colours/g").text
+    assert "You own no card that can be a commander in exactly these colours" in text and "Ezuri, Renegade Leader" in text
+    assert "no deck in this group yet" in text
+
+
+def test_the_deck_list_filters_and_sorts_on_the_colour_group(client):
+    client.post("/api/collection", json={"name": "Lim-Dûl's Vault"})
+    client.post("/api/decks", json={"name": "Grixis", "decklist": "1 Lim-Dûl's Vault\n1 Fire // Ice\n1 Sol Ring"})
+    client.post("/api/decks", json={"name": "Artifacts", "decklist": "1 Sol Ring\n1 Black Lotus"})
+    page = client.get("/deck").text
+    assert 'id="deck-group-filter"' in page and '<option value="Grixis">Grixis (1)</option>' in page
+    assert '<option value="Colourless">Colourless (1)</option>' in page and "Selesnya" not in page.split('id="deck-group-filter"')[1].split("</select>")[0]
+    assert 'data-group="Grixis"' in page and 'data-group="Colourless"' in page
+    assert 'data-sort="groupOrder"' in page
+    order = {name: int(value) for name, value in __import__("re").findall(r'data-group="(\w+)" data-group-order="(\d+)"', page)}
+    assert order["Colourless"] == 0 < order["Grixis"]  # colourless first
+    assert 'href="/deck/colours/wg"' in page  # a group you do not play links to its commanders
+
+
+def test_the_collection_spread_over_the_colours(client, session):
+    from app.services import stats
+
+    assert stats.colour_spread(session)["weakest"] is None  # nothing yet
+    assert "Add cards to your collection" in client.get("/").text
+    client.post("/api/collection", json={"name": "Lim-Dûl's Vault", "quantity": 2})  # UB, 12.34 each
+    client.post("/api/collection", json={"name": "Sol Ring"})  # colourless
+    client.post("/api/collection", json={"name": "Fire // Ice"})  # UR
+    spread = stats.colour_spread(session)
+    per = {c["letter"]: c for c in spread["colours"]}
+    assert spread["copies"] == 4 and (per["U"]["copies"], per["B"]["copies"], per["R"]["copies"]) == (3, 2, 1)
+    assert per["W"]["copies"] == per["G"]["copies"] == 0 and per["U"]["unique"] == 2
+    assert per["B"]["value"] == 24.68 and per["U"]["bar"] == 100 and per["B"]["bar"] == 67 and per["B"]["share"] == 50
+    assert (spread["multicolour"], spread["colourless"], spread["unknown"]) == (3, 1, 0)
+    assert spread["strongest"]["letter"] == "U" and spread["weakest"]["name"] in ("White", "Green")
+    page = client.get("/").text
+    assert 'data-tab="colours"' in page and "Your collection in colours" in page and "weakest in" in page
+    assert 'class="bar-B" style="width: 67%"' in page and "Multicolour: <b>3</b>" in page
+
+
+async def test_the_summary_has_decks_new_cards_and_alerts_and_can_be_daily(client, session):
+    from app.jobs import send_weekly_summary
+    from app.services import stats
+    from tests.test_more_extras import FakeNotifier
+
+    client.post("/api/collection", json={"name": "Lim-Dûl's Vault", "quantity": 2})
+    client.post("/api/collection", json={"name": "Sol Ring"})
+    client.post("/api/decks", json={"name": "Vault", "decklist": "1 Lim-Dûl's Vault"})
+    week = stats.weekly_summary(session)
+    assert week["days"] == 7 and week["new_copies"] == 3
+    assert [c["name"] for c in week["new_cards"]][0] == "Lim-Dûl's Vault" and week["top_card"]["name"] == "Lim-Dûl's Vault"
+    assert week["price_drops"] == 0 and week["deck_gains"] == [] and week["deck_losses"] == []  # no price history yet
+    lines = stats.weekly_lines(week)
+    assert any(line.startswith("**New cards** 3 added this week · most valuable: Lim-Dûl's Vault ×2") for line in lines)
+    assert any(line.startswith("**Most valuable card** Lim-Dûl's Vault €12.34") for line in lines)
+
+    day = stats.weekly_summary(session, days=1)
+    assert day["days"] == 1 and "added today" in " ".join(stats.weekly_lines(day))
+    notifier = FakeNotifier()
+    assert await send_weekly_summary(session, notifier, days=1) is True
+    assert notifier.title == "Your day in Magic" and " – " not in notifier.sent[0][1]
+    assert await send_weekly_summary(session, notifier) is True and notifier.title == "Your week in Magic"
+    page = client.get("/").text
+    assert "Most valuable new: Lim-Dûl&#39;s Vault ×2" in page and "Most valuable card:" in page

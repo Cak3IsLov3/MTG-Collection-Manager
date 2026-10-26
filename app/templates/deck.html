@@ -117,18 +117,19 @@
 <div class="panel table-wrap" data-tab-panel="decks">
   {% set complete = summaries | selectattr('complete') | list | length %}
   <h2>Your saved decks ({{ summaries | length }}) <span class="muted">· {{ complete }} complete, {{ summaries | length - complete }} still missing cards</span></h2>
+  {% set group_overview = colour_overview(summaries | map(attribute='deck.colors') | list) %}{% set group_kinds = colour_kinds(group_overview) %}
   {% set missing_groups = group_overview | selectattr('missing') | list %}
   <div class="colour-groups">
     <p class="small"><b>Colour groups:</b> you have decks in {{ group_overview | length - missing_groups | length }} of {{ group_overview | length }}
       {% if missing_groups %}<span class="muted">· {{ missing_groups | length }} still missing</span>{% else %}<span class="up">· every group!</span>{% endif %}</p>
     {% if missing_groups %}
-    <div class="group-chips" aria-label="Colour groups you have no deck in yet">{% for g in missing_groups %}<span class="group-chip">{{ pips(g.colors) }} {{ g.name }}</span>{% endfor %}</div>
+    <div class="group-chips" aria-label="Colour groups you have no deck in yet">{% for g in missing_groups %}<a class="group-chip" href="/deck/colours/{{ g.colors.lower() or 'c' }}" title="Commanders you could build for {{ g.name }}">{{ pips(g.colors) }} {{ g.name }}</a>{% endfor %}</div>
     {% endif %}
     <details class="small">
       <summary class="muted">All colour groups</summary>
       {% for label, items in group_kinds %}
       <div class="group-row"><span class="muted">{{ label }}</span>
-        {% for g in items %}<span class="group-chip{{ ' have' if not g.missing }}" title="{{ g.decks }} deck{{ 's' if g.decks != 1 }}">{{ pips(g.colors) }} {{ g.name }}{% if g.decks %} <b>{{ g.decks }}</b>{% endif %}</span>{% endfor %}
+        {% for g in items %}<a class="group-chip{{ ' have' if not g.missing }}" href="/deck/colours/{{ g.colors.lower() or 'c' }}" title="{{ g.decks }} deck{{ 's' if g.decks != 1 }}">{{ pips(g.colors) }} {{ g.name }}{% if g.decks %} <b>{{ g.decks }}</b>{% endif %}</a>{% endfor %}
       </div>
       {% endfor %}
     </details>
@@ -144,6 +145,10 @@
       {% endif %}{% endfor %}
       {% if summaries | selectattr('deck.bracket', 'none') | list %}<option value="none">No bracket</option>{% endif %}
     </select>
+    <select id="deck-group-filter" aria-label="Filter decks by colour group">
+      <option value="">All colour groups</option>
+      {% for g in group_overview if not g.missing %}<option value="{{ g.name }}">{{ g.name }} ({{ g.decks }})</option>{% endfor %}
+    </select>
     <label class="check muted"><input id="deck-complete-filter" type="checkbox">&nbsp;Only complete decks</label>
     <label class="check muted"><input id="deck-tokens-filter" type="checkbox">&nbsp;Only decks whose tokens I own</label>
     <span id="deck-filter-count" class="muted"></span>
@@ -156,6 +161,7 @@
     <thead>
     <tr>
       <th><button class="sort" data-sort="name" data-type="text" title="Sort by deck name">Deck</button></th>
+      <th><button class="sort" data-sort="groupOrder" data-type="number" title="Sort by colour group: colourless first, five colours last">Colours</button></th>
       <th><button class="sort" data-sort="bracketNumber" data-type="number" title="Sort by bracket">Bracket</button></th>
       <th class="num"><button class="sort" data-sort="cards" data-type="number" title="Sort by deck size">Cards</button></th>
       <th><button class="sort" data-sort="percent" data-type="number" title="Sort by how much of the deck you have">Owned</button></th>
@@ -170,14 +176,15 @@
         data-order="{{ loop.index }}" data-name="{{ s.deck.name }}" data-bracket-number="{{ s.deck.bracket or '' }}"
         data-cards="{{ s.total_cards }}" data-percent="{{ s.percent }}" data-value="{{ s.value }}" data-missing="{{ s.needed - s.usable }}"
         data-colors="{{ '?' if s.deck.colors is none else s.deck.colors }}"
+        data-group="{{ colour_group(s.deck.colors) or '' }}" data-group-order="{{ colour_order(s.deck.colors) }}"
         data-card-names="{{ (card_names | default({})).get(s.deck.id, []) | join('|') }}"
         data-tokens="{{ 1 if s.uses_tokens else 0 }}"
         {% set p = (plays | default({})).get(s.deck.id) %}data-played="{{ p.played if p else 0 }}">
       <td class="deck-name-cell" style="--deck-colours: linear-gradient(180deg, {{ colour_gradient(s.deck.colors) }})">{% if s.deck.commander_image %}<img class="thumb commander-thumb" src="{{ s.deck.commander_image }}" alt="" loading="lazy" title="{{ s.deck.commander }}">{% else %}<span class="commander-thumb empty"></span>{% endif %}
         <div><a href="/decks/{{ s.deck.id }}">{{ s.deck.name }}</a>
-        {{ pips(s.deck.colors) }}{% set gname = colour_group(s.deck.colors) %}{% if gname %} <span class="badge colour-group" title="Colour group of this deck">{{ gname }}</span>{% endif %}
         <div class="muted small deck-hit" hidden></div>{% if s.deck.archidekt_id %} <span class="badge linked" title="Follows its deck on Archidekt">↻ Archidekt</span>{% endif %}
         {% if s.uses_tokens %}<span class="badge tokens" title="You have the tokens of this deck{% if s.tokens %} ({{ s.tokens }} on its list){% endif %}">✓ tokens owned</span>{% endif %}</div></td>
+      <td class="colours-cell">{{ pips(s.deck.colors) }}{% set gname = colour_group(s.deck.colors) %}{% if gname %}<div><span class="badge colour-group" title="Colour group of this deck">{{ gname }}</span></div>{% endif %}</td>
       {% set warning = (bracket_warnings | default({})).get(s.deck.id) %}
       <td>{% if s.bracket_name %}<span class="badge bracket bracket-{{ s.deck.bracket }}">{{ s.deck.bracket }} · {{ s.bracket_name }}</span>{% else %}<span class="muted">–</span>{% endif %}
         {% if warning %}<a class="badge warn" href="/decks/{{ s.deck.id }}" title="Does not fit bracket {{ s.deck.bracket }}: {{ warning | join('; ') }}">⚠</a>{% endif %}</td>
@@ -1163,6 +1170,7 @@
   // Filter the list of saved decks by bracket; the choice is remembered in this browser.
   const bracketFilter = document.getElementById("deck-bracket-filter");
   const completeFilter = document.getElementById("deck-complete-filter");
+  const groupFilter = document.getElementById("deck-group-filter");
   const tokensFilter = document.getElementById("deck-tokens-filter");
   const deckListRows = [...document.querySelectorAll("#deck-list tr[data-bracket]")];
 
@@ -1192,6 +1200,7 @@
       const match =
         hit.match &&
         (!bracketFilter.value || row.dataset.bracket === bracketFilter.value) &&
+        (!groupFilter.value || row.dataset.group === groupFilter.value) &&
         (!completeFilter.checked || row.dataset.complete === "1") &&
         (!tokensFilter.checked || row.dataset.tokens === "1") &&
         deckColours.matches(row.dataset.colors);
@@ -1207,7 +1216,7 @@
     if (deckSearch.value.trim()) url.searchParams.set("q", deckSearch.value.trim());
     else url.searchParams.delete("q");
     history.replaceState(null, "", url);
-    const filtered = bracketFilter.value || completeFilter.checked || tokensFilter.checked || deckColours.active() || words.length > 0;
+    const filtered = bracketFilter.value || groupFilter.value || completeFilter.checked || tokensFilter.checked || deckColours.active() || words.length > 0;
     document.getElementById("deck-filter-count").textContent = filtered ? `${shown} of ${deckListRows.length} decks` : "";
     document.getElementById("deck-filter-empty").hidden = shown > 0;
     document.getElementById("deck-list").hidden = shown === 0;
@@ -1219,6 +1228,7 @@
     if (saved && [...bracketFilter.options].some((option) => option.value === saved)) bracketFilter.value = saved;
   } catch (error) {}
   bracketFilter.addEventListener("change", filterDecks);
+  groupFilter.addEventListener("change", filterDecks);
   completeFilter.addEventListener("change", filterDecks);
   tokensFilter.addEventListener("change", filterDecks);
   deckSearch.addEventListener("input", filterDecks);

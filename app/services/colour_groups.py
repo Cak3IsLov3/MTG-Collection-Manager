@@ -1,6 +1,9 @@
 """The names of the colour groups of Magic: a guild for two colours, a shard or wedge for three, a nephilim for four."""
 
+import datetime as dt
 from dataclasses import dataclass
+
+from sqlmodel import Session
 
 COLOURS = "WUBRG"
 
@@ -54,6 +57,115 @@ def overview(deck_colors: list[str | None]) -> list[Group]:
     return [Group(key, NAMES[key], counts.get(key, 0)) for key in ordered]
 
 
+def order(colors: str | None) -> int | str:
+    """The place of these colours in the list of all groups (colourless first); "" when not known yet."""
+    key = normalise(colors)
+    if key is None:
+        return ""
+    return sorted(NAMES, key=lambda k: (len(k), [COLOURS.index(c) for c in k])).index(key)
+
+
 def by_kind(groups: list[Group]) -> list[tuple[str, list[Group]]]:
     """The groups per number of colours, for showing them in rows."""
     return [(label, [g for g in groups if len(g.colors) == size]) for size, label in KINDS.items()]
+
+
+def group_key(slug: str) -> str | None:
+    """The colours of an address like "wg", "GW" or "c" (colourless); None when it is no colour group."""
+    key = "" if slug.strip().lower() == "c" else normalise(slug)
+    return key if key in NAMES and (key or slug.strip().lower() == "c") and set(slug.upper()) <= set(COLOURS + "C") else None
+
+
+def slug(colors: str) -> str:
+    """The address of a colour group: its letters, "c" for colourless."""
+    return normalise(colors).lower() or "c"
+
+
+def commander_query(colors: str) -> str:
+    """The Scryfall search for the commanders that have exactly these colours."""
+    return f"is:commander legal:commander id={normalise(colors).lower() or 'c'}"
+
+
+def _image(raw: dict) -> str | None:
+    uris = raw.get("image_uris") or ((raw.get("card_faces") or [{}])[0].get("image_uris")) or {}
+    return uris.get("normal")
+
+
+_COMMANDERS: dict[tuple[str, dt.date], list[dict]] = {}  # per group and day: Scryfall answers the same all day
+
+
+async def all_commanders(scryfall, colors: str) -> list[dict]:
+    """Every commander with exactly these colours, the most played first (Scryfall's EDHREC order), without duplicates."""
+    key = (normalise(colors), dt.date.today())
+    if key in _COMMANDERS:
+        return _COMMANDERS[key]
+    found, seen = [], set()
+    for raw in await scryfall.search(commander_query(colors), order="edhrec", unique="cards"):
+        name = raw.get("name") or ""
+        if not name or name in seen:
+            continue
+        seen.add(name)
+        found.append({"name": name, "image_url": _image(raw), "type_line": raw.get("type_line") or "",
+                      "scryfall_uri": raw.get("scryfall_uri"), "rank": raw.get("edhrec_rank")})
+    if len(_COMMANDERS) > 64:
+        _COMMANDERS.clear()
+    _COMMANDERS[key] = found
+    return found
+
+
+def owned_commanders(session: Session, commanders: list[dict], decks: list) -> list[dict]:
+    """The commanders of this group that you already have a copy of, the most played first, each with the
+    number of copies and the deck (if any) that has it as its commander."""
+    from app.scryfall import name_key
+    from app.services.collection import collection_rows
+    from app.services.decks import _names
+
+    copies: dict[str, int] = {}
+    for row in collection_rows(session):
+        key = name_key(row.card.name)
+        copies[key] = copies.get(key, 0) + row.entry.quantity
+    led = {}
+    for deck in decks:
+        for key in _names(deck.commander or ""):
+            led.setdefault(key, deck)
+    found = []
+    for commander in commanders:
+        keys = _names(commander["name"])
+        have = max((copies.get(key, 0) for key in keys), default=0)
+        if have:
+            deck = next((led[key] for key in keys if key in led), None)
+            found.append({**commander, "copies": have, "deck": {"id": deck.id, "name": deck.name} if deck else None})
+    return found
+
+
+@dataclass
+class Pool:
+    unique: int  # different cards of your collection that fit the colours
+    copies: int
+
+
+def fitting_pool(session: Session, colors: str) -> Pool:
+    """What your collection holds that could be played in a deck of these colours (the colours of the cards
+    themselves; cards whose colours are not known yet are left out)."""
+    from app.services.collection import collection_rows
+
+    allowed = set(normalise(colors) or "")
+    unique, copies = set(), 0
+    for row in collection_rows(session):
+        have = row.card.colors
+        if have is not None and set(have) <= allowed:
+            unique.add(row.card.name)
+            copies += row.entry.quantity
+    return Pool(len(unique), copies)
+
+
+def commander_coverage(session: Session, name: str, page: dict, top: int = 60) -> dict:
+    """How many of the `top` cards EDHREC's decks with this commander play most you own."""
+    from app.models import Deck
+    from app.services import edhrec_compare
+
+    comparison = edhrec_compare.compare(session, Deck(id=-1, name="", commander=name), page)
+    cards = comparison.cards[:top]
+    owned = sum(1 for card in cards if card.owned)
+    return {"commander": name, "owned": owned, "of": len(cards), "percent": round(owned / len(cards) * 100) if cards else 0,
+            "decks": comparison.decks, "url": comparison.url}

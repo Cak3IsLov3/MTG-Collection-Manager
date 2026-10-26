@@ -215,19 +215,20 @@ async def check_reprints(
     return alerts
 
 
-async def send_weekly_summary(session: Session, notifier: DiscordNotifier) -> bool:
-    """Post the week in short to Discord: collection value, risers and fallers, games played."""
-    summary = weekly_summary(session)
-    return await notifier.send_weekly_summary(weekly_lines(summary), f"{summary['from']} – {summary['to']}")
+async def send_weekly_summary(session: Session, notifier: DiscordNotifier, days: int = 7) -> bool:
+    """Post the week (or the day) in short to Discord: collection value, risers and fallers, decks, new cards, games."""
+    summary = weekly_summary(session, days=days)
+    period = summary["to"] if days == 1 else f"{summary['from']} – {summary['to']}"
+    return await notifier.send_weekly_summary(weekly_lines(summary), period, "Your day in Magic" if days == 1 else "Your week in Magic")
 
 
-async def run_weekly_summary() -> None:
+async def run_weekly_summary(days: int = 7) -> None:
     try:
         with Session(engine) as session:
-            sent = await send_weekly_summary(session, deps.get_notifier())
-        logger.info("Weekly summary %s", "sent" if sent else "not sent (no webhook or Discord refused)")
+            sent = await send_weekly_summary(session, deps.get_notifier(), days)
+        logger.info("%s summary %s", "Daily" if days == 1 else "Weekly", "sent" if sent else "not sent (no webhook or Discord refused)")
     except Exception:
-        logger.exception("Weekly summary failed")
+        logger.exception("Summary failed")
 
 
 async def fill_missing_colors(session: Session, scryfall: ScryfallClient) -> int:
@@ -448,7 +449,9 @@ def start_scheduler() -> AsyncIOScheduler:
     scheduler.add_job(run_wishlist_check, "interval", hours=settings.wishlist_check_hours, id="wishlist-check")
     if settings.deck_sync_hours > 0:
         scheduler.add_job(run_deck_sync, "interval", hours=settings.deck_sync_hours, id="deck-sync")
-    if settings.weekly_summary_day in {"mon", "tue", "wed", "thu", "fri", "sat", "sun"}:
+    if settings.weekly_summary_day == "daily":  # every day, about the last day
+        scheduler.add_job(run_weekly_summary, "cron", hour=settings.weekly_summary_hour, kwargs={"days": 1}, id="weekly-summary")
+    elif settings.weekly_summary_day in {"mon", "tue", "wed", "thu", "fri", "sat", "sun"}:
         scheduler.add_job(
             run_weekly_summary, "cron", day_of_week=settings.weekly_summary_day,
             hour=settings.weekly_summary_hour, id="weekly-summary",

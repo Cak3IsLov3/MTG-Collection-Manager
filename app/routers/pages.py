@@ -48,6 +48,9 @@ def asset_version() -> int:
 templates.env.globals["asset_version"] = asset_version
 templates.env.globals["icon"] = icon
 templates.env.globals["colour_group"] = colour_groups.group_name  # "WG" -> "Selesnya"
+templates.env.globals["colour_overview"] = colour_groups.overview  # all 32 groups with the number of decks in each
+templates.env.globals["colour_kinds"] = colour_groups.by_kind
+templates.env.globals["colour_order"] = colour_groups.order  # where a deck's colours come in the list of groups
 # Long lists (the collection): the indentation of the template is left out of the page.
 templates.env.filters["squeeze"] = lambda html: Markup(re.sub(r"\n[ \t]*\n?[ \t]*", "\n", str(html)))
 
@@ -593,11 +596,30 @@ async def deck_page(
     summaries = decks.deck_summaries(session)
     plays = games.deck_plays(session)
     warnings = deck_insights.bracket_warnings(session, [s.deck for s in summaries], await _game_changers(scryfall))
-    groups = colour_groups.overview([s.deck.colors for s in summaries])
     return render(request, "deck.html", rows=None, deck=None, summaries=summaries, brackets=decks.BRACKETS,
-                  group_overview=groups, group_kinds=colour_groups.by_kind(groups),
                   deck_data=_deck_data(summaries, plays), card_names=decks.deck_card_names(session), plays=plays,
                   bracket_warnings=warnings)
+
+
+@router.get("/deck/colours/{slug}")
+async def colour_group_page(request: Request, slug: str, session: Session = Depends(get_session),
+                            scryfall: ScryfallClient = Depends(get_scryfall)):
+    """A colour group: your decks in it and the commanders with exactly these colours you could build next."""
+    key = colour_groups.group_key(slug)
+    if key is None:
+        raise HTTPException(status_code=404, detail="Unknown colour group")
+    every = [s.deck for s in decks.deck_summaries(session)]
+    mine = [deck for deck in every if colour_groups.normalise(deck.colors) == key]
+    try:
+        everything, error = await colour_groups.all_commanders(scryfall, key), None
+    except ScryfallError as exc:
+        everything, error = [], str(exc)
+    owned = colour_groups.owned_commanders(session, everything, every)
+    have = {c["name"] for c in owned}
+    popular = [{**c, "owned": c["name"] in have} for c in everything[:12]]
+    return render(request, "colour_group.html", key=key, name=colour_groups.NAMES[key], decks=mine, commanders=popular,
+                  owned=owned[:30], owned_more=max(0, len(owned) - 30), known=len(everything), error=error,
+                  pool=colour_groups.fitting_pool(session, key), top=60)
 
 
 async def _game_changers(scryfall: ScryfallClient) -> frozenset[str] | None:
