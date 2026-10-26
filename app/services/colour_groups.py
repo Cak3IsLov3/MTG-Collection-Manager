@@ -113,28 +113,20 @@ async def all_commanders(scryfall, colors: str) -> list[dict]:
     return found
 
 
-def owned_commanders(session: Session, commanders: list[dict], decks: list) -> list[dict]:
-    """The commanders of this group that you already have a copy of, the most played first, each with the
-    number of copies and the deck (if any) that has it as its commander."""
-    from app.scryfall import name_key
-    from app.services.collection import collection_rows
+def owned_commanders(session: Session, commanders: list[dict]) -> list[dict]:
+    """The commanders of this group that you have a copy of that no deck uses, the most played first, each
+    with the number of copies and how many of them are free. A commander whose copies all sit in decks is left out."""
     from app.services.decks import _names
+    from app.services.edhrec_compare import _collection_by_name
 
-    copies: dict[str, int] = {}
-    for row in collection_rows(session):
-        key = name_key(row.card.name)
-        copies[key] = copies.get(key, 0) + row.entry.quantity
-    led = {}
-    for deck in decks:
-        for key in _names(deck.commander or ""):
-            led.setdefault(key, deck)
+    have = _collection_by_name(session)  # per name key: [copies owned, copies free, a printing, its price]
     found = []
     for commander in commanders:
-        keys = _names(commander["name"])
-        have = max((copies.get(key, 0) for key in keys), default=0)
-        if have:
-            deck = next((led[key] for key in keys if key in led), None)
-            found.append({**commander, "copies": have, "deck": {"id": deck.id, "name": deck.name} if deck else None})
+        owned = [have[key] for key in _names(commander["name"]) if key in have]
+        copies = max((item[0] for item in owned), default=0)
+        free = max((item[1] for item in owned), default=0)
+        if free > 0:
+            found.append({**commander, "copies": copies, "free": free})
     return found
 
 

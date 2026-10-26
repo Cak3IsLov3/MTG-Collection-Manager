@@ -608,13 +608,12 @@ async def colour_group_page(request: Request, slug: str, session: Session = Depe
     key = colour_groups.group_key(slug)
     if key is None:
         raise HTTPException(status_code=404, detail="Unknown colour group")
-    every = [s.deck for s in decks.deck_summaries(session)]
-    mine = [deck for deck in every if colour_groups.normalise(deck.colors) == key]
+    mine = [s.deck for s in decks.deck_summaries(session) if colour_groups.normalise(s.deck.colors) == key]
     try:
         everything, error = await colour_groups.all_commanders(scryfall, key), None
     except ScryfallError as exc:
         everything, error = [], str(exc)
-    owned = colour_groups.owned_commanders(session, everything, every)
+    owned = colour_groups.owned_commanders(session, everything)
     have = {c["name"] for c in owned}
     popular = [{**c, "owned": c["name"] in have} for c in everything[:12]]
     return render(request, "colour_group.html", key=key, name=colour_groups.NAMES[key], decks=mine, commanders=popular,

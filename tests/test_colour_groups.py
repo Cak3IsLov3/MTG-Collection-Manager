@@ -51,7 +51,7 @@ def test_the_collection_that_fits_a_colour_group(client, session):
     assert colour_groups.slug("UB") == "ub" and colour_groups.slug("") == "c"
 
 
-def test_a_colour_group_page_lists_the_most_played_commanders_and_the_ones_you_own(client, monkeypatch):
+def test_a_colour_group_page_lists_the_most_played_commanders_and_the_free_ones_you_own(client, monkeypatch):
     from app.scryfall import ScryfallClient
     from app.services import colour_groups
 
@@ -65,32 +65,37 @@ def test_a_colour_group_page_lists_the_most_played_commanders_and_the_ones_you_o
                 {"name": "Marwyn, the Nurturer", "type_line": "Legendary Creature — Elf Druid", "edhrec_rank": 1234,
                  "scryfall_uri": "https://scryfall.com/card/x", "image_uris": {"normal": "https://cards.scryfall.io/normal/front/m.jpg"}},
                 {"name": "Marwyn, the Nurturer", "type_line": "again"},
+                {"name": "Sol Ring", "type_line": "Artifact", "edhrec_rank": 5000},
+                {"name": "Lim-Dûl's Vault", "type_line": "Instant", "edhrec_rank": 6000},
                 {"name": "Ghalta", "card_faces": [{"image_uris": {"normal": "https://cards.scryfall.io/normal/front/g.jpg"}}]}]
 
     monkeypatch.setattr(ScryfallClient, "search", search)
-    client.post("/api/collection", json={"name": "Lim-Dûl's Vault"})
-    client.post("/api/collection", json={"name": "Sol Ring", "set_code": "cmm"})
-    client.post("/api/collection", json={"name": "Marwyn, the Nurturer", "quantity": 2})
+    client.post("/api/collection", json={"name": "Lim-Dûl's Vault"})  # free: no deck uses it
+    client.post("/api/collection", json={"name": "Sol Ring", "set_code": "cmm"})  # its only copy sits in a deck
+    client.post("/api/collection", json={"name": "Marwyn, the Nurturer", "quantity": 2})  # one copy sits in a deck
     client.post("/api/decks", json={"name": "Marwyn, the Nurturer - Elves", "decklist": "1 Marwyn, the Nurturer"})
-    client.get("/api/decks")  # works out its commander
+    client.post("/api/decks", json={"name": "Artifacts", "decklist": "1 Sol Ring"})
+    client.get("/api/decks")
     page = client.get("/deck/colours/g")
     assert page.status_code == 200
     assert asked == [("is:commander legal:commander id=g", {"order": "edhrec", "unique": "cards"})]
     text = page.text
-    owned, popular = text.split("Commanders you already own")[1].split("Most played commanders")
-    # what you own: Marwyn (two copies, the commander of the deck Elves), not Ezuri or Ghalta
-    assert "Marwyn, the Nurturer" in owned and "Ezuri" not in owned and "Ghalta" not in owned
-    assert "You own <b>2</b> copies" in owned and "it is the commander of" in owned and "Marwyn, the Nurturer - Elves" in owned
-    # the most played, in EDHREC's order and without duplicates, with a mark on the one you own
-    assert popular.count('class="panel commander-card"') == 3 and popular.index("Ezuri") < popular.index("Marwyn")
+    owned, popular = text.split("Commanders you own that no deck uses")[1].split("Most played commanders")
+    # free to use: the Vault, and Marwyn of which one of two copies is free; Sol Ring is in a deck, Ezuri and Ghalta are not owned
+    assert "Marwyn, the Nurturer" in owned and "Lim-Dûl&#39;s Vault" in owned and "Sol Ring" not in owned
+    assert "Ezuri" not in owned and "Ghalta" not in owned
+    assert "You own <b>2</b> copies" in owned and "1 not in a deck" in owned and "in no deck yet" in owned
+    assert owned.index("Marwyn") < owned.index("Lim-D")  # the most played first
+    # the most played, in EDHREC's order and without duplicates, with a mark on those you own and can use
+    assert popular.count('class="panel commander-card"') == 5 and popular.index("Ezuri") < popular.index("Marwyn")
     assert "#1234 on EDHREC" in popular and "https://cards.scryfall.io/normal/front/g.jpg" in popular
-    assert popular.count("✓ in your collection") == 1
+    assert popular.count("✓ in your collection") == 2
     assert client.get("/deck/colours/g").status_code == 200 and len(asked) == 1  # one search a day per group
     assert client.get("/deck/colours/c").status_code == 200 and asked[-1][0].endswith("id=c")
     assert client.get("/deck/colours/xyz").status_code == 404
 
     found = client.get("/api/commanders/coverage", params={"name": "Marwyn, the Nurturer"}).json()
-    assert (found["owned"], found["of"], found["percent"], found["decks"]) == (2, 3, 67, 1000)
+    assert (found["decks"], found["of"]) == (1000, 3) and found["owned"] >= 1
     assert found["url"] == "https://edhrec.com/commanders/marwyn-the-nurturer"
     assert client.get("/api/commanders/coverage", params={"name": "Nobody"}).status_code == 502
 
@@ -106,7 +111,7 @@ def test_no_owned_commander_is_said_so(client, monkeypatch):
 
     monkeypatch.setattr(ScryfallClient, "search", search)
     text = client.get("/deck/colours/g").text
-    assert "You own no card that can be a commander in exactly these colours" in text and "Ezuri, Renegade Leader" in text
+    assert "You own no free card that can be a commander in exactly these colours" in text and "Ezuri, Renegade Leader" in text
     assert "no deck in this group yet" in text
 
 

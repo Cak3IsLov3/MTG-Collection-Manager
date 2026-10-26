@@ -10,8 +10,7 @@
     <h3>{{ c.name }}</h3>
     <div class="muted small">{{ c.type_line }}{% if c.rank %} · #{{ c.rank }} on EDHREC{% endif %}</div>
     {% if owned_list %}
-    <div class="small">You own <b>{{ c.copies }}</b> cop{{ 'y' if c.copies == 1 else 'ies' }} ·
-      {% if c.deck %}it is the commander of <a href="/decks/{{ c.deck.id }}">{{ c.deck.name }}</a>{% else %}<span class="up">no deck has it as its commander yet</span>{% endif %}</div>
+    <div class="small">You own <b>{{ c.copies }}</b> cop{{ 'y' if c.copies == 1 else 'ies' }}{% if c.copies > 1 %} · <span class="up">{{ c.free }} not in a deck</span>{% else %} · <span class="up">in no deck yet</span>{% endif %}</div>
     {% elif c.owned %}
     <div class="small"><span class="badge hit">✓ in your collection</span></div>
     {% endif %}
@@ -39,13 +38,13 @@
 
 {% if error %}<p class="down">Could not get the commanders from Scryfall: {{ error }}</p>{% endif %}
 
-<h2>Commanders you already own <span class="muted">· {{ owned | length + owned_more }}</span></h2>
+<h2>Commanders you own that no deck uses <span class="muted">· {{ owned | length + owned_more }}</span></h2>
 {% if owned %}
-<p class="muted small">Legendary cards in your collection that can lead a deck in these colours, the most played first.</p>
+<p class="muted small">Cards in your collection that can lead a deck in these colours and that no deck uses, the most played first.</p>
 <div class="commander-grid">{% for c in owned %}{{ commander_card(c, True) }}{% endfor %}</div>
 {% if owned_more %}<p class="muted small">… and {{ owned_more }} more, less played ones.</p>{% endif %}
 {% elif not error %}
-<p class="muted">You own no card that can be a commander in exactly these colours.</p>
+<p class="muted">You own no free card that can be a commander in exactly these colours (the ones you own are in a deck already).</p>
 {% endif %}
 
 <h2>Most played commanders</h2>
