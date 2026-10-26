@@ -26,6 +26,10 @@ from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconn
 from fastapi.responses import FileResponse, RedirectResponse, Response
 from pydantic import BaseModel, Field, field_validator
 
+from app.stream.playtest import (
+    CardPatch, CopyIn, DiceIn, DrawIn, LifePatch, ManaPatch, MillIn, MoveAllIn, MoveIn, OrderIn, PlayDeckIn, PlayStore, TutorIn,
+)
+
 BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "static"
 DEFAULT_STATE_PATH = Path("stream-state.json")
@@ -1007,18 +1011,24 @@ def create_app(state_path: Path | str = DEFAULT_STATE_PATH) -> FastAPI:
     store = TokenStore(Path(state_path))
     presets = PresetStore(Path(state_path).with_name(Path(state_path).stem + "-presets.json"))
     decks = DeckStore(Path(state_path).with_name(Path(state_path).stem + "-deck.json"))
+    play = PlayStore(Path(state_path).with_name(Path(state_path).stem + "-play.json"))
     hub = Hub()
     app.state.store = store
     app.state.hub = hub
     app.state.decks = decks
+    app.state.play = play
     # Set by the collection manager: result_hook(result, deck) logs the game of a saved deck and
     # returns {"logged": bool, "record": "5 W · 3 L", "note": "..."}.
     app.state.result_hook = None
     # tonight_hook() returns {"wins": 2, "losses": 1, "draws": 0}: tonight's score, from the game log.
     app.state.tonight_hook = None
 
+    def full_state() -> dict:
+        """The tokens and the turn, and what the others may see of the playtest table."""
+        return {**store.snapshot(), "play": play.public()}
+
     async def publish() -> dict:
-        state = store.snapshot()
+        state = full_state()
         await hub.broadcast(state)
         return state
 
@@ -1049,7 +1059,7 @@ def create_app(state_path: Path | str = DEFAULT_STATE_PATH) -> FastAPI:
 
     @app.get("/api/state")
     def get_state():
-        return store.snapshot()
+        return full_state()
 
     @app.post("/api/tokens", status_code=201)
     async def add_token(item: TokenIn):
@@ -1427,9 +1437,179 @@ def create_app(state_path: Path | str = DEFAULT_STATE_PATH) -> FastAPI:
         await press(action)
         return {"ok": True, "action": action}
 
+    # ---- the playtest table: a deck, a hand only you see, and a battlefield on stream
+    @app.get("/playtest")
+    def playtest_page():
+        return FileResponse(STATIC_DIR / "playtest.html", headers=no_cache)
+
+    @app.post("/api/play/deck", status_code=201)
+    async def play_deck(deck: PlayDeckIn):
+        play.load(deck)
+        return await publish()
+
+    @app.post("/api/play/new")
+    async def play_new():
+        play.new_game()
+        return await publish()
+
+    @app.post("/api/play/clear")
+    async def play_clear():
+        play.clear()
+        return await publish()
+
+    @app.post("/api/play/keep")
+    async def play_keep():
+        play.keep()
+        return await publish()
+
+    @app.post("/api/play/draw")
+    async def play_draw(body: DrawIn | None = None):
+        play.draw(body.count if body else 1)
+        return await publish()
+
+    @app.post("/api/play/draw-random")
+    async def play_draw_random():
+        play.draw_random()
+        return await publish()
+
+    @app.post("/api/play/shuffle")
+    async def play_shuffle():
+        play.shuffle()
+        return await publish()
+
+    @app.post("/api/play/mulligan")
+    async def play_mulligan():
+        play.mulligan()
+        return await publish()
+
+    @app.post("/api/play/untap")
+    async def play_untap():
+        play.untap_all()
+        return await publish()
+
+    @app.post("/api/play/tap-all")
+    async def play_tap_all():
+        play.tap_all()
+        return await publish()
+
+    @app.post("/api/play/proliferate")
+    async def play_proliferate():
+        play.proliferate()
+        return await publish()
+
+    @app.post("/api/play/next-turn")
+    async def play_next_turn():
+        play.next_turn()
+        return await publish()
+
+    @app.post("/api/play/undo")
+    async def play_undo():
+        play.undo()
+        return await publish()
+
+    @app.post("/api/play/redo")
+    async def play_redo():
+        play.redo()
+        return await publish()
+
+    @app.post("/api/play/top-to-bottom")
+    async def play_top_to_bottom():
+        play.top_to_bottom()
+        return await publish()
+
+    @app.post("/api/play/bottom-to-top")
+    async def play_bottom_to_top():
+        play.bottom_to_top()
+        return await publish()
+
+    @app.post("/api/play/mill")
+    async def play_mill(body: MillIn):
+        play.mill(body.count, body.to, body.bottom)
+        return await publish()
+
+    @app.post("/api/play/reveal")
+    async def play_reveal(show: bool = True):
+        play.reveal(show)
+        return await publish()
+
+    @app.post("/api/play/tutor")
+    async def play_tutor(body: TutorIn):
+        try:
+            play.tutor(body.uid, body.to)
+        except KeyError:
+            raise HTTPException(404, "card not in the library")
+        return await publish()
+
+    @app.post("/api/play/discard-random")
+    async def play_discard_random():
+        play.discard_random()
+        return await publish()
+
+    @app.post("/api/play/order-hand")
+    async def play_order_hand(body: OrderIn):
+        play.order_hand(body.by)
+        return await publish()
+
+    @app.post("/api/play/move")
+    async def play_move(body: MoveIn):
+        try:
+            play.move(body.uid, body.to, body.position)
+        except KeyError:
+            raise HTTPException(404, "card not found")
+        return await publish()
+
+    @app.post("/api/play/move-all")
+    async def play_move_all(body: MoveAllIn):
+        play.move_all(body.zone, body.to)
+        return await publish()
+
+    @app.post("/api/play/dice")
+    async def play_dice(body: DiceIn):
+        play.roll_die(body.kind)
+        return await publish()
+
+    @app.patch("/api/play/cards/{uid}")
+    async def play_card(uid: str, body: CardPatch):
+        try:
+            play.patch(uid, body)
+        except KeyError:
+            raise HTTPException(404, "card not on the battlefield")
+        return await publish()
+
+    @app.post("/api/play/cards/{uid}/copy")
+    async def play_copy(uid: str, body: CopyIn | None = None):
+        try:
+            play.copy_card(uid, body.count if body else 1)
+        except KeyError:
+            raise HTTPException(404, "card not on the battlefield")
+        return await publish()
+
+    @app.delete("/api/play/cards/{uid}")
+    async def play_delete(uid: str):
+        try:
+            play.delete_card(uid)
+        except KeyError:
+            raise HTTPException(404, "card not found")
+        return await publish()
+
+    @app.patch("/api/play/life")
+    async def play_life(body: LifePatch):
+        play.set_life(body)
+        return await publish()
+
+    @app.patch("/api/play/mana")
+    async def play_mana(body: ManaPatch):
+        play.set_mana(body)
+        return await publish()
+
+    @app.get("/api/play/private")
+    def play_private(peek: int = 0, library: bool = False, bottom: int = 0):
+        """Your hand (and parts of your library when you look): only for the playtest page."""
+        return play.private(min(max(peek, 0), 40), library, min(max(bottom, 0), 40))
+
     @app.websocket("/ws")
     async def ws_endpoint(ws: WebSocket):
-        await hub.connect(ws, store.snapshot())
+        await hub.connect(ws, full_state())
         try:
             while True:
                 # Clients don't send anything meaningful; we only read to
@@ -1442,6 +1622,12 @@ def create_app(state_path: Path | str = DEFAULT_STATE_PATH) -> FastAPI:
 
     return app
 
+
+
+async def set_playtest(app: FastAPI, deck: PlayDeckIn) -> None:
+    """Put this deck on the playtest table (shuffled, seven cards drawn) and show it to the overlay."""
+    app.state.play.load(deck)
+    await app.state.hub.broadcast({**app.state.store.snapshot(), "play": app.state.play.public()})
 
 
 async def set_deck(app: FastAPI, deck: dict | None, intro: bool = False) -> None:

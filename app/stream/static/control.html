@@ -969,6 +969,10 @@
   input, select, textarea { border-radius: 8px; }
   .app-nav { background: var(--bg); }
   .app-nav a.active { background: transparent; color: #fff; box-shadow: inset 0 -2px 0 var(--accent); border-radius: 0; }
+  .sure-back { position: fixed; inset: 0; z-index: 100; background: rgba(0, 0, 0, .65); display: grid; place-items: center; padding: 16px; }
+  .sure { background: var(--panel); border: 1px solid var(--line-2); border-radius: 12px; padding: 18px 20px; max-width: 360px; box-shadow: 0 20px 50px rgba(0, 0, 0, .7); }
+  .sure p { margin: 0 0 14px; }
+  .sure-btns { display: flex; gap: 8px; justify-content: flex-end; }
 </style>
 </head>
 <body>
@@ -990,6 +994,7 @@
   <nav class="tabs" role="tablist" aria-label="Sections">
     <button type="button" role="tab" data-tab="board">Board <span id="tabCount" class="pill-count"></span></button>
     <button type="button" role="tab" data-tab="add">Add tokens</button>
+    <button type="button" id="playTabBtn" title="The playtest table opens in a tab of its own, for another screen">Playtest ↗</button>
   </nav>
   <button id="undoBtn" type="button" title="Undo the last change (Ctrl+Z)">↶ Undo</button>
   <button id="helpBtn" class="icon" type="button" title="Keyboard shortcuts (?)">⌨</button>
@@ -1289,6 +1294,23 @@
     t.classList.add("show");
     clearTimeout(toastTimer);
     toastTimer = setTimeout(() => t.classList.remove("show"), 2200);
+  }
+
+  // Asks "are you sure?" inside the page. The browser's own confirm() pop-up is blocked in OBS docks, so a button
+  // that waits for it does nothing there.
+  function sure(text, yes = "Yes") {
+    return new Promise((resolve) => {
+      const done = (answer) => { back.remove(); removeEventListener("keydown", onKey, true); resolve(answer); };
+      const onKey = (e) => { if (e.key === "Escape") { e.stopPropagation(); done(false); } if (e.key === "Enter") { e.stopPropagation(); done(true); } };
+      const back = el("div", { class: "sure-back", onclick: (e) => { if (e.target === back) done(false); } },
+        el("div", { class: "sure", role: "alertdialog" }, el("p", { text }),
+          el("div", { class: "sure-btns" },
+            el("button", { class: "danger", type: "button", text: yes, onclick: () => done(true) }),
+            el("button", { type: "button", text: "Cancel", onclick: () => done(false) }))));
+      document.body.append(back);
+      addEventListener("keydown", onKey, true);
+      back.querySelector("button").focus();
+    });
   }
 
   async function api(method, path, body) {
@@ -1680,8 +1702,8 @@
                      title: "Next phase (N). Mana empties; after End a new turn starts and everything untaps.",
                      onclick: () => api("POST", ROOT + "/api/turn/next") }),
       moreMenu([
-        { text: "New game (turn 1)", onclick: () => {
-            if (confirm("Start over at turn 1?")) api("PATCH", ROOT + "/api/turn", { number: 1, phase: "untap", on: true, casts: 0, storm: 0 });
+        { text: "New game (turn 1)", onclick: async () => {
+            if (await sure("Start over at turn 1?")) api("PATCH", ROOT + "/api/turn", { number: 1, phase: "untap", on: true, casts: 0, storm: 0 });
           } },
         { text: "Hide tracker", onclick: () => api("PATCH", ROOT + "/api/turn", { on: false }) },
       ]),
@@ -2010,12 +2032,12 @@
         el("button", { class: "primary", type: "button", text: "Load", title: "Replace the board with this preset",
                        onclick: async () => {
                          if ((lastState.tokens || []).length &&
-                             !confirm(`Replace the current board with "${pr.name}"? (You can undo it.)`)) return;
+                             !(await sure(`Replace the current board with "${pr.name}"? (You can undo it.)`, "Replace"))) return;
                          if (await api("POST", `${path}/load`)) toast(`Loaded ${pr.name}`);
                        } }),
         el("button", { class: "danger icon", type: "button", text: "✕", title: "Delete this preset",
                        onclick: async () => {
-                         if (!confirm(`Delete preset "${pr.name}"?`)) return;
+                         if (!(await sure(`Delete preset "${pr.name}"?`, "Delete"))) return;
                          if (await api("DELETE", path)) loadPresets();
                        } }),
       );
@@ -2163,8 +2185,8 @@
     addKeyword.value = "";
   });
 
-  $("clearAll").addEventListener("click", () => {
-    if (confirm("Remove all tokens from the stream?")) api("POST", ROOT + "/api/clear");
+  $("clearAll").addEventListener("click", async () => {
+    if (await sure("Remove all tokens from the stream?", "Clear all")) api("POST", ROOT + "/api/clear");
   });
 
   // ---------------------------------------------------------- overlay URL
@@ -2331,6 +2353,8 @@
   // Board (with the layout) / Add tokens. Each has its own address (#board,
   // #add), so OBS can show two docks side by side if you like.
   const TABS = ["board", "add"];
+  // "Add tokens" opens in a tab of its own (?solo), so it can sit on another screen. That page shows only that panel.
+  const SOLO = new URLSearchParams(location.search).has("solo");
 
   function showTab(name) {
     if (name === "layout") {          // old address: the layout is on the Board tab now
@@ -2344,20 +2368,38 @@
       b.classList.toggle("on", b.dataset.tab === name);
       b.setAttribute("aria-selected", String(b.dataset.tab === name));
     }
+    if (SOLO) return syncPreview();
     if (location.hash !== `#${name}`) history.replaceState(null, "", `#${name}`);
     try { localStorage.setItem("controlTab", name); } catch {}
     syncPreview();
   }
 
   for (const b of document.querySelectorAll(".tabs [data-tab]")) {
-    b.addEventListener("click", () => showTab(b.dataset.tab));
+    b.addEventListener("click", () => {
+      if (b.dataset.tab === "add" && !SOLO) {
+        const url = new URL(location.href);
+        url.search = "?solo";
+        url.hash = "#add";
+        if (window.open(url.href, "_blank")) return;   // blocked: show it here instead
+      }
+      showTab(b.dataset.tab);
+    });
   }
-  addEventListener("hashchange", () => showTab(location.hash.slice(1)));
-  let startTab = location.hash.slice(1);
-  if (!TABS.includes(startTab) && startTab !== "layout") {
-    try { startTab = localStorage.getItem("controlTab"); } catch {}
+  $("playTabBtn").addEventListener("click", () => {
+    if (!window.open(new URL("playtest", location.href).href, "_blank")) location.href = "playtest";
+  });
+  if (SOLO) {
+    document.querySelector(".tabs").style.display = "none";
+    document.title = "Add tokens";
+    showTab("add");
+  } else {
+    addEventListener("hashchange", () => showTab(location.hash.slice(1)));
+    let startTab = location.hash.slice(1);
+    if (!TABS.includes(startTab) && startTab !== "layout") {
+      try { startTab = localStorage.getItem("controlTab"); } catch {}
+    }
+    showTab(startTab);
   }
-  showTab(startTab);
 
   // ---------------------------------------------------------- deck tokens
   // Paste an Archidekt/Moxfield link; the server finds every token the deck's
@@ -2472,7 +2514,7 @@
   });
 
   $("deckForget").addEventListener("click", async () => {
-    if (!confirm("Forget this deck and its token list?")) return;
+    if (!(await sure("Forget this deck and its token list?", "Forget"))) return;
     if (await api("DELETE", ROOT + "/api/deck")) {
       $("deckUrl").value = "";
       $("deckScan").textContent = "Scan deck";

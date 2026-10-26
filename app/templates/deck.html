@@ -89,6 +89,9 @@
     <form class="inline" method="post" action="/decks/{{ deck.id }}/stream">
       <button class="small play-button" title="Open the stream screen with every token this deck makes ready to put on the board">▶ Play</button>
     </form>
+    <form class="inline" method="post" action="/decks/{{ deck.id }}/playtest" target="_blank">
+      <button class="small secondary" title="Shuffle this deck and draw seven on the playtest page: your hand stays on your screen, the battlefield goes to the stream">♠ Playtest</button>
+    </form>
     <a class="button-link" href="/table?deck={{ deck.id }}" title="Life, poison and commander damage for the table, with this deck chosen">♥ Life counter</a>
     <a class="button-link" href="/decks/{{ deck.id }}/export.txt" title="Download this deck as a text list for Archidekt or Moxfield">⤓ Export list</a>
     <a class="button-link" href="/decks/{{ deck.id }}/proxies" title="A printable sheet of the cards you still miss, to play-test with">⎙ Proxies</a>

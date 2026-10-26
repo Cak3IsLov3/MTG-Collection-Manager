@@ -236,6 +236,7 @@ Press **▶ Play** on a deck and the stream screen opens with every token that d
 - Export a deck as a text list for Archidekt or Moxfield, with the commander first and its tokens at the end
 - Weekly summary on Discord (by default on Monday at 9:00): collection value and its change, new cards, risers and fallers, and the games you played. The dashboard shows the same under "This week"
 - Commander picture: every deck shows its commander, taken from the Commander category on Archidekt, recognised from the deck name (only when that card can be a commander), or chosen on the deck page
+- Playtest on stream: a page of its own, like the Archidekt playtester, where you shuffle a deck, draw seven and play it with a hidden hand, while the stream overlay (your virtual camera in Convoke, SpellTable or Discord) shows only the battlefield, graveyard, exile, command zone and life. Cards you do not own count too. See [docs/stream.md](docs/stream.md)
 - Game log: log a game from the Games page or from a deck (date, players, who you played against and their commanders, who won, how it ended, who went first, notes). Every deck shows how often it was played, its win rate and when it was last played
 - Live table for game night (made for an iPad on the table): life, poison and commander damage per player, whose turn it is and the round, undo, full screen, and the screen stays on. Players are out at 0 life, 10 poison or 21 commander damage; the top row can be turned upside down for the players across. At the end you pick the winner and the game goes into the log with everyone and their commanders. A game in progress survives a reload
 - **Stream overlay for OBS**: show tokens, counters, mana, dice and a turn tracker on your stream, with a control panel to run it (also as an OBS dock). Take the tokens of any saved deck with one click (**▶ Play** on a deck; two tokens on one picture, like the Roles, become two tokens, and on stream only their name bar shows, like the Ring emblem, with a button per token for the whole token), with a deck intro on stream (commander, bracket and record). Put any card big in the spotlight, keep track of commander tax and storm, and end with Victory! with confetti and cards falling in the colours of your deck (the game goes straight into your log), tonight's score in view and achievements as they unlock. A ready-made Stream Deck profile (32 keys, with pictures) to import with a double-click; it works without a plugin. Control panel at `/stream/control`, Browser source at `/stream/overlay`; see [docs/stream.md](docs/stream.md)
@@ -283,6 +284,19 @@ Run the tests (no network needed, every external service is mocked):
 ```bash
 pytest
 ```
+
+### As a program (.exe)
+
+On Windows you can build one file that starts the server and opens your browser, so you do not need Python to run it:
+
+```bash
+build_exe.bat
+```
+
+This makes `dist\MTGCollectionManager.exe`. Put it in a folder of its own, or next to your existing `mtg.db`, and start it:
+the collection, `.env`, backups and the stream files (`stream-state*.json`) are kept in the folder of the .exe, so moving
+the folder moves everything. Closing its window stops the program. It uses port 8017 (set `PORT` to change it); starting it a
+second time just opens the one that is already running.
 
 ## Configuration
 

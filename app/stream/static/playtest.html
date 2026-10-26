@@ -1,0 +1,714 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Playtest</title>
+<style>
+  :root {
+    --bg: #0b0e11; --panel: #16181e; --panel-2: #1d2027; --panel-3: #252932; --line: #2b2f39; --line-2: #383d49;
+    --text: #eaecef; --muted: #a1abb8; --accent: #fcd535; --accent-2: #fde677; --up: #0ecb81; --down: #f6465d;
+    --cw: 110px; --hw: 100px;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body { background: var(--bg); color: var(--text); font: 14px/1.4 "Inter", system-ui, sans-serif; display: flex; flex-direction: column; overflow: hidden; }
+  button, input, select { font: inherit; color: inherit; }
+  button { background: var(--panel-3); border: 1px solid var(--line-2); border-radius: 6px; padding: 5px 11px; cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  button.primary { background: linear-gradient(180deg, var(--accent-2), var(--accent)); color: #181a20; border-color: var(--accent); font-weight: 700; }
+  button.small { padding: 2px 8px; font-size: 12px; }
+  button:disabled { opacity: .4; cursor: default; }
+  input[type=number], input[type=text], input[type=search] { background: var(--panel-3); border: 1px solid var(--line-2); border-radius: 6px; padding: 4px 8px; }
+  input[type=number] { width: 64px; }
+  .muted { color: var(--muted); }
+
+  /* ---- top bar */
+  #top { display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: center; padding: 8px 14px; background: var(--panel); border-bottom: 1px solid var(--line); }
+  #top .brand { font-weight: 700; color: var(--accent); letter-spacing: .02em; }
+  #top .deck { color: var(--muted); }
+  #top .sep { width: 1px; align-self: stretch; background: var(--line); margin: 0 2px; }
+  .ctr { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); font-size: 13px; }
+  .ctr b { min-width: 22px; text-align: center; color: var(--text); font-variant-numeric: tabular-nums; }
+  .ctr button { padding: 0 7px; line-height: 1.5; }
+  .ctr.life b { color: var(--up); font-size: 16px; }
+  .mana { display: inline-flex; align-items: center; gap: 3px; }
+  .mana .pip { display: inline-flex; align-items: center; gap: 1px; padding: 1px 3px; border-radius: 999px; background: var(--panel-3); border: 1px solid var(--line-2); font-size: 12px; }
+  .mana .pip i { font-style: normal; font-weight: 800; width: 17px; height: 17px; border-radius: 50%; display: grid; place-items: center; color: #181a20; font-size: 11px; }
+  .mana .pip button { padding: 0 4px; border: 0; background: none; line-height: 1.2; }
+  .pip.W i { background: #f4efd0; } .pip.U i { background: #6ab0e8; } .pip.B i { background: #9b8f9f; }
+  .pip.R i { background: #ef8a6b; } .pip.G i { background: #7cc58a; } .pip.C i { background: #c8cbd0; }
+
+  /* ---- battlefield */
+  #field { flex: 1; min-height: 0; overflow: auto; padding: 12px 16px 16px; display: flex; flex-direction: column; gap: 14px;
+    background: var(--bg); }
+  .row-label { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
+  .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; min-height: 20px; }
+  #empty { margin: auto; text-align: center; max-width: 520px; color: var(--muted); }
+
+  /* ---- a card */
+  .c { position: relative; flex: none; width: var(--cw); height: calc(var(--cw) * 1.395); }
+  .c.tapped { width: calc(var(--cw) * 1.395); }
+  .c .face { position: absolute; left: 0; top: 0; width: var(--cw); height: calc(var(--cw) * 1.395); transition: transform .25s, left .25s; cursor: pointer; }
+  .c.tapped .face { left: calc((var(--cw) * 1.395 - var(--cw)) / 2); transform: rotate(90deg); }
+  .c .face img, .c .back { width: 100%; height: 100%; display: block; border-radius: calc(var(--cw) * .045); background: var(--panel-3);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, .6); }
+  .c .back { border: 3px solid #1b1f27; background: radial-gradient(circle, var(--accent) 0 7%, transparent 8%), repeating-linear-gradient(45deg, #232830 0 8px, #2b313b 8px 16px); }
+  .c:hover .face img, .c:hover .back { outline: 2px solid var(--accent); }
+  .c.tapped .face img { filter: brightness(.85); }
+  .c.phased { opacity: .45; }
+  .c.rot .face img, .c.rot .back { transform: rotate(180deg); }
+  .c.tapped.rot .face { transform: rotate(270deg); }
+  .c.copy .face img { outline: 2px dashed var(--accent); }
+  .c .tags { position: absolute; left: 3px; bottom: 3px; display: flex; flex-direction: column; gap: 2px; align-items: flex-start; pointer-events: none; z-index: 2; }
+  .c .tag { padding: 0 6px; border-radius: 999px; font-size: 11px; font-weight: 700; background: var(--accent); color: #181a20; box-shadow: 0 1px 4px rgba(0, 0, 0, .6); }
+  .c .tag.pt { background: #0b0e11; color: #fff; border: 1px solid var(--accent); }
+  .c .tag.fd { background: #0b0e11; color: var(--accent); border: 1px solid var(--line-2); }
+  .stack { position: relative; flex: none; width: calc(var(--cw) + 36px); height: calc(var(--cw) * 1.395 + 26px); }
+  .stack .c { position: absolute; top: 0; }
+  .stack .c.dim { opacity: .55; }
+  .stack .num { position: absolute; left: 0; right: 0; bottom: 0; text-align: center; font-weight: 800; font-size: 15px; color: var(--accent); }
+  .stack .num small { font-weight: 400; color: var(--muted); font-size: 12px; }
+  .c.small { --cw: 80px; }
+  .c.tiny { --cw: 64px; }
+
+  /* ---- bottom dock */
+  #dock { display: flex; gap: 14px; padding: 8px 14px 10px; background: var(--panel); border-top: 1px solid var(--line); align-items: flex-end; }
+  #handBox { flex: 1; min-width: 0; }
+  .dock-title { display: flex; align-items: center; gap: 8px; font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
+  #hand { display: flex; gap: 6px; overflow-x: auto; padding: 4px 2px 6px; min-height: calc(var(--hw) * 1.395 + 12px); align-items: flex-end; }
+  #hand .c { --cw: var(--hw); }
+  #hand .c:hover { transform: translateY(-10px); transition: transform .12s; }
+  #piles { display: flex; gap: 10px; align-items: flex-end; }
+  .pile { width: 92px; text-align: center; cursor: pointer; user-select: none; }
+  .pile .art { position: relative; width: 100%; aspect-ratio: 488 / 680; border-radius: 6px; overflow: hidden; background: var(--panel-2);
+    border: 1px dashed var(--line-2); display: grid; place-items: center; color: var(--muted); font-size: 12px; }
+  .pile .art img { width: 100%; height: 100%; display: block; }
+  .pile.lib .art { border: 2px solid var(--accent); border-style: solid; background: repeating-linear-gradient(45deg, #1b1f27 0 8px, #20252e 8px 16px);
+    box-shadow: 3px 3px 0 -1px #14171d, 5px 5px 0 -1px var(--line-2); }
+  .pile .art b { font-size: 24px; color: var(--accent); }
+  .pile:hover .art { outline: 2px solid var(--accent-2); }
+  .pile .n { position: absolute; right: 4px; top: 4px; min-width: 22px; padding: 0 6px; border-radius: 999px; background: #fff; color: #181a20; font-weight: 800; font-size: 12px; z-index: 2; }
+  .pile .lab { margin-top: 3px; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); display: flex; justify-content: center; align-items: center; gap: 2px; }
+  .pile .lab button { padding: 0 5px; border: 0; background: none; color: var(--muted); }
+
+  /* ---- modals and menus */
+  .modal { position: fixed; inset: 0; z-index: 40; background: rgba(0, 0, 0, .72); display: grid; place-items: center; padding: 18px; }
+  .modal[hidden] { display: none; }
+  .sheet { width: min(1100px, 100%); max-height: 92vh; overflow: auto; background: var(--panel); border: 1px solid var(--line-2); border-radius: 14px; padding: 16px 18px 20px; box-shadow: 0 20px 60px rgba(0, 0, 0, .7); }
+  .sheet h2 { margin: 0 0 10px; font-size: 16px; display: flex; align-items: center; gap: 10px; }
+  .sheet h2 .grow { flex: 1; }
+  .cards { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-start; }
+  .cards .c { --cw: 100px; }
+  .cards .c.tapped { width: var(--cw); }
+  .cards .name { position: absolute; left: 0; right: 0; bottom: -16px; text-align: center; font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .cards .c.named { margin-bottom: 18px; }
+  .open-hand { text-align: center; }
+  .open-hand .cards { justify-content: center; }
+  .open-hand .actions { display: flex; gap: 8px; justify-content: center; margin: 4px 0 12px; }
+  .oh-card { display: grid; gap: 4px; justify-items: center; }
+  .oh-card .row2 { display: flex; gap: 4px; }
+  .set { display: grid; grid-template-columns: 1fr auto; gap: 10px 20px; align-items: center; }
+  .set small { display: block; color: var(--muted); }
+  .keys-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 6px 24px; font-size: 13px; }
+  kbd { display: inline-block; min-width: 24px; padding: 0 6px; margin-right: 6px; text-align: center; border-radius: 4px; background: var(--panel-3); border: 1px solid var(--line-2); color: var(--accent); font: 700 12px/1.6 inherit; }
+  #log { display: grid; gap: 2px; color: var(--muted); font-size: 13px; }
+
+  .ctx { position: fixed; z-index: 60; min-width: 220px; padding: 6px; border-radius: 8px; background: #2b2f36; border: 1px solid #3a3f49; box-shadow: 0 10px 30px rgba(0, 0, 0, .6); font-size: 14px; }
+  .ctx .item { position: relative; display: flex; align-items: center; gap: 10px; padding: 6px 12px; border-radius: 5px; cursor: pointer; white-space: nowrap; }
+  .ctx .item:hover { background: #3a3f49; }
+  .ctx .item.off { opacity: .4; pointer-events: none; }
+  .ctx .ic { width: 16px; text-align: center; color: var(--muted); }
+  .ctx .key { margin-left: auto; padding-left: 24px; color: var(--muted); font-size: 12px; }
+  .ctx .arrow { margin-left: auto; padding-left: 20px; color: var(--muted); }
+  .ctx hr { border: 0; border-top: 1px solid #3a3f49; margin: 5px 0; }
+  .ctx .item input { width: 90px; padding: 2px 6px; }
+  .ctx .sub { display: none; position: absolute; top: -7px; left: 100%; margin-left: 2px; }
+  .ctx .item:hover > .sub { display: block; }
+  .ctx .item.flip > .sub { left: auto; right: 100%; margin-left: 0; margin-right: 2px; }
+
+  #zoom { position: fixed; z-index: 70; width: 320px; aspect-ratio: 488 / 680; pointer-events: none; display: none; border-radius: 14px; background: #000;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, .8), 0 0 0 2px rgba(255, 255, 255, .85); }
+  #zoom img { width: 100%; height: 100%; display: block; border-radius: 14px; }
+  #toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 80; background: #0b0e11; border: 1px solid var(--accent); border-radius: 999px;
+    padding: 6px 16px; display: none; }
+</style>
+</head>
+<body>
+<header id="top">
+  <span class="brand">♠ Playtest</span><span class="deck" id="deckName"></span>
+  <button id="btnGame" type="button" title="New game, game log, dice, settings…">☰ Game menu</button>
+  <button id="btnNext" type="button" class="primary" title="Untap everything, draw a card, count the turn (N)">Next turn</button>
+  <button id="btnUndo" type="button" title="Undo (Ctrl + Z)">↶</button>
+  <button id="btnRedo" type="button" title="Redo (Ctrl + Shift + Z)">↷</button>
+  <button id="btnActions" type="button" title="Tap all, proliferate, dice…">⋮ Actions</button>
+  <button id="btnMode" type="button" title="What a left click on a card does"></button>
+  <span class="sep"></span>
+  <span class="ctr life">♥ <button data-life="-1" type="button">−</button><b id="cLife">40</b><button data-life="1" type="button">+</button></span>
+  <span class="ctr">☠ <button data-cnt="poison" data-d="-1" type="button">−</button><b id="cPoison">0</b><button data-cnt="poison" data-d="1" type="button">+</button></span>
+  <span class="ctr">⚡ <button data-cnt="energy" data-d="-1" type="button">−</button><b id="cEnergy">0</b><button data-cnt="energy" data-d="1" type="button">+</button></span>
+  <span class="ctr">✦ <button data-cnt="experience" data-d="-1" type="button">−</button><b id="cExperience">0</b><button data-cnt="experience" data-d="1" type="button">+</button></span>
+  <span class="ctr">⛈ <button data-cnt="storm" data-d="-1" type="button">−</button><b id="cStorm">0</b><button data-cnt="storm" data-d="1" type="button">+</button></span>
+  <span class="ctr" title="Commander tax: 2 for every time you cast your commander again">tax <button data-cnt="tax" data-d="-2" type="button">−</button><b id="cTax">0</b><button data-cnt="tax" data-d="2" type="button">+</button></span>
+  <span class="ctr">Turn <b id="cTurn">1</b></span>
+  <span class="sep"></span>
+  <span class="mana" id="manaPool" title="Your mana pool; it empties when the turn ends"></span>
+  <a href="control" style="margin-left:auto;color:var(--muted)" title="Back to the control panel of the stream">← Control panel</a>
+</header>
+
+<main id="field"></main>
+
+<footer id="dock">
+  <section id="handBox">
+    <div class="dock-title">Hand <span id="handN"></span> · only you see this
+      <button id="kebHand" class="small" type="button" title="Hand menu">⋮</button></div>
+    <div id="hand"></div>
+  </section>
+  <section id="piles"></section>
+</footer>
+
+<div class="modal" id="viewer" hidden><div class="sheet"><h2><span id="viewerTitle"></span><span class="grow"></span>
+  <input id="viewerFilter" type="search" placeholder="Filter by name"><button id="viewerClose" type="button">Close</button></h2>
+  <div class="cards" id="viewerCards"></div></div></div>
+
+<div class="modal" id="opening" hidden><div class="sheet open-hand">
+  <h2 style="justify-content:center">Opening hand</h2>
+  <div class="actions">
+    <button id="ohKeep" type="button" class="primary">Keep this</button>
+    <button id="ohMull" type="button">Mulligan (0)</button>
+    <button id="ohDraw" type="button" title="Draw one more card">Draw a card</button>
+  </div>
+  <p class="muted" style="margin-top:0">After a mulligan put cards on the bottom of your library (one for every mulligan you took).</p>
+  <div class="cards" id="ohCards"></div>
+</div></div>
+
+<div class="modal" id="settings" hidden><div class="sheet" style="width:min(560px,100%)"><h2><span>Playtester settings</span><span class="grow"></span><button class="closeBtn" type="button">Close</button></h2>
+  <div class="set">
+    <div>Card size<small>The cards on the battlefield</small></div><input id="setSize" type="range" min="1" max="6" step="1">
+    <div>Hand size<small>The cards in your hand</small></div><input id="setHand" type="range" min="1" max="6" step="1">
+    <div>Left click<small>What a left click on a card does</small></div>
+    <select id="setMode"><option value="action">Default action (play, tap)</option><option value="menu">Open the menu</option></select>
+    <div>Cards in hand open the menu<small>Also when a left click does the action</small></div><input id="setHandMenu" type="checkbox">
+    <div>Card preview on hover<small>A big card next to the mouse</small></div><input id="setZoom" type="checkbox">
+  </div></div></div>
+
+<div class="modal" id="keysBox" hidden><div class="sheet" style="width:min(900px,100%)"><h2><span>Keybinds</span><span class="grow"></span><button class="closeBtn" type="button">Close</button></h2>
+  <div class="keys-grid">
+    <div><kbd>?</kbd>Show / hide the keybinds</div><div><kbd>N</kbd>Next turn (untap + draw)</div><div><kbd>U</kbd>Untap all</div>
+    <div><kbd>D</kbd>Draw a card</div><div><kbd>Ctrl S</kbd>Shuffle the library</div><div><kbd>Ctrl F</kbd>Search the library</div>
+    <div><kbd>Ctrl Y</kbd>Search the graveyard</div><div><kbd>Ctrl H</kbd>View the full hand</div><div><kbd>Ctrl Z</kbd>Undo</div>
+    <div><kbd>Ctrl Shift Z</kbd>Redo</div><div><kbd>Ctrl G</kbd>New game</div><div><kbd>Ctrl Space</kbd>Left click: action / menu</div>
+    <div><kbd>1</kbd>–<kbd>9</kbd> Play card 1–9 from your hand</div><div><kbd>Alt 1</kbd>–<kbd>9</kbd> Peek the top 1–9 cards</div>
+    <div><kbd>Esc</kbd>Close a menu or window</div>
+  </div>
+  <h2 style="margin-top:16px">On the card under your mouse</h2>
+  <div class="keys-grid">
+    <div><kbd>B</kbd>To the battlefield</div><div><kbd>H</kbd>To your hand</div><div><kbd>G</kbd>To the graveyard</div>
+    <div><kbd>E</kbd>To exile</div><div><kbd>Z</kbd>To the command zone</div><div><kbd>Y</kbd>On top of the library</div>
+    <div><kbd>L</kbd>Under the library</div><div><kbd>T</kbd>Tap / untap</div><div><kbd>M</kbd>Face down (morph)</div>
+    <div><kbd>P</kbd>Dim (phase)</div><div><kbd>J</kbd>Turn 180°</div><div><kbd>C</kbd>Token copy</div>
+    <div><kbd>+</kbd><kbd>-</kbd> Power and toughness</div><div><kbd>O</kbd>Card details</div><div><kbd>Delete</kbd>Remove from the game</div>
+  </div></div></div>
+
+<div class="modal" id="logBox" hidden><div class="sheet" style="width:min(640px,100%)"><h2><span>Game log</span><span class="grow"></span><button class="closeBtn" type="button">Close</button></h2>
+  <div id="log"></div></div></div>
+
+<div id="zoom"><img alt="" src="data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw=="></div>
+<div id="toast"></div>
+
+<script>
+(() => {
+  "use strict";
+  const ROOT = location.pathname.replace(/\/playtest\/?$/, "");
+  const $ = (id) => document.getElementById(id);
+  const el = (tag, attrs = {}, ...kids) => {
+    const node = document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs)) {
+      if (k === "class") node.className = v;
+      else if (k === "text") node.textContent = v;
+      else if (k.startsWith("on")) node.addEventListener(k.slice(2), v);
+      else node.setAttribute(k, v);
+    }
+    node.append(...kids.filter(Boolean));
+    return node;
+  };
+
+  // ------------------------------------------------------------ state
+  let pub = null;                                   // what the stream shows (comes over the websocket)
+  let priv = { hand: [], top: [], bottom: [], library: [], hidden: {}, log: [], mana: {}, opening: false, mulligans: 0 };
+  let privRev = -1, peekTop = 0, peekBottom = 0, libOpen = false;
+  let viewer = null;                                // {kind, to} of the open zone window
+  let hoverCard = null;
+  let settings = { size: 3, hand: 3, mode: "action", handMenu: false, zoom: true };
+  try { Object.assign(settings, JSON.parse(localStorage.getItem("playSettings") || "{}")); } catch {}
+  const saveSettings = () => { try { localStorage.setItem("playSettings", JSON.stringify(settings)); } catch {} };
+  const SIZES = [70, 90, 110, 135, 165, 200], HANDS = [60, 80, 100, 125, 150, 180];
+
+  // ------------------------------------------------------------ talking to the server
+  async function call(method, path, body) {
+    try {
+      const res = await fetch(ROOT + path, { method, headers: body ? { "Content-Type": "application/json" } : {}, body: body ? JSON.stringify(body) : undefined });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || res.statusText);
+      return await res.json();
+    } catch (e) { toast(String(e.message || e)); }
+  }
+  async function loadPrivate() {
+    try {
+      const res = await fetch(`${ROOT}/api/play/private?peek=${peekTop}&bottom=${peekBottom}&library=${libOpen}`, { cache: "no-store" });
+      if (res.ok) { priv = await res.json(); privRev = priv.rev; render(); }
+    } catch {}
+  }
+  // "Are you sure?" inside the page: the browser's own confirm() pop-up is blocked in OBS docks.
+  function sure(text, yes = "Yes") {
+    return new Promise((resolve) => {
+      const done = (answer) => { back.remove(); removeEventListener("keydown", onKey, true); resolve(answer); };
+      const onKey = (e) => { if (e.key === "Escape") { e.stopPropagation(); done(false); } if (e.key === "Enter") { e.stopPropagation(); done(true); } };
+      const back = el("div", { class: "modal", style: "z-index:90", onclick: (e) => { if (e.target === back) done(false); } },
+        el("div", { class: "sheet", style: "width:min(380px,100%)" }, el("p", { text, style: "margin-top:0" }),
+          el("div", { style: "display:flex;gap:8px;justify-content:flex-end" },
+            el("button", { class: "primary", type: "button", text: yes, onclick: () => done(true) }),
+            el("button", { type: "button", text: "Cancel", onclick: () => done(false) }))));
+      document.body.append(back);
+      addEventListener("keydown", onKey, true);
+      back.querySelector("button").focus();
+    });
+  }
+  function toast(text) {
+    const t = $("toast"); t.textContent = text; t.style.display = "block";
+    clearTimeout(toast.timer); toast.timer = setTimeout(() => { t.style.display = "none"; }, 2400);
+  }
+  function connect() {
+    const ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}${ROOT}/ws`);
+    ws.onmessage = (e) => { const d = JSON.parse(e.data); if (d.play) setPub(d.play); };
+    ws.onclose = () => setTimeout(connect, 1500);
+  }
+  function setPub(p) {
+    const lastRoll = pub && pub.roll ? JSON.stringify(pub.roll) : "";
+    pub = p;
+    if (p.roll && JSON.stringify(p.roll) !== lastRoll && lastRoll !== "") toast(`🎲 ${p.roll.kind}: ${p.roll.result}`);
+    if (p.rev !== privRev) loadPrivate(); else render();
+  }
+  const play = (id, to, extra = {}) => call("POST", "/api/play/move", { uid: id, to, ...extra });
+  const patchCard = (uid, body) => call("PATCH", `/api/play/cards/${uid}`, body);
+  const details = (c) => window.open("https://scryfall.com/search?q=" + encodeURIComponent(`!"${c.name}"`), "_blank", "noopener");
+
+  // ------------------------------------------------------------ cards
+  const label = (c) => `${c.n} ${c.t}`;
+  function tile(card, zone, opts = {}) {
+    const real = card.facedown && priv.hidden && priv.hidden[card.uid];
+    const shown = real || card;
+    const face = el("div", { class: "face", title: shown.name },
+      el("img", { src: shown.image_url, alt: shown.name, loading: "lazy" }));
+    const tags = el("div", { class: "tags" });
+    for (const k of card.counters || []) tags.append(el("span", { class: "tag", text: label(k) }));
+    if (card.dp || card.dt) tags.append(el("span", { class: "tag pt", text: `${card.dp >= 0 ? "+" : ""}${card.dp}/${card.dt >= 0 ? "+" : ""}${card.dt}` }));
+    if (card.facedown) tags.append(el("span", { class: "tag fd", text: "face down" }));
+    if (card.token) tags.append(el("span", { class: "tag", text: "copy" }));
+    const box = el("div", { class: "c" + (opts.cls ? " " + opts.cls : "") + (card.tapped ? " tapped" : "") + (card.phased ? " phased" : "")
+      + (card.rot ? " rot" : "") + (card.token ? " copy" : "") }, face, tags);
+    if (opts.named) { box.classList.add("named"); box.append(el("div", { class: "name", text: shown.name })); }
+    box._card = card; box._zone = zone; box._shown = shown;
+    face.addEventListener("click", (e) => {
+      if (opts.onClick) return opts.onClick(e);
+      if (settings.mode === "menu" || (zone === "hand" && settings.handMenu)) return openMenu(e.clientX, e.clientY, cardMenu(card, zone));
+      if (zone === "hand" || zone === "command") play(card.uid, "battlefield");
+      else if (zone === "battlefield") patchCard(card.uid, { tapped: !card.tapped });
+      else play(card.uid, "hand");
+    });
+    return box;
+  }
+
+  // ------------------------------------------------------------ render
+  const ZONE_NAMES = { hand: "Hand", battlefield: "Battlefield", graveyard: "Graveyard", exile: "Exile", command: "Command zone" };
+  function render() {
+    if (!pub) return;
+    document.documentElement.style.setProperty("--cw", SIZES[settings.size - 1] + "px");
+    document.documentElement.style.setProperty("--hw", HANDS[settings.hand - 1] + "px");
+    $("deckName").textContent = pub.loaded && pub.deck ? `· ${pub.deck}` : "";
+    for (const [id, v] of [["cLife", pub.life], ["cPoison", pub.poison], ["cEnergy", pub.energy], ["cExperience", pub.experience],
+                           ["cStorm", pub.storm], ["cTax", pub.tax], ["cTurn", pub.turn]]) $(id).textContent = v;
+    $("btnMode").textContent = settings.mode === "menu" ? "Left click: Menu" : "Left click: Action";
+    $("btnUndo").disabled = !priv.can_undo; $("btnRedo").disabled = !priv.can_redo;
+    hideZoom();
+    renderMana();
+    // the battlefield: creatures, the rest, lands
+    const field = $("field");
+    if (!pub.loaded) {
+      field.replaceChildren(el("div", { id: "empty" }, el("h2", { text: "No deck on the table yet" }),
+        el("p", { text: "Open a deck in the collection manager and press ♠ Playtest: the deck is shuffled and seven cards are drawn. " +
+          "Your hand stays on this screen; the stream overlay (your virtual camera) shows the battlefield, graveyard, exile, command zone and life, and only how many cards you hold." })));
+      $("hand").replaceChildren(); $("piles").replaceChildren(); $("opening").hidden = true;
+      return;
+    }
+    const rows = { creature: [], other: [], land: [] };
+    // more than three plain lands of one kind lie on top of each other, with the number below
+    const plain = (c) => c.type === "land" && !c.facedown && !c.phased && !c.rot && !c.token && !c.dp && !c.dt && !(c.counters || []).length;
+    const groups = new Map();
+    for (const c of pub.battlefield) if (plain(c)) groups.set(c.name, [...(groups.get(c.name) || []), c]);
+    const stacked = new Set();
+    for (const c of pub.battlefield) {
+      const group = plain(c) ? groups.get(c.name) : null;
+      if (group && group.length > 3) {
+        if (stacked.has(c.name)) continue;
+        stacked.add(c.name);
+        rows.land.push(stackTile(group));
+      } else (rows[c.type] || rows.other).push(tile(c, "battlefield"));
+    }
+    field.replaceChildren(...[["creature", "Creatures"], ["other", "Other permanents"], ["land", "Lands"]].map(([k, name]) =>
+      el("div", {}, el("div", { class: "row-label", text: name }), el("div", { class: "row" }, ...rows[k]))));
+    $("handN").textContent = `(${priv.hand.length})`;
+    $("hand").replaceChildren(...priv.hand.map((c) => tile(c, "hand")));
+    renderPiles();
+    renderOpening();
+    renderViewer();
+  }
+  // a stack of the same land: click to tap one (or untap one when all are tapped); the menu is of the front card
+  function stackTile(cards) {
+    const tapped = cards.filter((c) => c.tapped).length;
+    const active = cards.find((c) => !c.tapped) || cards[cards.length - 1];
+    const toggle = () => patchCard(active.uid, { tapped: !active.tapped });
+    const shown = [...cards].sort((a, b) => b.tapped - a.tapped).slice(-3);
+    const box = el("div", { class: "stack", title: `${cards.length} × ${cards[0].name}` });
+    shown.forEach((c, i) => {
+      const t = tile(c, "battlefield", { onClick: (e) => (settings.mode === "menu" ? openMenu(e.clientX, e.clientY, cardMenu(active, "battlefield")) : toggle()) });
+      t.classList.remove("tapped");
+      if (c.tapped) t.classList.add("dim");
+      t.style.left = `${i * 18}px`; t.style.top = `${i * 4}px`;
+      t._card = active;
+      box.append(t);
+    });
+    box.append(el("div", { class: "num" }, `×${cards.length}`, tapped ? el("small", { text: ` · ${tapped} tapped` }) : ""));
+    return box;
+  }
+  function renderMana() {
+    $("manaPool").replaceChildren(...["W", "U", "B", "R", "G", "C"].map((color) => el("span", { class: `pip ${color}` },
+      el("button", { type: "button", text: "−", onclick: () => call("PATCH", "/api/play/mana", { color, delta: -1 }) }),
+      el("i", { text: color }), el("b", { text: String((priv.mana || {})[color] || 0) }),
+      el("button", { type: "button", text: "+", onclick: () => call("PATCH", "/api/play/mana", { color, delta: 1 }) }))));
+  }
+  function pile(kind, name, cards, onClick, menu) {
+    const top = cards[cards.length - 1];
+    const art = el("div", { class: "art" }, top ? el("img", { src: top.image_url, alt: top.name }) : "empty");
+    if (cards.length > 1) art.append(el("span", { class: "n", text: String(cards.length) }));
+    const box = el("div", { class: "pile" }, art,
+      el("div", { class: "lab" }, name, el("button", { type: "button", text: "⋮", title: `${name} menu`, onclick: (e) => { e.stopPropagation(); const r = e.currentTarget.getBoundingClientRect(); openMenu(r.left, r.top - 4, menu(), true); } })));
+    box.addEventListener("click", onClick);
+    box.addEventListener("contextmenu", (e) => { e.preventDefault(); openMenu(e.clientX, e.clientY, menu(), true); });
+    return box;
+  }
+  function renderPiles() {
+    const lib = el("div", { class: "pile lib" }, el("div", { class: "art" }, el("b", { text: String(pub.library) })),
+      el("div", { class: "lab" }, "Library", el("button", { type: "button", text: "⋮", title: "Library menu", onclick: (e) => { e.stopPropagation(); const r = e.currentTarget.getBoundingClientRect(); openMenu(r.left, r.top - 4, libraryMenu(), true); } })));
+    lib.addEventListener("click", (e) => { if (settings.mode === "menu") openMenu(e.clientX, e.clientY, libraryMenu(), true); else call("POST", "/api/play/draw", { count: 1 }); });
+    lib.addEventListener("contextmenu", (e) => { e.preventDefault(); openMenu(e.clientX, e.clientY, libraryMenu(), true); });
+    $("piles").replaceChildren(
+      pile("graveyard", "Graveyard", pub.graveyard, () => openViewer("graveyard"), () => zoneMenu("graveyard")),
+      pile("exile", "Exile", pub.exile, () => openViewer("exile"), () => zoneMenu("exile")),
+      pile("command", "Command", pub.command, () => { const c = pub.command[0]; if (c) play(c.uid, "battlefield"); }, () => zoneMenu("command")),
+      lib);
+  }
+
+  // ------------------------------------------------------------ zone windows
+  function openViewer(kind, to = "hand") { viewer = { kind, to }; if (kind === "library") { libOpen = true; loadPrivate(); } $("viewer").hidden = false; renderViewer(); if (kind === "library") $("viewerFilter").focus(); }
+  function closeViewer() { viewer = null; if (libOpen) { libOpen = false; } $("viewer").hidden = true; }
+  function renderViewer() {
+    if (!viewer) { $("viewer").hidden = true; return; }
+    $("viewer").hidden = false;
+    const q = $("viewerFilter").value.trim().toLowerCase();
+    const k = viewer.kind;
+    const pick = { library: priv.library, graveyard: pub.graveyard, exile: pub.exile, hand: priv.hand, command: pub.command, top: priv.top, bottom: priv.bottom }[k] || [];
+    const WHERE = { hand: "your hand", battlefield: "the battlefield", graveyard: "the graveyard", exile: "exile", command: "the command zone" };
+    $("viewerTitle").textContent = { library: `Your library (${pick.length}) · click a card to take it to ${WHERE[viewer.to]}, the library is shuffled afterwards`,
+      graveyard: `Graveyard (${pick.length})`, exile: `Exile (${pick.length})`, hand: `Hand (${pick.length})`, command: "Command zone",
+      top: `Top ${pick.length} of your library`, bottom: `Bottom ${pick.length} of your library` }[k];
+    const cards = pick.filter((c) => !q || c.name.toLowerCase().includes(q));
+    $("viewerCards").replaceChildren(...cards.map((c) => tile(c, k === "top" || k === "bottom" ? k : k, {
+      named: true,
+      onClick: k === "library" ? () => call("POST", "/api/play/tutor", { uid: c.uid, to: viewer.to })
+        : (e) => openMenu(e.clientX, e.clientY, cardMenu(c, k === "top" || k === "bottom" ? "library" : k)),
+    })));
+  }
+  $("viewerClose").addEventListener("click", closeViewer);
+  $("viewerFilter").addEventListener("input", renderViewer);
+  document.querySelectorAll(".closeBtn").forEach((b) => b.addEventListener("click", () => { b.closest(".modal").hidden = true; }));
+  const peek = async (n, side) => {
+    if (side === "top") peekTop = Math.max(1, Math.min(40, n)); else peekBottom = Math.max(1, Math.min(40, n));
+    await loadPrivate(); openViewer(side);
+  };
+
+  // ------------------------------------------------------------ the opening hand
+  function renderOpening() {
+    const on = pub.loaded && priv.opening;
+    $("opening").hidden = !on;
+    if (!on) return;
+    $("ohMull").textContent = `Mulligan (${priv.mulligans})`;
+    $("ohCards").replaceChildren(...priv.hand.map((c) => el("div", { class: "oh-card" }, tile(c, "hand", { cls: "", onClick: () => details(c) }),
+      el("div", { class: "row2" },
+        el("button", { class: "small", type: "button", text: "↓ Bottom of library", onclick: () => play(c.uid, "library-bottom") }),
+        el("button", { class: "small", type: "button", text: "Exile", onclick: () => play(c.uid, "exile") })))));
+  }
+  $("ohKeep").addEventListener("click", () => call("POST", "/api/play/keep"));
+  $("ohMull").addEventListener("click", () => call("POST", "/api/play/mulligan"));
+  $("ohDraw").addEventListener("click", () => call("POST", "/api/play/draw", { count: 1 }));
+
+  // ------------------------------------------------------------ menus
+  let ctx = null;
+  const closeMenu = () => { if (ctx) { ctx.remove(); ctx = null; } };
+  function buildMenu(items) {
+    const box = el("div", { class: "ctx" });
+    for (const it of items) {
+      if (it === "-") { box.append(el("hr")); continue; }
+      const row = el("div", { class: "item" + (it.off ? " off" : "") }, el("span", { class: "ic", text: it.icon || "" }), el("span", { text: it.label }));
+      if (it.key) row.append(el("span", { class: "key", text: it.key }));
+      if (it.sub) {
+        row.append(el("span", { class: "arrow", text: "›" }));
+        const sub = buildMenu(it.sub); sub.classList.add("sub");
+        row.append(sub);
+        row.addEventListener("mouseenter", () => row.classList.toggle("flip", row.getBoundingClientRect().right + sub.offsetWidth + 20 > innerWidth));
+      } else if (it.ask) {
+        // a value typed into the menu itself: a number, or text
+        row.addEventListener("click", (e) => {
+          if (e.target.tagName === "INPUT") return;
+          const text = it.ask.type === "text";
+          const input = el("input", { type: text ? "text" : "number", value: text ? "" : "10", placeholder: text ? "name" : "" });
+          row.replaceChildren(el("span", { class: "ic", text: it.icon || "" }), el("span", { text: text ? "Name:" : "X =" }), input);
+          input.focus(); input.select();
+          input.addEventListener("keydown", (ev) => {
+            if (ev.key === "Escape") closeMenu();
+            if (ev.key !== "Enter") return;
+            const v = text ? input.value.trim() : parseInt(input.value, 10);
+            closeMenu();
+            if (text ? v : v >= 1) it.ask.run(v);
+          });
+        });
+      } else if (it.run) row.addEventListener("click", () => { closeMenu(); it.run(); });
+      box.append(row);
+    }
+    return box;
+  }
+  function openMenu(x, y, items, up = false) {
+    closeMenu();
+    ctx = buildMenu(items);
+    document.body.append(ctx);
+    const w = ctx.offsetWidth, h = ctx.offsetHeight;
+    ctx.style.left = Math.max(4, Math.min(x, innerWidth - w - 8)) + "px";
+    ctx.style.top = Math.max(4, up ? Math.min(y - h, innerHeight - h - 8) : Math.min(y, innerHeight - h - 8)) + "px";
+  }
+  document.addEventListener("mousedown", (e) => { if (ctx && !ctx.contains(e.target)) closeMenu(); });
+
+  const X = (n) => ({ ask: { type: "number", run: n } });
+  const PLACES = [["Hand", "hand"], ["Battlefield", "battlefield"], ["Graveyard", "graveyard"], ["Exile", "exile"], ["Command Zone", "command"]];
+  const moveAllItems = (zone) => [...PLACES, ["Top of library", "library-top"], ["Bottom of library", "library-bottom"], ["Shuffle into library", "library-shuffle"]]
+    .filter(([, to]) => to !== zone).map(([label, to]) => ({ label, run: () => call("POST", "/api/play/move-all", { zone, to }) }));
+  const view = (kind) => () => openViewer(kind);
+
+  function cardMenu(card, zone) {
+    const onField = zone === "battlefield";
+    const inLib = zone === "library";
+    const patch = (b) => patchCard(card.uid, b);
+    const go = async (b) => { await play(card.uid, "battlefield"); if (b) patch(b); };
+    const places = PLACES.filter(([, z]) => z !== zone).map(([l, z]) => ({ label: l, run: () => play(card.uid, z) }));
+    const move = { icon: "→", label: "Move to", sub: [...places,
+      { label: "Top of library", run: () => play(card.uid, "library-top") },
+      { label: "Bottom of library", run: () => play(card.uid, "library-bottom") },
+      { label: "X of library", ...X((n) => play(card.uid, "library", { position: n })) },
+      { label: "Shuffle into library", run: () => play(card.uid, "library-shuffle") }] };
+    if (!onField) {
+      return [
+        { icon: "▶", label: "Play card", run: () => go() },
+        { icon: "▶", label: "Play as", sub: [{ label: "Play card", run: () => go() }, { label: "Play tapped", run: () => go({ tapped: true }) },
+          { label: "Play face down", run: () => go({ facedown: true }) }] },
+        move,
+        "-",
+        { icon: "↗", label: "View card notes / details", run: () => details(card) },
+      ];
+    }
+    const counters = ["+1/+1", "Lifelink", "Hexproof", "Indestructible", "Time", "Charge", "Generic"]
+      .map((t) => ({ label: t, run: () => patch({ counter: { type: t, delta: 1 } }) }));
+    const removes = (card.counters || []).map((k) => ({ label: `Remove one ${k.t}`, run: () => patch({ counter: { type: k.t, delta: -1 } }) }));
+    const pm = (field, n) => ({ label: (n > 0 ? "+" : "−") + Math.abs(n), run: () => patch({ [field]: n }) });
+    return [
+      { icon: "↷", label: card.tapped ? "Untap" : "Tap", key: "T", run: () => patch({ tapped: !card.tapped }) },
+      move,
+      { icon: "☗", label: "Card actions", sub: [
+        { label: card.tapped ? "Untap" : "Tap", key: "T", run: () => patch({ tapped: !card.tapped }) },
+        { label: card.facedown ? "Flip face up" : "Flip face down", key: "M", run: () => patch({ facedown: !card.facedown }) },
+        { label: "Flip card 180°", key: "J", run: () => patch({ rot: !card.rot }) },
+        { label: card.phased ? "Undim card" : "Dim card", key: "P", run: () => patch({ phased: !card.phased }) }] },
+      "-",
+      { icon: "+", label: "Add counters", sub: [...counters, { label: "Custom…", ask: { type: "text", run: (t) => patch({ counter: { type: t, delta: 1 } }) } },
+        ...(removes.length ? ["-", ...removes, { label: "Remove all counters", run: () => patch({ clear_counters: true }) }] : [])] },
+      "-",
+      { icon: "↟", label: "Add / subtract power", sub: [pm("power_delta", 1), pm("power_delta", 2), pm("power_delta", 3), pm("power_delta", -1), pm("power_delta", -2), pm("power_delta", -3)] },
+      { icon: "⛨", label: "Add / subtract toughness", sub: [pm("toughness_delta", 1), pm("toughness_delta", 2), pm("toughness_delta", 3), pm("toughness_delta", -1), pm("toughness_delta", -2), pm("toughness_delta", -3)] },
+      { icon: "⚔", label: "Add / subtract +X/+X", sub: [1, 2, 3, -1, -2, -3].map((n) => ({ label: `${n > 0 ? "+" : "−"}${Math.abs(n)}/${n > 0 ? "+" : "−"}${Math.abs(n)}`, run: () => patch({ power_delta: n, toughness_delta: n }) })) },
+      "-",
+      { icon: "↗", label: "View card notes / details", key: "O", run: () => details(card) },
+      "-",
+      { icon: "⧉", label: "Create token copy", sub: [1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => ({ label: `Create ${n} cop${n === 1 ? "y" : "ies"}`, key: n === 1 ? "C" : "", run: () => call("POST", `/api/play/cards/${card.uid}/copy`, { count: n }) })) },
+      "-",
+      { icon: "🗑", label: "Delete card from game", key: "Del", run: () => call("DELETE", `/api/play/cards/${card.uid}`) },
+    ];
+  }
+
+  function libraryMenu() {
+    const n = (f) => ({ ask: { type: "number", run: f } });
+    const presets = (f) => [1, 2, 3, 4, 5].map((i) => ({ label: String(i), run: () => f(i) }));
+    return [
+      { icon: "→", label: "Move all cards to", sub: moveAllItems("library") },
+      "-",
+      { icon: "→", label: "Draw", key: "D", run: () => call("POST", "/api/play/draw", { count: 1 }) },
+      { icon: "→", label: "Draw X", sub: [...[2, 3, 4, 5, 6, 7].map((i) => ({ label: String(i), run: () => call("POST", "/api/play/draw", { count: i }) })),
+        { label: "X…", ...n((v) => call("POST", "/api/play/draw", { count: Math.min(14, v) })) }] },
+      { icon: "→", label: "Move to", sub: PLACES.map(([l, z]) => ({ label: l, run: () => call("POST", "/api/play/mill", { count: 1, to: z }) })) },
+      "-",
+      { icon: "⌕", label: "Search Library", key: "Ctrl + F", run: () => openViewer("library", "hand") },
+      { icon: "⇄", label: "Shuffle Library", key: "Ctrl + S", run: () => call("POST", "/api/play/shuffle") },
+      { icon: "▦", label: "Draw random card", run: () => call("POST", "/api/play/draw-random") },
+      { icon: "▷", label: "Play card & shuffle", sub: PLACES.filter(([, z]) => z !== "hand").map(([l, z]) => ({ label: l, run: () => openViewer("library", z) })) },
+      "-",
+      { icon: "◉", label: pub && pub.revealed ? "Hide revealed card" : "Reveal", run: () => call("POST", `/api/play/reveal?show=${!(pub && pub.revealed)}`) },
+      { icon: "✎", label: "Peek top X cards…", sub: [...presets((i) => peek(i, "top")), { label: "X…", ...n((v) => peek(v, "top")) }] },
+      { icon: "✎", label: "Peek bottom X cards…", sub: [...presets((i) => peek(i, "bottom")), { label: "X…", ...n((v) => peek(v, "bottom")) }] },
+      { icon: "✎", label: "Mill X cards…", sub: [...presets((i) => call("POST", "/api/play/mill", { count: i })), { label: "X…", ...n((v) => call("POST", "/api/play/mill", { count: v })) }] },
+      { icon: "☗", label: "Card actions", sub: [
+        { label: "Top card to the bottom", run: () => call("POST", "/api/play/top-to-bottom") },
+        { label: "Bottom card to the top", run: () => call("POST", "/api/play/bottom-to-top") },
+        { label: "Mill from the bottom…", ...n((v) => call("POST", "/api/play/mill", { count: v, bottom: true })) }] },
+      "-",
+      { icon: "→", label: "Misc options", sub: [
+        { label: "Mulligan", run: () => call("POST", "/api/play/mulligan") },
+        { label: "Untap all", key: "U", run: () => call("POST", "/api/play/untap") },
+        { label: "New game", key: "Ctrl + G", run: () => newGame() }] },
+    ];
+  }
+  const handMenu = () => [
+    { icon: "→", label: "Move all cards to", sub: moveAllItems("hand") },
+    "-",
+    { icon: "⌕", label: "View full hand", key: "Ctrl + H", run: view("hand") },
+    { icon: "⚖", label: "Discard random card", run: () => call("POST", "/api/play/discard-random") },
+    "-",
+    { icon: "⇄", label: "Order hand", sub: [{ label: "By name", run: () => call("POST", "/api/play/order-hand", { by: "name" }) },
+      { label: "By type (lands, creatures, rest)", run: () => call("POST", "/api/play/order-hand", { by: "type" }) }] },
+  ];
+  const zoneMenu = (zone) => [
+    { icon: "→", label: "Move all cards to", sub: moveAllItems(zone) },
+    ...(zone === "command" ? [] : [{ icon: "⌕", label: "Search " + ZONE_NAMES[zone].toLowerCase(), key: zone === "graveyard" ? "Ctrl + Y" : "", run: view(zone) }]),
+  ];
+  const actionsMenu = () => [
+    { icon: "↷", label: "Tap all", run: () => call("POST", "/api/play/tap-all") },
+    { icon: "↶", label: "Untap all", key: "U", run: () => call("POST", "/api/play/untap") },
+    "-",
+    { icon: "✦", label: "New turn (untap + draw)", key: "N", run: () => call("POST", "/api/play/next-turn") },
+    { icon: "⊕", label: "Proliferate all counters", run: () => call("POST", "/api/play/proliferate") },
+    "-",
+    { icon: "🎲", label: "Dice & coins", sub: ["d4", "d6", "d8", "d10", "d12", "d20", "d100", "coin"].map((kind) => ({ label: kind === "coin" ? "Flip a coin" : `Roll a ${kind}`, run: () => call("POST", "/api/play/dice", { kind }) })) },
+    { icon: "☼", label: "Empty the mana pool", run: () => call("PATCH", "/api/play/mana", { color: "all", clear: true }) },
+    "-",
+    { icon: "↶", label: "Undo action", key: "Ctrl + Z", run: () => call("POST", "/api/play/undo") },
+    { icon: "↷", label: "Redo action", key: "Ctrl + Shift + Z", run: () => call("POST", "/api/play/redo") },
+  ];
+  const newGame = async () => { if (await sure("Start a new game with this deck?", "New game")) call("POST", "/api/play/new"); };
+  const gameMenu = () => [
+    { icon: "←", label: "Back to the control panel", run: () => { location.href = "control"; } },
+    "-",
+    { icon: "↺", label: "Start new game", key: "Ctrl + G", run: newGame },
+    { icon: "▤", label: "Game logs", run: () => { renderLog(); $("logBox").hidden = false; } },
+    { icon: "🎲", label: "Dice & coins", sub: ["d6", "d20", "coin"].map((kind) => ({ label: kind === "coin" ? "Flip a coin" : `Roll a ${kind}`, run: () => call("POST", "/api/play/dice", { kind }) })) },
+    { icon: "⌨", label: "Keybinds", key: "?", run: () => { $("keysBox").hidden = false; } },
+    { icon: "⚙", label: "Playtester settings", run: openSettings },
+    "-",
+    { icon: "✕", label: "Clear the table", run: async () => { if (await sure("Take the deck off the table? The stream overlay shows nothing then.", "Clear the table")) call("POST", "/api/play/clear"); } },
+  ];
+  const renderLog = () => $("log").replaceChildren(...[...(priv.log || [])].reverse().map((l) => el("div", { text: l })));
+  function openSettings() {
+    $("setSize").value = settings.size; $("setHand").value = settings.hand; $("setMode").value = settings.mode;
+    $("setHandMenu").checked = settings.handMenu; $("setZoom").checked = settings.zoom;
+    $("settings").hidden = false;
+  }
+  for (const [id, key, read] of [["setSize", "size", (e) => +e.value], ["setHand", "hand", (e) => +e.value], ["setMode", "mode", (e) => e.value],
+                                 ["setHandMenu", "handMenu", (e) => e.checked], ["setZoom", "zoom", (e) => e.checked]]) {
+    $(id).addEventListener("input", () => { settings[key] = read($(id)); saveSettings(); render(); });
+  }
+
+  // ------------------------------------------------------------ top bar and counters
+  $("btnGame").addEventListener("click", (e) => { const r = e.currentTarget.getBoundingClientRect(); openMenu(r.left, r.bottom + 4, gameMenu()); });
+  $("btnActions").addEventListener("click", (e) => { const r = e.currentTarget.getBoundingClientRect(); openMenu(r.left, r.bottom + 4, actionsMenu()); });
+  $("kebHand").addEventListener("click", (e) => { const r = e.currentTarget.getBoundingClientRect(); openMenu(r.left, r.top - 4, handMenu(), true); });
+  $("btnNext").addEventListener("click", () => call("POST", "/api/play/next-turn"));
+  $("btnUndo").addEventListener("click", () => call("POST", "/api/play/undo"));
+  $("btnRedo").addEventListener("click", () => call("POST", "/api/play/redo"));
+  const toggleMode = () => { settings.mode = settings.mode === "menu" ? "action" : "menu"; saveSettings(); render(); };
+  $("btnMode").addEventListener("click", toggleMode);
+  document.querySelectorAll("[data-life]").forEach((b) => b.addEventListener("click", () => call("PATCH", "/api/play/life", { life_delta: +b.dataset.life })));
+  document.querySelectorAll("[data-cnt]").forEach((b) => b.addEventListener("click", () => call("PATCH", "/api/play/life", { [`${b.dataset.cnt}_delta`]: +b.dataset.d })));
+
+  // ------------------------------------------------------------ hover preview, right click, keys
+  const zoomBox = $("zoom");
+  const hideZoom = () => { zoomBox.style.display = "none"; };
+  const moveZoom = (e) => {
+    const w = 320, h = 446;
+    let x = e.clientX + 18; if (x + w > innerWidth - 8) x = e.clientX - 18 - w;
+    zoomBox.style.left = Math.max(8, x) + "px";
+    zoomBox.style.top = Math.max(8, Math.min(e.clientY - h / 2, innerHeight - h - 8)) + "px";
+  };
+  document.addEventListener("mouseover", (e) => {
+    const c = e.target.closest && e.target.closest(".c");
+    hoverCard = c && c._card ? c : null;
+    if (hoverCard && settings.zoom && !ctx) { zoomBox.firstChild.src = hoverCard._shown.image_url; zoomBox.style.display = "block"; moveZoom(e); } else hideZoom();
+  });
+  document.addEventListener("mousemove", (e) => { if (zoomBox.style.display === "block") moveZoom(e); });
+  document.addEventListener("mouseout", (e) => { if (!e.relatedTarget) { hoverCard = null; hideZoom(); } });
+  document.addEventListener("contextmenu", (e) => {
+    const c = e.target.closest && e.target.closest(".c");
+    if (!c || !c._card) return;
+    e.preventDefault(); hideZoom();
+    openMenu(e.clientX, e.clientY, cardMenu(c._card, c._zone === "top" || c._zone === "bottom" ? "library" : c._zone));
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") { closeMenu(); document.querySelectorAll(".modal").forEach((m) => { if (m.id !== "opening") m.hidden = true; }); viewer = null; libOpen = false; return; }
+    if (/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName || "") || e.metaKey || !pub || !pub.loaded || priv.opening) return;
+    const k = e.key.toLowerCase();
+    const run = (fn) => { e.preventDefault(); fn(); };
+    if (e.ctrlKey) {
+      if (k === "f") run(() => openViewer("library", "hand"));
+      else if (k === "s") run(() => call("POST", "/api/play/shuffle"));
+      else if (k === "y") run(() => openViewer("graveyard"));
+      else if (k === "h") run(() => openViewer("hand"));
+      else if (k === "g") run(newGame);
+      else if (k === "z") run(() => call("POST", e.shiftKey ? "/api/play/redo" : "/api/play/undo"));
+      else if (k === " ") run(toggleMode);
+      return;
+    }
+    if (e.altKey) { if (/^[1-9]$/.test(e.key)) run(() => peek(+e.key, "top")); return; }
+    if (e.key === "?") return run(() => { $("keysBox").hidden = !$("keysBox").hidden; });
+    if (hoverCard) {
+      const c = hoverCard._card, zone = hoverCard._zone, onField = zone === "battlefield";
+      const moves = { b: "battlefield", h: "hand", g: "graveyard", e: "exile", z: "command", y: "library-top", l: "library-bottom" };
+      if (moves[k]) return run(() => play(c.uid, moves[k]));
+      if (k === "o") return run(() => details(c));
+      if (onField) {
+        if (k === "t") return run(() => patchCard(c.uid, { tapped: !c.tapped }));
+        if (k === "m") return run(() => patchCard(c.uid, { facedown: !c.facedown }));
+        if (k === "p") return run(() => patchCard(c.uid, { phased: !c.phased }));
+        if (k === "j") return run(() => patchCard(c.uid, { rot: !c.rot }));
+        if (k === "c") return run(() => call("POST", `/api/play/cards/${c.uid}/copy`, { count: 1 }));
+        if (e.key === "+" || e.key === "=") return run(() => patchCard(c.uid, { power_delta: 1, toughness_delta: 1 }));
+        if (e.key === "-") return run(() => patchCard(c.uid, { power_delta: -1, toughness_delta: -1 }));
+        if (e.key === "Delete") return run(() => call("DELETE", `/api/play/cards/${c.uid}`));
+      }
+    }
+    if (k === "d") run(() => call("POST", "/api/play/draw", { count: 1 }));
+    else if (k === "n") run(() => call("POST", "/api/play/next-turn"));
+    else if (k === "u") run(() => call("POST", "/api/play/untap"));
+    else if (/^[1-9]$/.test(e.key)) { const c = priv.hand[+e.key - 1]; if (c) run(() => play(c.uid, "battlefield")); }
+  });
+
+  // ------------------------------------------------------------ go
+  fetch(`${ROOT}/api/state`, { cache: "no-store" }).then((r) => r.json()).then((s) => { if (s.play) setPub(s.play); }).catch(() => {});
+  connect();
+})();
+</script>
+</body>
+</html>

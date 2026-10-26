@@ -72,6 +72,8 @@ The control panel has two tabs:
 - **Board**: what's on stream now, with the counters, mana pool and dice, and
   below it the layout settings with the live preview.
 - **Add tokens**: your deck's tokens, search, and deck presets.
+  Clicking it opens it in a tab of its own (`/stream/control?solo#add`), so you can put it on another screen
+  while the first tab stays on the Board.
 
 Each tab has its own address (`/stream/control#board`, `/stream/control#add`), so you can
 also add two custom browser docks in OBS, side by side.
@@ -109,6 +111,36 @@ and helper cards are found when you scan a deck link and when you search for tok
 tab (and **Name only** to go back). A Role then shows as a half card (the name, the picture and the rules
 text), The Ring as the whole emblem, both without a name plate under them: the name is printed on them.
 The overlay changes at once, per stack; the name bar is the default.
+
+## Playtest: a virtual battlefield on your camera
+
+For playing a deck you do not have in paper, or just trying one out, over a video call (Convoke, SpellTable, Discord):
+the stream overlay is your **virtual camera** (OBS: Start Virtual Camera) and the cards are virtual. The table is a page of
+its own, like the Archidekt playtester, that opens in a tab you can put on another screen.
+
+1. On the page of a deck press **♠ Playtest** (or press **Playtest ↗** in the control panel). The deck is shuffled (the cards you
+   do not own count too), the commander goes to the command zone and seven cards are drawn. The page is `/stream/playtest`.
+2. **Only you see your hand there.** The overlay shows the others the battlefield (creatures, other permanents, lands), your
+   graveyard, exile and command zone, your life and counters, and only the *number* of cards in your hand and library.
+   Face-down cards are only a card back for them. `?play=off` in the overlay address hides the table.
+3. The **opening hand** has *Keep this*, *Mulligan* and *Draw a card*, and each card can go to the bottom of the library or into exile.
+4. A left click plays a card from your hand, taps a card on the battlefield and draws from the library. **Left click: Action / Menu**
+   (also `Ctrl + Space`) lets a left click open the menu instead; a right click always does. Hover a card to read it big.
+5. The menu of a card: play (tapped, face down), **Move to** (every zone, top or bottom of the library, *X of library*, shuffle in),
+   tap, face down, turn 180°, dim, **counters** (+1/+1, lifelink, hexproof, indestructible, time, charge, generic or your own),
+   power, toughness and +X/+X, token copies (1 to 9) and *Delete card from game*.
+6. The **library menu** (the pile, or `⋮`): draw, draw X, move the top card, search (and take a card to your hand, or play it and
+   shuffle), shuffle, draw a random card, reveal the top card to the others, peek at the top or bottom X cards, mill X, move all
+   cards, mulligan and new game. The hand, graveyard and exile have a `⋮` with *Move all cards to…*, *Discard random card*, *Order hand*.
+7. **Next turn** (`N`) untaps, draws and counts the turn. **Undo / Redo** (`Ctrl + Z`, `Ctrl + Shift + Z`). Life, poison, energy,
+   experience, storm, commander tax and a mana pool. **Dice & coins**, the **game log** and the **keybinds** (`?`): `D` draw, `U` untap
+   all, `1`-`9` play a card, `Ctrl + F / S / Y / H`, and on the card under your mouse `B H G E Z Y L` (move it), `T M P J C + - O Delete`.
+
+More than three plain lands of one kind (no counters, not face down) lie on top of each other, on the page and on the
+overlay, with the number below (for example *×12 · 2 tapped*). A click on the stack taps one of them, or untaps one when
+they are all tapped; the menu is the one of its front card.
+
+The game is kept in `stream-state-play.json` and survives a restart.
 
 ## Placing cards anywhere (drag & drop)
 

@@ -46,6 +46,45 @@ def deck_intro(session: Session, deck: Deck) -> dict:
 RESULT_REPEAT = dt.timedelta(minutes=2)
 
 
+async def deck_for_playtest(session: Session, deck: Deck, scryfall) -> dict:
+    """The deck as the playtest table takes it: a card for every copy (also the ones you do not own: you
+    play them virtually), the basic lands and the commander apart. Cards without a picture are left out."""
+    from app.models import DeckBasicLand
+    from app.scryfall import ScryfallError
+    from app.services.deck_insights import basic_land_images, fill_card_info
+
+    try:
+        await fill_card_info(session, scryfall, deck.id)
+    except ScryfallError:
+        session.rollback()
+    commander_key = name_key(deck.commander) if deck.commander else None
+    cards, commander, skipped = [], None, 0
+    for entry in session.exec(select(DeckEntry).where(DeckEntry.deck_id == deck.id).order_by(DeckEntry.name)):
+        if not entry.image_url or not entry.image_url.startswith(server.ALLOWED_IMAGE_PREFIX):
+            skipped += entry.quantity
+            continue
+        card = {"name": entry.name.split(" // ")[0], "image_url": entry.image_url, "type_line": entry.type_line or ""}
+        if commander_key and name_key(entry.name) == commander_key and commander is None:
+            commander = {**card, "count": 1}
+            if entry.quantity > 1:
+                cards.append({**card, "count": entry.quantity - 1})
+            continue
+        cards.append({**card, "count": entry.quantity})
+    lands = session.exec(select(DeckBasicLand).where(DeckBasicLand.deck_id == deck.id)).all()
+    if any(row.quantity for row in lands):
+        try:
+            images = await basic_land_images(scryfall)
+        except ScryfallError:
+            images = {}
+        for row in lands:
+            image = images.get(row.name)
+            if row.quantity and image:
+                cards.append({"name": row.name, "image_url": image, "type_line": "Basic Land", "count": row.quantity})
+            elif row.quantity:
+                skipped += row.quantity
+    return {"name": deck.name, "cards": cards, "commander": commander, "skipped": skipped}
+
+
 def record_result(result: str, deck: dict) -> dict:
     """The stream says the game is over: log it for the saved deck in the control panel, on tonight's
     date. Pressed again within two minutes (a double press), it is not logged twice."""

@@ -308,6 +308,25 @@ async def saved_deck_stream(deck_id: int, session: Session = Depends(get_session
     return RedirectResponse("/stream/control#add", status_code=303)
 
 
+@router.post("/decks/{deck_id}/playtest")
+async def saved_deck_playtest(deck_id: int, session: Session = Depends(get_session),
+                              scryfall: ScryfallClient = Depends(get_scryfall)):
+    """Put this deck on the playtest table of the stream and open the playtest page."""
+    from app.main import stream_app
+    from app.services.stream_link import deck_for_playtest
+    from app.stream.playtest import PlayDeckIn
+    from app.stream.server import set_playtest
+
+    deck = session.get(Deck, deck_id)
+    if deck is None:
+        return redirect("/deck", "Deck not found", error=True)
+    found = await deck_for_playtest(session, deck, scryfall)
+    if not found["cards"] and not found["commander"]:
+        return redirect(f"/decks/{deck_id}", "This deck has no cards with a picture yet: open it again in a minute", error=True)
+    await set_playtest(stream_app, PlayDeckIn(**{k: found[k] for k in ("name", "cards", "commander")}))
+    return RedirectResponse("/stream/playtest", status_code=303)
+
+
 @router.get("/table")
 def table_page(request: Request, deck: int | None = None, session: Session = Depends(get_session)):
     """The live table: life, poison, commander damage and turns on one screen; logged afterwards.

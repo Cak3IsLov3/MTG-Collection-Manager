@@ -589,6 +589,58 @@
   }
   .result-screen.win .line { border-color: rgba(231, 179, 67, .75); color: #ffe9b0; }
   .result-screen .line .rec { margin-left: .7em; color: #9be8aa; }
+  /* ---- the playtest table: your battlefield and piles for the others on your virtual camera; never your hand */
+  #play {
+    position: fixed; left: 1.4vh; right: 19vh; bottom: 9vh; z-index: 4; pointer-events: none; max-height: 74vh;
+    display: flex; flex-direction: column; gap: 1.1vh;
+  }
+  body.row-bottom #play { bottom: auto; top: 2vh; }
+  #play[hidden], #piles[hidden] { display: none; }
+  #play .prow { display: flex; flex-wrap: wrap; gap: 1vh; align-items: flex-end; }
+  #play .prow:empty { display: none; }
+  .pc { position: relative; flex: none; width: 23.4vh; height: 32.5vh; animation: pc-in .35s cubic-bezier(.2, .9, .3, 1.2) both; }
+  .pc.tapped { width: 32.5vh; }
+  .pc .pl-face { position: absolute; left: 0; top: 0; width: 23.4vh; height: 32.5vh; transition: transform .3s; }
+  .pc.tapped .pl-face { left: 4.55vh; transform: rotate(90deg); }
+  .pc .pl-face img { width: 100%; height: 100%; display: block; border-radius: .7vh;
+    box-shadow: 0 0 0 .22vh rgba(255, 255, 255, .92), 0 .5vh 1.4vh rgba(0, 0, 0, .6); }
+  .pc.tapped .pl-face img { filter: brightness(.85); }
+  .pc .pl-back { width: 100%; height: 100%; border-radius: .7vh; border: .5vh solid #1b1f27; box-sizing: border-box;
+    background: radial-gradient(circle at 50% 50%, #fcd535 0 7%, transparent 8%), repeating-linear-gradient(45deg, #232830 0 1.2vh, #2b313b 1.2vh 2.4vh);
+    box-shadow: 0 0 0 .22vh rgba(255, 255, 255, .92), 0 .5vh 1.4vh rgba(0, 0, 0, .6); }
+  .pc.phased { opacity: .45; }
+  .pc.rot .pl-face img, .pc.rot .pl-back { transform: rotate(180deg); }
+  .pc.tapped.rot .pl-face { transform: rotate(270deg); }
+  .pc.copy .pl-face img { box-shadow: 0 0 0 .3vh #fcd535, 0 .5vh 1.4vh rgba(0, 0, 0, .6); }
+  .pc .pl-tags { position: absolute; left: -.4vh; bottom: -.4vh; display: flex; flex-direction: column; gap: .4vh; align-items: flex-start; z-index: 2; }
+  .pc .pl-cnt, .pc .pl-pt { padding: 0 .9vh; height: 3vh; border-radius: 1.5vh; display: grid; place-items: center;
+    font: 800 1.9vh/1 "Barlow Condensed", "Inter", sans-serif; box-shadow: 0 .3vh .8vh rgba(0, 0, 0, .6); }
+  .pc .pl-cnt { color: #181a20; background: #fcd535; }
+  .pc .pl-pt { color: #fff; background: #0b0e11; border: .2vh solid #fcd535; }
+  .pc-stack { position: relative; flex: none; width: 22.6vh; height: 29.4vh; }
+  .pc-stack .pc { position: absolute; top: 0; animation: none; }
+  .pc-stack .pc.dim { opacity: .55; }
+  .pc-stack .pl-num { position: absolute; left: 0; right: 0; bottom: 0; text-align: center; font: 800 3vh/1 "Barlow Condensed", "Inter", sans-serif;
+    color: #fcd535; text-shadow: 0 .2vh .6vh #000; }
+  .pc-stack .pl-num small { font-weight: 600; font-size: 2.2vh; color: #fff; }
+  .pc.land { width: 18.2vh; height: 25.4vh; }
+  .pc.land .pl-face { width: 18.2vh; height: 25.4vh; }
+  .pc.land.tapped { width: 25.4vh; }
+  .pc.land.tapped .pl-face { left: 3.6vh; }
+  @keyframes pc-in { from { opacity: 0; transform: translateY(1.5vh) scale(.9); } }
+  #piles { position: fixed; right: 1.4vh; top: 24vh; z-index: 4; pointer-events: none; display: flex; flex-direction: column; gap: 1.2vh; align-items: flex-end; }
+  #piles .pl-pile { position: relative; width: 15vh; }
+  #piles .pl-pile img { width: 100%; display: block; border-radius: .6vh; box-shadow: 0 0 0 .2vh rgba(255, 255, 255, .85), 0 .5vh 1.3vh rgba(0, 0, 0, .6); }
+  #piles .pl-pile .pl-lab { margin-top: .5vh; text-align: center; font: 700 1.5vh/1.2 "Barlow Condensed", "Inter", sans-serif; letter-spacing: .08em;
+    text-transform: uppercase; color: #fff; text-shadow: 0 .2vh .6vh #000; }
+  #piles .pl-pile .pl-n { position: absolute; right: -.5vh; top: -.5vh; min-width: 2.8vh; height: 2.8vh; padding: 0 .7vh; border-radius: 1.4vh; display: grid;
+    place-items: center; font: 800 1.7vh/1 "Barlow Condensed", "Inter", sans-serif; color: #181a20; background: #fff; }
+  #piles .pl-info { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .6vh; max-width: 16vh; }
+  #piles .pl-chip { padding: .5vh 1.1vh; border-radius: 1.6vh; font: 700 1.8vh/1 "Barlow Condensed", "Inter", sans-serif; color: #fff;
+    background: rgba(14, 16, 22, .82); border: .15vh solid rgba(255, 255, 255, .22); }
+  #piles .pl-chip.life { border-color: rgba(14, 203, 129, .7); }
+  #piles .pl-chip.poison { border-color: rgba(166, 97, 224, .8); }
+  #piles .pl-chip.roll { border-color: rgba(252, 213, 53, .8); }
   .confetti { position: fixed; top: -3vh; z-index: 41; width: 1.1vh; height: 1.8vh; border-radius: .2vh; pointer-events: none; }
   /* a card tumbling down in the colours of the deck */
   .confetti.card {
@@ -745,6 +797,7 @@
 <div id="dice"></div>
 <div id="phases" hidden></div>
 <div id="tally" hidden></div>
+<div id="play" hidden></div>
 <script>
   // The app can live under a path (/stream); every address starts from there.
   const ROOT = location.pathname.replace(/\/(control|overlay)\/?$/, "");
@@ -1712,7 +1765,96 @@
     if (ev.phase === "combat" && ev.on && phasesPos !== "off") showBanner("⚔ Combat", "attack");
   }
 
+  // ---- the playtest table: only what the others may see
+  const playOff = params.get("play") === "off";
+  const playEl = document.getElementById("play");
+  let playSig = "";
+  // The cards are big; when the field fills up, shrink the whole table so it still fits the picture.
+  function fitPlay() {
+    const room = window.innerHeight * 0.74;
+    playEl.style.zoom = 1;
+    for (let i = 0; i < 3; i++) {
+      const zoom = parseFloat(playEl.style.zoom) || 1;
+      const h = playEl.offsetHeight * zoom;
+      if (h <= room) break;
+      playEl.style.zoom = Math.max(0.35, zoom * room / h);
+    }
+  }
+  window.addEventListener("resize", () => { if (!playEl.hidden) fitPlay(); });
+  function renderPlay(play) {
+    const piles = document.getElementById("piles") || Object.assign(document.createElement("div"), { id: "piles" });
+    if (!piles.isConnected) document.body.append(piles);
+    const show = !playOff && play && play.loaded;
+    playEl.hidden = piles.hidden = !show;
+    if (!show) { playSig = ""; return; }
+    const sig = JSON.stringify(play);
+    if (sig === playSig) return;
+    playSig = sig;
+    const make = (tag, cls, text) => Object.assign(document.createElement(tag), { className: cls || "", textContent: text || "" });
+    const okImage = (u) => typeof u === "string" && u.startsWith("https://cards.scryfall.io/");
+    const card = (c) => {
+      const box = make("div", `pc ${c.type}${c.tapped ? " tapped" : ""}${c.phased ? " phased" : ""}${c.rot ? " rot" : ""}${c.token ? " copy" : ""}`);
+      const face = make("div", "pl-face");
+      if (c.facedown) face.append(make("div", "pl-back"));
+      else if (okImage(c.image_url)) face.append(Object.assign(document.createElement("img"), { src: c.image_url, alt: c.name, decoding: "async" }));
+      box.append(face);
+      const tags = make("div", "pl-tags");
+      for (const k of c.counters || []) tags.append(make("div", "pl-cnt", `${k.n} ${k.t}`));
+      if (c.dp || c.dt) tags.append(make("div", "pl-pt", `${c.dp >= 0 ? "+" : ""}${c.dp}/${c.dt >= 0 ? "+" : ""}${c.dt}`));
+      if (tags.childNodes.length) box.append(tags);
+      return box;
+    };
+    const rows = { creature: make("div", "prow"), other: make("div", "prow"), land: make("div", "prow") };
+    // more than three plain lands of one kind lie on top of each other, with the number below
+    const plain = (c) => c.type === "land" && !c.facedown && !c.phased && !c.rot && !c.token && !c.dp && !c.dt && !(c.counters || []).length;
+    const groups = new Map();
+    for (const c of play.battlefield) if (plain(c)) groups.set(c.name, [...(groups.get(c.name) || []), c]);
+    const stacked = new Set();
+    for (const c of play.battlefield) {
+      const group = plain(c) ? groups.get(c.name) : null;
+      if (!group || group.length <= 3) { (rows[c.type] || rows.other).append(card(c)); continue; }
+      if (stacked.has(c.name)) continue;
+      stacked.add(c.name);
+      const tapped = group.filter((g) => g.tapped).length;
+      const stack = make("div", "pc-stack");
+      [...group].sort((a, b) => b.tapped - a.tapped).slice(-3).forEach((g, i) => {
+        const t = card(g);
+        t.classList.remove("tapped");
+        if (g.tapped) t.classList.add("dim");
+        t.style.left = `${i * 2.2}vh`; t.style.top = `${i * .5}vh`;
+        stack.append(t);
+      });
+      const num = make("div", "pl-num", `×${group.length}`);
+      if (tapped) num.append(Object.assign(make("small"), { textContent: ` · ${tapped} tapped` }));
+      stack.append(num);
+      rows.land.append(stack);
+    }
+    playEl.replaceChildren(rows.creature, rows.other, rows.land);
+    fitPlay();
+    const pile = (label, cards) => {
+      if (!cards.length) return null;
+      const top = cards[cards.length - 1];
+      const box = make("div", "pl-pile");
+      if (okImage(top.image_url)) box.append(Object.assign(document.createElement("img"), { src: top.image_url, alt: top.name }));
+      if (cards.length > 1) box.append(make("div", "pl-n", `${cards.length}`));
+      box.append(make("div", "pl-lab", label));
+      return box;
+    };
+    const info = make("div", "pl-info");
+    info.append(make("span", "pl-chip life", `♥ ${play.life}`));
+    if (play.poison) info.append(make("span", "pl-chip poison", `☠ ${play.poison}`));
+    for (const [icon, key] of [["⚡", "energy"], ["✦", "experience"], ["⛈", "storm"]]) {
+      if (play[key]) info.append(make("span", "pl-chip", `${icon} ${play[key]}`));
+    }
+    if (play.turn > 1) info.append(make("span", "pl-chip", `Turn ${play.turn}`));
+    if (play.roll) info.append(make("span", "pl-chip roll", `🎲 ${play.roll.kind} ${play.roll.result}`));
+    info.append(make("span", "pl-chip", `Hand ${play.hand}`), make("span", "pl-chip", `Library ${play.library}`));
+    piles.replaceChildren(info, ...[play.revealed ? pile("Revealed", [play.revealed]) : null, pile("Command", play.command),
+      pile("Graveyard", play.graveyard), pile("Exile", play.exile)].filter(Boolean));
+  }
+
   function render(state) {
+    renderPlay(state.play);
     renderTurn(state.turn);
     renderTally(state.turn);
     const seen = new Set();

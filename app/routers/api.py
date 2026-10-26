@@ -712,6 +712,24 @@ async def send_deck_to_stream(deck_id: int, session: Session = Depends(get_sessi
     return found
 
 
+@router.post("/decks/{deck_id}/playtest")
+async def send_deck_to_playtest(deck_id: int, session: Session = Depends(get_session),
+                                scryfall: ScryfallClient = Depends(get_scryfall)):
+    """Put this deck on the playtest table of the stream: shuffled, seven cards drawn, the hand only on the
+    playtest page, the battlefield on the overlay."""
+    from app.main import stream_app
+    from app.services.stream_link import deck_for_playtest
+    from app.stream.playtest import PlayDeckIn
+    from app.stream.server import set_playtest
+
+    deck = _saved_deck(session, deck_id)
+    found = await deck_for_playtest(session, deck, scryfall)
+    if not found["cards"] and not found["commander"]:
+        raise HTTPException(status_code=400, detail="This deck has no cards with a picture yet")
+    await set_playtest(stream_app, PlayDeckIn(**{k: found[k] for k in ("name", "cards", "commander")}))
+    return {"deck": found["name"], "cards": sum(c["count"] for c in found["cards"]), "skipped": found["skipped"]}
+
+
 @router.get("/decks/{deck_id}/edhrec")
 async def deck_edhrec(
     deck_id: int, session: Session = Depends(get_session), edhrec: EdhrecClient = Depends(get_edhrec)
