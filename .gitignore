@@ -11,3 +11,9 @@ stream-state*.json
 .state-*.tmp
 .presets-*.tmp
 .deck-*.tmp
+
+# Built program (build_exe.bat)
+build/
+dist/
+*.spec
+MTG-exe/
