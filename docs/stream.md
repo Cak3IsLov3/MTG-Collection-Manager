@@ -136,6 +136,8 @@ its own, like the Archidekt playtester, that opens in a tab you can put on anoth
    experience, storm, commander tax and a mana pool. **Dice & coins**, the **game log** and the **keybinds** (`?`): `D` draw, `U` untap
    all, `1`-`9` play a card, `Ctrl + F / S / Y / H`, and on the card under your mouse `B H G E Z Y L` (move it), `T M P J C + - O Delete`.
 
+From the seventh creature on, the creature cards on the overlay shrink (the more creatures, the smaller, down to 40%), so
+they all stay on one row.
 More than three plain lands of one kind (no counters, not face down) lie on top of each other, on the page and on the
 overlay, with the number below (for example *×12 · 2 tapped*). A click on the stack taps one of them, or untaps one when
 they are all tapped; the menu is the one of its front card.

@@ -45,8 +45,12 @@ def open_browser_when_ready() -> None:
 
 def main() -> None:
     if is_ours():  # started twice: just show the one that is already running
+        print(f"MTG Collection Manager is already running at {URL}\n"
+              "That is the copy you will see: it may be another one (or an older version) than this program.\n"
+              "Close it first if you want to start this one. This window closes in a few seconds.")
         if not os.getenv("NO_BROWSER"):
             webbrowser.open(URL)
+        time.sleep(8)
         return
     from app.main import app  # imported here so the working directory is set first
 

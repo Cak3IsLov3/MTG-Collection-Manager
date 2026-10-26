@@ -1829,6 +1829,9 @@
       stack.append(num);
       rows.land.append(stack);
     }
+    // from the seventh creature on the creature cards shrink, so they all stay on one row
+    const creatures = rows.creature.childNodes.length;
+    rows.creature.style.zoom = creatures > 6 ? String(Math.max(0.4, 6 / creatures)) : "";
     playEl.replaceChildren(rows.creature, rows.other, rows.land);
     fitPlay();
     const pile = (label, cards) => {
