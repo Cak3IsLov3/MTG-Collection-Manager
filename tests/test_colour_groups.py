@@ -173,3 +173,66 @@ async def test_the_summary_has_decks_new_cards_and_alerts_and_can_be_daily(clien
     assert await send_weekly_summary(session, notifier) is True and notifier.title == "Your week in Magic"
     page = client.get("/").text
     assert "Most valuable new: Lim-Dûl&#39;s Vault ×2" in page and "Most valuable card:" in page
+
+
+def test_a_deck_is_built_from_the_free_cards_you_own_without_lands(client, session, monkeypatch):
+    from app.services import auto_deck
+    from tests import conftest
+
+    conftest.EDHREC_PAGES["marwyn-the-nurturer"]["container"]["json_dict"]["cardlists"].append(
+        {"header": "Utility Lands", "tag": "utilitylands", "cardviews": [conftest.edhrec_view("Fire // Ice", 500)]})
+    try:
+        for name, extra in (("Marwyn, the Nurturer", {}), ("Sol Ring", {"set_code": "cmm"}), ("Lim-Dûl's Vault", {}),
+                            ("Pitiless Plunderer", {}), ("Fire // Ice", {})):
+            client.post("/api/collection", json={"name": name, **extra})
+        client.post("/api/decks", json={"name": "Artifacts", "decklist": "1 Sol Ring"})  # the Sol Ring sits in this deck
+        client.get("/api/decks")
+        few = client.post("/deck/colours/build", data={"commander": "Marwyn, the Nurturer"}, follow_redirects=False)
+        assert few.headers["location"].startswith("/deck?msg=Only%202%20free%20cards")  # not enough for a deck
+        monkeypatch.setattr(auto_deck, "MIN_CARDS", 1)
+        made = client.post("/deck/colours/build", data={"commander": "Marwyn, the Nurturer"}, follow_redirects=False)
+        assert made.status_code == 303 and made.headers["location"].startswith("/decks/")
+        deck = next(d for d in client.get("/api/decks").json() if d["name"] == "Marwyn, the Nurturer - from my collection")
+        detail = client.get(f"/api/decks/{deck['id']}").json()
+        names = {card["name"] for card in detail["cards"]}
+        # the commander and the cards most played with it that are free; no Sol Ring (in another deck), no land
+        assert names == {"Marwyn, the Nurturer", "Lim-Dûl's Vault", "Pitiless Plunderer"} and detail["commander"] == "Marwyn, the Nurturer"
+        page = client.get(made.headers["location"]).text
+        assert "Built a deck of 2 cards you own, without lands" in page and "1 more you own are in other decks" in page
+
+        # a commander EDHREC does not know
+        assert "Could not build a deck for Nobody" in client.post("/deck/colours/build", data={"commander": "Nobody"}).text
+        # the deck just made holds the only copy of the commander now
+        again = client.post("/deck/colours/build", data={"commander": "Marwyn, the Nurturer"}).text
+        assert "no free copy" in again  # its only copy is in the deck just made
+    finally:
+        conftest.EDHREC_PAGES["marwyn-the-nurturer"]["container"]["json_dict"]["cardlists"].pop()
+
+
+def test_the_build_button_is_on_the_commanders_you_own(client, monkeypatch):
+    from app.scryfall import ScryfallClient
+    from app.services import colour_groups
+
+    colour_groups._COMMANDERS.clear()
+
+    async def search(self, query, **params):
+        return [{"name": "Marwyn, the Nurturer", "type_line": "Legendary Creature"}, {"name": "Ezuri", "type_line": "Legendary Creature"}]
+
+    monkeypatch.setattr(ScryfallClient, "search", search)
+    client.post("/api/collection", json={"name": "Marwyn, the Nurturer"})
+    text = client.get("/deck/colours/g").text
+    owned, popular = text.split("Commanders you own that no deck uses")[1].split("Most played commanders")
+    assert owned.count("Build a deck from my cards") == 1 and 'value="Marwyn, the Nurturer"' in owned
+    assert "Build a deck" not in popular
+
+
+def test_the_colour_group_styles_do_not_touch_the_rows_of_the_collection_table():
+    """The collection table calls the line of a card with several versions "group-row": no style of its own may
+    make it a flex box, or the cells of that line pile up under each other."""
+    import re
+    from pathlib import Path
+
+    css = (Path(__file__).resolve().parent.parent / "app" / "static" / "style.css").read_text(encoding="utf-8")
+    for selector, body in re.findall(r"([^{}]+)\{([^{}]*)\}", css):
+        if re.search(r"(?<![\w-])\.group-row\b", selector) and "tr.group-row" not in selector:
+            raise AssertionError(f"{selector.strip()} would style the group line of the collection table: {body.strip()}")

@@ -11,6 +11,10 @@
     <div class="muted small">{{ c.type_line }}{% if c.rank %} · #{{ c.rank }} on EDHREC{% endif %}</div>
     {% if owned_list %}
     <div class="small">You own <b>{{ c.copies }}</b> cop{{ 'y' if c.copies == 1 else 'ies' }}{% if c.copies > 1 %} · <span class="up">{{ c.free }} not in a deck</span>{% else %} · <span class="up">in no deck yet</span>{% endif %}</div>
+    <form class="inline" method="post" action="/deck/colours/build" data-keep-scroll>
+      <input type="hidden" name="commander" value="{{ c.name }}">
+      <button class="small" title="Makes a deck of this commander and the free cards of your collection that its decks play most, without lands">Build a deck from my cards</button>
+    </form>
     {% elif c.owned %}
     <div class="small"><span class="badge hit">✓ in your collection</span></div>
     {% endif %}

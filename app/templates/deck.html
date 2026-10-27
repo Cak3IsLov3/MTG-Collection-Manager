@@ -84,6 +84,16 @@
     <input type="hidden" name="tokens_shown" value="1" form="deck-form">
     <label class="token-toggle {{ 'on' if uses_tokens }}" title="Tick when you have the tokens this deck needs">
       <input type="checkbox" name="uses_tokens" form="deck-form" {{ 'checked' if uses_tokens }}>Tokens owned</label>
+    <label class="token-toggle {{ 'on' if deck.testing }}" title="Tick when you only want to try this deck out: it takes no cards from your collection, so every card counts as missing (print the proxies to play it)">
+      <input type="checkbox" name="testing" form="deck-form" {{ 'checked' if deck.testing }}>Testing deck</label>
+    {% if folders %}
+    <label class="muted">Folder
+      <select name="folder" form="deck-form" title="The folder of this deck in the list of decks">
+        <option value="">No folder</option>
+        {% for folder in folders %}<option value="{{ folder.id }}" {{ 'selected' if deck.folder_id == folder.id }}>{{ folder.name }}</option>{% endfor %}
+      </select>
+    </label>
+    {% endif %}
     <button form="deck-form" class="deck-save small">Save changes</button>
   </div>
   <div class="actions deck-tools">
@@ -128,7 +138,7 @@
     <details class="small">
       <summary class="muted">All colour groups</summary>
       {% for label, items in group_kinds %}
-      <div class="group-row"><span class="muted">{{ label }}</span>
+      <div class="colour-group-row"><span class="muted">{{ label }}</span>
         {% for g in items %}<a class="group-chip{{ ' have' if not g.missing }}" href="/deck/colours/{{ g.colors.lower() or 'c' }}" title="{{ g.decks }} deck{{ 's' if g.decks != 1 }}">{{ pips(g.colors) }} {{ g.name }}{% if g.decks %} <b>{{ g.decks }}</b>{% endif %}</a>{% endfor %}
       </div>
       {% endfor %}
@@ -149,6 +159,13 @@
       <option value="">All colour groups</option>
       {% for g in group_overview if not g.missing %}<option value="{{ g.name }}">{{ g.name }} ({{ g.decks }})</option>{% endfor %}
     </select>
+    {% if folders %}
+    <select id="deck-folder-filter" aria-label="Filter decks by folder">
+      <option value="">All folders</option>
+      {% for folder in folders %}<option value="{{ folder.id }}">📁 {{ folder.name }} ({{ summaries | selectattr('deck.folder_id', 'equalto', folder.id) | list | length }})</option>{% endfor %}
+      <option value="none">No folder</option>
+    </select>
+    {% endif %}
     <label class="check muted"><input id="deck-complete-filter" type="checkbox">&nbsp;Only complete decks</label>
     <label class="check muted"><input id="deck-tokens-filter" type="checkbox">&nbsp;Only decks whose tokens I own</label>
     <span id="deck-filter-count" class="muted"></span>
@@ -161,6 +178,7 @@
     <thead>
     <tr>
       <th><button class="sort" data-sort="name" data-type="text" title="Sort by deck name">Deck</button></th>
+      <th><button class="sort" data-sort="folderName" data-type="text" title="Sort by folder">Folder</button></th>
       <th><button class="sort" data-sort="groupOrder" data-type="number" title="Sort by colour group: colourless first, five colours last">Colours</button></th>
       <th><button class="sort" data-sort="bracketNumber" data-type="number" title="Sort by bracket">Bracket</button></th>
       <th class="num"><button class="sort" data-sort="cards" data-type="number" title="Sort by deck size">Cards</button></th>
@@ -178,12 +196,22 @@
         data-colors="{{ '?' if s.deck.colors is none else s.deck.colors }}"
         data-group="{{ colour_group(s.deck.colors) or '' }}" data-group-order="{{ colour_order(s.deck.colors) }}"
         data-card-names="{{ (card_names | default({})).get(s.deck.id, []) | join('|') }}"
-        data-tokens="{{ 1 if s.uses_tokens else 0 }}"
+        data-tokens="{{ 1 if s.uses_tokens else 0 }}" data-folder="{{ s.deck.folder_id or 'none' }}"
+        data-folder-name="{{ (folders | selectattr('id', 'equalto', s.deck.folder_id) | map(attribute='name') | first) if s.deck.folder_id else '' }}"
         {% set p = (plays | default({})).get(s.deck.id) %}data-played="{{ p.played if p else 0 }}">
       <td class="deck-name-cell" style="--deck-colours: linear-gradient(180deg, {{ colour_gradient(s.deck.colors) }})">{% if s.deck.commander_image %}<img class="thumb commander-thumb" src="{{ s.deck.commander_image }}" alt="" loading="lazy" title="{{ s.deck.commander }}">{% else %}<span class="commander-thumb empty"></span>{% endif %}
         <div><a href="/decks/{{ s.deck.id }}">{{ s.deck.name }}</a>
         <div class="muted small deck-hit" hidden></div>{% if s.deck.archidekt_id %} <span class="badge linked" title="Follows its deck on Archidekt">↻ Archidekt</span>{% endif %}
-        {% if s.uses_tokens %}<span class="badge tokens" title="You have the tokens of this deck{% if s.tokens %} ({{ s.tokens }} on its list){% endif %}">✓ tokens owned</span>{% endif %}</div></td>
+        {% if s.uses_tokens %}<span class="badge tokens" title="You have the tokens of this deck{% if s.tokens %} ({{ s.tokens }} on its list){% endif %}">✓ tokens owned</span>{% endif %}
+        {% if s.deck.testing %}<span class="badge" title="Only for testing: this deck takes no cards from your collection">⚗ testing</span>{% endif %}</div></td>
+      <td class="folder-cell">
+        <form class="inline" method="post" action="/decks/{{ s.deck.id }}/folder" data-keep-scroll>
+          <select name="folder" class="small" aria-label="Folder of {{ s.deck.name }}" onchange="this.form.submit()">
+            <option value="">–</option>
+            {% for folder in folders %}<option value="{{ folder.id }}" {{ 'selected' if s.deck.folder_id == folder.id }}>{{ folder.name }}</option>{% endfor %}
+          </select>
+        </form>
+      </td>
       <td class="colours-cell">{{ pips(s.deck.colors) }}{% set gname = colour_group(s.deck.colors) %}{% if gname %}<div><span class="badge colour-group" title="Colour group of this deck">{{ gname }}</span></div>{% endif %}</td>
       {% set warning = (bracket_warnings | default({})).get(s.deck.id) %}
       <td>{% if s.bracket_name %}<span class="badge bracket bracket-{{ s.deck.bracket }}">{{ s.deck.bracket }} · {{ s.bracket_name }}</span>{% else %}<span class="muted">–</span>{% endif %}
@@ -200,6 +228,25 @@
   <p class="muted">Every copy you own can only be in one deck. Printings you chose yourself go first, then the printing a deck list names goes to that deck, then older decks get first pick.
     Click a column to sort, for example on "Missing" to see which deck is closest to done.
     <button type="button" class="link" id="deck-sort-reset" hidden>Back to the order the decks were added in</button></p>
+  <details class="deck-folders" {{ 'open' if not folders }}>
+    <summary><b>Folders</b> <span class="muted">· {{ folders | length }}. Pick a folder in the list above to put a deck in it.</span></summary>
+    <form class="row" method="post" action="/deck/folders">
+      <input name="name" type="text" size="24" maxlength="60" placeholder="Name of a new folder" aria-label="Name of a new folder" required>
+      <button class="small">📁 Make folder</button>
+    </form>
+    {% for folder in folders %}
+    <div class="row folder-row">
+      <form class="inline row" method="post" action="/deck/folders/{{ folder.id }}/rename">
+        <input name="name" type="text" size="24" maxlength="60" value="{{ folder.name }}" aria-label="Name of folder {{ folder.name }}" required>
+        <button class="secondary small">Rename</button>
+      </form>
+      <span class="muted">{{ summaries | selectattr('deck.folder_id', 'equalto', folder.id) | list | length }} decks</span>
+      <form class="inline" method="post" action="/deck/folders/{{ folder.id }}/delete" data-confirm="Click again to delete">
+        <button class="secondary small" title="The decks in it stay, in no folder">Delete folder</button>
+      </form>
+    </div>
+    {% endfor %}
+  </details>
   {% set linked = summaries | selectattr('deck.archidekt_id') | list | length %}
   <form class="row" method="post" action="/deck/sync"
         onsubmit="const b = this.querySelector('button'); b.disabled = true; b.textContent = 'Checking Archidekt…';">
@@ -246,11 +293,12 @@
         <input name="include_basics" type="checkbox" {{ 'checked' if include_basics }}>&nbsp;Include basic lands
       </label>
       <label class="check"><input name="include_tokens" type="checkbox" {{ 'checked' if include_tokens }}>&nbsp;Include tokens</label>
+      <label class="check" title="Tick when you only want to try this deck out: it takes no cards from your collection, so every card counts as missing"><input name="testing" type="checkbox" {{ 'checked' if testing }}>&nbsp;Testing deck</label>
       <button name="action" value="save">Save deck</button>
       <button name="action" value="check" class="secondary">Only check, don't save</button>
     </div>
     <p class="muted">Saving sets the cards you own aside for this deck. "Only check" shows what you have without saving anything.
-      Basic lands and tokens are left out unless you tick the boxes.</p>
+      Basic lands and tokens are left out unless you tick the boxes. A testing deck takes no cards from your collection.</p>
   </form>
 </div>
 </div>
@@ -322,6 +370,7 @@
     <input type="hidden" name="skipped_token" value="{{ tokens }}">
     {% for token in (left_out.token_cards if left_out else []) %}<input type="hidden" name="token:{{ token.name }}" value="{{ token.quantity }}">{% endfor %}
     <label>Deck name<input name="name" required size="30" value="{{ deck_name or '' }}" placeholder="My Commander deck"></label>
+    <label class="check" title="It takes no cards from your collection, so every card counts as missing"><input name="testing" type="checkbox" {{ 'checked' if testing }}>&nbsp;Testing deck</label>
     <button>Save deck &amp; set these cards aside</button>
   </form>
   <p class="muted"><strong>This deck is not saved yet.</strong> Saved decks keep their cards, so the next deck does not count the same Sol Ring again.</p>
@@ -1172,6 +1221,7 @@
   const completeFilter = document.getElementById("deck-complete-filter");
   const groupFilter = document.getElementById("deck-group-filter");
   const tokensFilter = document.getElementById("deck-tokens-filter");
+  const folderFilter = document.getElementById("deck-folder-filter") || { value: "", addEventListener() {} };
   const deckListRows = [...document.querySelectorAll("#deck-list tr[data-bracket]")];
 
   const deckColours = colourFilter("deck", "deck-colors", "exact", () => filterDecks());
@@ -1201,6 +1251,7 @@
         hit.match &&
         (!bracketFilter.value || row.dataset.bracket === bracketFilter.value) &&
         (!groupFilter.value || row.dataset.group === groupFilter.value) &&
+        (!folderFilter.value || row.dataset.folder === folderFilter.value) &&
         (!completeFilter.checked || row.dataset.complete === "1") &&
         (!tokensFilter.checked || row.dataset.tokens === "1") &&
         deckColours.matches(row.dataset.colors);
@@ -1216,7 +1267,7 @@
     if (deckSearch.value.trim()) url.searchParams.set("q", deckSearch.value.trim());
     else url.searchParams.delete("q");
     history.replaceState(null, "", url);
-    const filtered = bracketFilter.value || groupFilter.value || completeFilter.checked || tokensFilter.checked || deckColours.active() || words.length > 0;
+    const filtered = bracketFilter.value || groupFilter.value || folderFilter.value || completeFilter.checked || tokensFilter.checked || deckColours.active() || words.length > 0;
     document.getElementById("deck-filter-count").textContent = filtered ? `${shown} of ${deckListRows.length} decks` : "";
     document.getElementById("deck-filter-empty").hidden = shown > 0;
     document.getElementById("deck-list").hidden = shown === 0;
@@ -1229,6 +1280,7 @@
   } catch (error) {}
   bracketFilter.addEventListener("change", filterDecks);
   groupFilter.addEventListener("change", filterDecks);
+  folderFilter.addEventListener("change", filterDecks);
   completeFilter.addEventListener("change", filterDecks);
   tokensFilter.addEventListener("change", filterDecks);
   deckSearch.addEventListener("input", filterDecks);

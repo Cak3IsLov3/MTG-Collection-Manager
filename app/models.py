@@ -179,6 +179,17 @@ class Deck(SQLModel, table=True):
     # The combos in the deck from Commander Spellbook (JSON), and the card list they were found for.
     combos: str | None = None
     combos_key: str | None = None
+    # The folder the deck sits in; None: in no folder.
+    folder_id: int | None = Field(default=None, foreign_key="deckfolder.id", index=True)
+    # A deck you only want to try out: it takes no copies from the collection, so every card counts as missing.
+    testing: bool = False
+
+
+class DeckFolder(SQLModel, table=True):
+    """A folder to keep decks in."""
+
+    id: int | None = Field(default=None, primary_key=True)
+    name: str
 
 
 class DeckEntry(SQLModel, table=True):

@@ -19,6 +19,7 @@ from app.models import (
     Deck,
     DeckBasicLand,
     DeckEntry,
+    DeckFolder,
     DeckPick,
     DeckSkipped,
     DeckToken,
@@ -448,7 +449,9 @@ class _CardPool:
         # claims[deck id][card key][collection entry id] = copies
         self.remaining = {row.entry.id: row.entry.quantity for rows in self.printings.values() for row in rows}
         self.claims: dict[int, dict[str, dict[int, int]]] = {deck.id: {} for deck in self.decks}
-        for deck in self.decks:  # chosen printings first
+        # A deck you are only testing takes nothing from the collection: its cards all stay missing.
+        claiming = [deck for deck in self.decks if not deck.testing]
+        for deck in claiming:  # chosen printings first
             for key, need in self.needs[deck.id].items():
                 if need.pin is not None and not need.unassigned:
                     self._take([need.pin], need.quantity, self.remaining, self.claims[deck.id].setdefault(key, {}))
@@ -460,13 +463,13 @@ class _CardPool:
                 if held > 0:
                     self.waiting[row.entry.id] = held
                     self.remaining[row.entry.id] -= held
-        for deck in self.decks:  # then the printing a deck list names
+        for deck in claiming:  # then the printing a deck list names
             for key, need in self.needs[deck.id].items():
                 if need.unassigned or not need.set_code:
                     continue
                 claimed = self.claims[deck.id].setdefault(key, {})
                 self._take(self._wanted_ids(key, need), need.quantity - sum(claimed.values()), self.remaining, claimed)
-        for deck in self.decks:  # then whatever is still needed
+        for deck in claiming:  # then whatever is still needed
             for key, need in self.needs[deck.id].items():
                 claimed = self.claims[deck.id].setdefault(key, {})
                 if need.unassigned:
@@ -791,12 +794,15 @@ def save_deck(
     left_out: LeftOut | None = None,
     bracket: int | None = None,
     archidekt_id: int | None = None,
+    testing: bool = False,
 ) -> Deck:
     """Save a deck. `left_out` records its basic lands and tokens, which are not tracked as cards.
 
     With `archidekt_id` the deck keeps following that Archidekt deck (see sync_deck).
+    A `testing` deck takes no copies from the collection.
     """
     deck = Deck(
+        testing=testing,
         name=name.strip() or "Untitled deck",
         bracket=bracket if bracket in BRACKETS else None,
         archidekt_id=archidekt_id,
@@ -1293,6 +1299,60 @@ async def fill_deck_commanders(session: Session, scryfall: ScryfallClient) -> in
         filled += 1 if image else 0
     session.commit()
     return filled
+
+
+def set_testing(session: Session, deck: Deck, testing: bool) -> None:
+    """Mark a deck as one you are only testing: it takes no copies from the collection."""
+    deck.testing = testing
+    session.add(deck)
+    session.flush()
+
+
+def deck_folders(session: Session) -> list[DeckFolder]:
+    return list(session.exec(select(DeckFolder).order_by(DeckFolder.name)))
+
+
+def _folder_name(session: Session, name: str, own_id: int | None = None) -> str:
+    name = " ".join(name.split())
+    if not name:
+        raise DeckError("A folder needs a name")
+    for folder in deck_folders(session):
+        if folder.id != own_id and folder.name.casefold() == name.casefold():
+            raise DeckError(f"There is a folder called {folder.name} already")
+    return name
+
+
+def create_folder(session: Session, name: str) -> DeckFolder:
+    folder = DeckFolder(name=_folder_name(session, name))
+    session.add(folder)
+    session.flush()
+    return folder
+
+
+def rename_folder(session: Session, folder: DeckFolder, name: str) -> None:
+    folder.name = _folder_name(session, name, folder.id)
+    session.add(folder)
+    session.flush()
+
+
+def delete_folder(session: Session, folder: DeckFolder) -> int:
+    """Remove a folder; the decks in it stay, in no folder. Returns how many decks that were."""
+    inside = session.exec(select(Deck).where(Deck.folder_id == folder.id)).all()
+    for deck in inside:
+        deck.folder_id = None
+        session.add(deck)
+    session.delete(folder)
+    session.flush()
+    return len(inside)
+
+
+def set_folder(session: Session, deck: Deck, folder_id: int | None) -> None:
+    """Put a deck in a folder (None: take it out of its folder)."""
+    if folder_id is not None and session.get(DeckFolder, folder_id) is None:
+        raise DeckError("That folder does not exist")
+    deck.folder_id = folder_id
+    session.add(deck)
+    session.flush()
 
 
 def set_uses_tokens(session: Session, deck: Deck, uses_tokens: bool | None) -> None:

@@ -1,5 +1,6 @@
 from collections.abc import Iterator
 
+from sqlalchemy import event
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, SQLModel, create_engine
 
@@ -19,6 +20,19 @@ def _make_engine(url: str):
 
 engine = _make_engine(get_settings().database_url)
 
+_data_version = 0
+
+
+def data_version() -> int:
+    """Goes up with every commit to the database: a page made from it is still good while this number is the same."""
+    return _data_version
+
+
+@event.listens_for(engine, "commit")
+def _data_changed(connection) -> None:
+    global _data_version
+    _data_version += 1
+
 
 def add_missing_columns(target=None) -> None:
     """create_all() never alters an existing table, so add columns introduced after a table was created."""
@@ -31,7 +45,8 @@ def add_missing_columns(target=None) -> None:
         "collectionentry": {"imported": "BOOLEAN NOT NULL DEFAULT 1", "unsorted": "INTEGER NOT NULL DEFAULT 0",
                             "purchase_price": "FLOAT", "purchase_prices": "VARCHAR"},
         "deck": {"bracket": "INTEGER", "archidekt_id": "INTEGER", "synced_at": "DATETIME", "colors": "VARCHAR", "uses_tokens": "BOOLEAN",
-                 "commander": "VARCHAR", "commander_image": "VARCHAR", "combos": "VARCHAR", "combos_key": "VARCHAR"},
+                 "commander": "VARCHAR", "commander_image": "VARCHAR", "combos": "VARCHAR", "combos_key": "VARCHAR",
+                 "folder_id": "INTEGER", "testing": "BOOLEAN NOT NULL DEFAULT 0"},
         "deckentry": {
             "unassigned": "BOOLEAN NOT NULL DEFAULT 0",
             "set_code": "VARCHAR",

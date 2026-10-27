@@ -1,9 +1,11 @@
 """Server-rendered pages (Jinja2) and the HTML forms behind them."""
 
 import datetime as dt
+import hashlib
 import json
 import logging
 import re
+import time
 from pathlib import PurePath
 from urllib.parse import quote
 
@@ -18,10 +20,10 @@ from app.cardmarket import is_cardmarket_url
 from app.config import BASE_DIR, get_settings
 from app.icons import icon
 from app.csv_import import CsvFormatError, parse_collection_csv
-from app.database import get_session
+from app.database import data_version, get_session
 from app.deps import get_edhrec, get_scryfall, get_spellbook
 from app.edhrec import EdhrecClient, EdhrecError
-from app.models import Card, CollectionEntry, Deck, WishlistEntry
+from app.models import Card, CollectionEntry, Deck, DeckFolder, WishlistEntry
 from app.routers.api import load_deck
 from app.scryfall import CardRef, ScryfallClient, ScryfallError, name_key
 from app.services import achievements, collection, colour_groups, combos, deck_insights, decks, edhrec_compare, games, mana_base, reprints, stats, suggestions, wishlist
@@ -120,13 +122,30 @@ def card_page(card_id: int, request: Request, session: Session = Depends(get_ses
 # --- collection (HAVE) -------------------------------------------------------
 
 
+# The collection page is made of thousands of rows and takes a second to build, but only changes when the database does.
+# So it is kept until the next commit, and the browser keeps its copy too (an ETag: "still the same?" is answered with a 304).
+_STARTED = time.time_ns()
+_collection_pages: dict[tuple, bytes] = {}
+
+
 @router.get("/collection")
 def collection_page(request: Request, session: Session = Depends(get_session)):
-    rows = collection.collection_rows(session)
-    shared = decks.collection_decks(session, rows)
-    return render(request, "collection.html", rows=rows, total=collection.collection_value(rows),
-                  usage=shared.usage, wanted=shared.wanted, waiting=shared.waiting,
-                  basic_lands=decks.BASIC_LAND_NAMES, purchases=collection.purchase_summary(rows))
+    key = (data_version(), dt.date.today(), request.url.query)
+    etag = f'W/"c{_STARTED}-{key[0]}-{key[1].toordinal()}-{hashlib.md5(key[2].encode()).hexdigest()[:8]}"'
+    headers = {"ETag": etag, "Cache-Control": "no-cache"}
+    if request.headers.get("if-none-match") == etag:
+        return Response(status_code=304, headers=headers)
+    body = _collection_pages.get(key)
+    if body is None:
+        rows = collection.collection_rows(session)
+        shared = decks.collection_decks(session, rows)
+        body = render(request, "collection.html", rows=rows, total=collection.collection_value(rows),
+                      usage=shared.usage, wanted=shared.wanted, waiting=shared.waiting,
+                      basic_lands=decks.BASIC_LAND_NAMES, purchases=collection.purchase_summary(rows)).body
+        if len(_collection_pages) >= 6:
+            _collection_pages.clear()
+        _collection_pages[key] = body
+    return Response(content=body, media_type="text/html; charset=utf-8", headers=headers)
 
 
 @router.post("/collection/add")
@@ -598,7 +617,30 @@ async def deck_page(
     warnings = deck_insights.bracket_warnings(session, [s.deck for s in summaries], await _game_changers(scryfall))
     return render(request, "deck.html", rows=None, deck=None, summaries=summaries, brackets=decks.BRACKETS,
                   deck_data=_deck_data(summaries, plays), card_names=decks.deck_card_names(session), plays=plays,
-                  bracket_warnings=warnings)
+                  bracket_warnings=warnings, folders=decks.deck_folders(session))
+
+
+@router.post("/deck/colours/build")
+async def build_deck_from_collection(commander: str = Form(...), session: Session = Depends(get_session),
+                                     edhrec: EdhrecClient = Depends(get_edhrec)):
+    """Make a deck of this commander and the free cards of your collection that its decks play most (no lands)."""
+    from app.services import auto_deck
+
+    back = "/deck"
+    try:
+        page = await edhrec.commander(commander)
+    except EdhrecError as exc:
+        return redirect(back, f"Could not build a deck for {commander}: {exc}", error=True)
+    made = auto_deck.build(session, commander, page)
+    if made is None:
+        return redirect(back, f"You have no free copy of {commander}", error=True)
+    if len(made.cards) < auto_deck.MIN_CARDS:
+        return redirect(back, f"Only {len(made.cards)} free cards of your collection fit {commander}: not enough for a deck", error=True)
+    cards, left_out = decks.select_tracked(decks.parse_decklist(made.decklist))
+    deck = decks.save_deck(session, f"{commander} - from my collection", cards, left_out)
+    session.commit()
+    note = f" {made.skipped_used} more you own are in other decks." if made.skipped_used else ""
+    return redirect(f"/decks/{deck.id}", f"Built a deck of {len(made.cards)} cards you own, without lands.{note}")
 
 
 @router.get("/deck/colours/{slug}")
@@ -662,6 +704,12 @@ def _deck_data(summaries: list[decks.DeckSummary], plays: dict | None = None) ->
     ]
 
 
+def _saved_message(deck: Deck) -> str:
+    if deck.testing:
+        return f"Saved {deck.name} as a testing deck. It takes no cards from your collection."
+    return f"Saved {deck.name}. The cards you own are now set aside for this deck."
+
+
 @router.post("/deck")
 async def deck_check(
     request: Request,
@@ -671,6 +719,7 @@ async def deck_check(
     action: str = Form("check"),
     include_basics: bool = Form(False),
     include_tokens: bool = Form(False),
+    testing: bool = Form(False),
     file: UploadFile | None = File(None),
     session: Session = Depends(get_session),
 ):
@@ -682,23 +731,23 @@ async def deck_check(
     except decks.DeckError as exc:
         return render(request, "deck.html", rows=None, deck=None, summaries=summaries, decklist=decklist,
                       archidekt_url=archidekt_url, brackets=decks.BRACKETS, deck_data=_deck_data(summaries),
-                      card_names=decks.deck_card_names(session),
+                      card_names=decks.deck_card_names(session), folders=decks.deck_folders(session),
                       msg=str(exc), error=True)
     name, cards = loaded.name, loaded.cards
     if name is None and uploaded:
         name = PurePath(file.filename).stem
     name = deck_name.strip() or name or ""
     if action == "save":
-        deck = decks.save_deck(session, name, cards, loaded.left_out, loaded.bracket, loaded.archidekt_id)
+        deck = decks.save_deck(session, name, cards, loaded.left_out, loaded.bracket, loaded.archidekt_id, testing)
         session.commit()
-        return redirect(f"/decks/{deck.id}", f"Saved {deck.name}. The cards you own are now set aside for this deck.")
+        return redirect(f"/decks/{deck.id}", _saved_message(deck))
     rows = decks.check_deck(session, cards)
     return render(request, "deck.html", rows=rows, deck=None, summaries=summaries, deck_name=name,
                   decklist=_decklist_text(rows), archidekt_url=archidekt_url, left_out=loaded.left_out,
                   bracket=loaded.bracket, brackets=decks.BRACKETS, deck_data=_deck_data(summaries),
-                  card_names=decks.deck_card_names(session),
+                  card_names=decks.deck_card_names(session), folders=decks.deck_folders(session),
                   archidekt_id=loaded.archidekt_id,
-                  include_basics=include_basics, include_tokens=include_tokens)
+                  include_basics=include_basics, include_tokens=include_tokens, testing=testing)
 
 
 @router.post("/deck/save")
@@ -709,6 +758,7 @@ async def deck_save(
     skipped_token: int = Form(0),
     bracket: str = Form(""),
     archidekt_id: str = Form(""),
+    testing: bool = Form(False),
     session: Session = Depends(get_session),
 ):
     """Save the deck that was just checked; its list was already filtered by the check."""
@@ -727,10 +777,10 @@ async def deck_save(
         return redirect("/deck", str(exc), error=True)
     deck = decks.save_deck(
         session, name, cards, left_out, int(bracket) if bracket.isdigit() else None,
-        int(archidekt_id) if archidekt_id.isdigit() else None,
+        int(archidekt_id) if archidekt_id.isdigit() else None, testing,
     )
     session.commit()
-    return redirect(f"/decks/{deck.id}", f"Saved {deck.name}. The cards you own are now set aside for this deck.")
+    return redirect(f"/decks/{deck.id}", _saved_message(deck))
 
 
 @router.get("/decks/{deck_id}")
@@ -789,7 +839,7 @@ async def saved_deck_page(
                   deck_achievements=achievements.achievements(session)[1].get(deck.id, []),
                   card_wall=deck_insights.card_wall(session, deck, deck_rows),
                   results=games.RESULTS, win_methods=games.WIN_METHODS, today=dt.date.today().isoformat(),
-                  summaries=summaries, left_out=decks.deck_left_out(session, deck),
+                  summaries=summaries, folders=decks.deck_folders(session), left_out=decks.deck_left_out(session, deck),
                   bracket=deck.bracket, brackets=decks.BRACKETS, basic_names=decks.BASIC_LAND_NAMES,
                   tracked_basics=decks.tracked_basic_lands(session, deck), deck_link=decks.deck_url(deck))
 
@@ -852,6 +902,9 @@ async def saved_deck_save(deck_id: int, request: Request, session: Session = Dep
             decks.set_commander(session, deck, str(form["commander"]))
         if "tokens_shown" in form:  # an unticked box is not sent at all
             decks.set_uses_tokens(session, deck, "uses_tokens" in form)
+            decks.set_testing(session, deck, "testing" in form)
+        if "folder" in form:
+            decks.set_folder(session, deck, int(form["folder"]) if str(form["folder"]).strip() else None)
         # The "Remove" / "Put back" buttons submit the same form, so pending edits are saved along.
         message = "Changes saved"
         # A new Archidekt link: follow it from now on and take over that deck right away.
@@ -1128,6 +1181,57 @@ def saved_deck_printing(
         return redirect(f"/decks/{deck_id}", str(exc), error=True)
     session.commit()
     return redirect(f"/decks/{deck_id}")
+
+
+@router.post("/deck/folders")
+def deck_folder_create(name: str = Form(""), session: Session = Depends(get_session)):
+    try:
+        folder = decks.create_folder(session, name)
+    except decks.DeckError as exc:
+        session.rollback()
+        return redirect("/deck", str(exc), error=True)
+    session.commit()
+    return redirect("/deck", f"Made the folder {folder.name}")
+
+
+@router.post("/deck/folders/{folder_id}/rename")
+def deck_folder_rename(folder_id: int, name: str = Form(""), session: Session = Depends(get_session)):
+    folder = session.get(DeckFolder, folder_id)
+    if folder is None:
+        return redirect("/deck", "Folder not found", error=True)
+    try:
+        decks.rename_folder(session, folder, name)
+    except decks.DeckError as exc:
+        session.rollback()
+        return redirect("/deck", str(exc), error=True)
+    session.commit()
+    return redirect("/deck", f"Renamed the folder to {folder.name}")
+
+
+@router.post("/deck/folders/{folder_id}/delete")
+def deck_folder_delete(folder_id: int, session: Session = Depends(get_session)):
+    folder = session.get(DeckFolder, folder_id)
+    if folder is None:
+        return redirect("/deck", "Folder not found", error=True)
+    name = folder.name
+    count = decks.delete_folder(session, folder)
+    session.commit()
+    return redirect("/deck", f"Deleted the folder {name}. Its {count} deck{'s' if count != 1 else ''} stay{'s' if count == 1 else ''}, in no folder.")
+
+
+@router.post("/decks/{deck_id}/folder")
+def saved_deck_folder(deck_id: int, folder: str = Form(""), session: Session = Depends(get_session)):
+    """The folder menu in the list of decks."""
+    deck = session.get(Deck, deck_id)
+    if deck is None:
+        return redirect("/deck", "Deck not found", error=True)
+    try:
+        decks.set_folder(session, deck, int(folder) if folder.strip() else None)
+    except (ValueError, decks.DeckError) as exc:
+        session.rollback()
+        return redirect("/deck", str(exc), error=True)
+    session.commit()
+    return redirect("/deck")
 
 
 @router.post("/decks/{deck_id}/delete")
