@@ -346,6 +346,38 @@
       <div class="sub">{% if deck_plays %}won {{ deck_plays.wins }}, last on {{ deck_plays.last_played }}{% else %}not played yet{% endif %}</div>
     </div>
   </div>
+  {% if real_preview %}
+  <div class="testing-panel">
+    <p><b>⚗ Testing deck.</b> It takes no cards from your collection. As a real deck it would get <b>{{ real_preview.usable }}</b> of its {{ real_preview.needed }} cards
+      ({{ real_preview.percent }}%) from you; <b>{{ real_preview.missing }}</b> would still be missing.</p>
+    <div class="row">
+      <button type="button" class="secondary small" id="real-cost-button" data-url="/decks/{{ deck.id }}/real-cost">What would it cost?</button>
+      <span id="real-cost" class="muted" aria-live="polite"></span>
+      <form class="inline" method="post" action="/decks/{{ deck.id }}/make-real" data-confirm="Click again to make this a real deck">
+        <button class="small" title="From now on this deck sets your copies aside, and other decks that are newer can lose cards to it">Make this a real deck</button>
+      </form>
+    </div>
+  </div>
+  <script>
+    document.getElementById("real-cost-button").addEventListener("click", async (event) => {
+      const button = event.currentTarget, out = document.getElementById("real-cost");
+      button.disabled = true;
+      out.textContent = "Looking up prices…";
+      try {
+        const response = await fetch(button.dataset.url);
+        if (!response.ok) throw new Error((await response.json()).detail || response.statusText);
+        const data = await response.json();
+        out.textContent = data.cards
+          ? `About €${data.cost.toFixed(2)} for the ${data.cards} missing card${data.cards === 1 ? "" : "s"} at today's price` +
+            (data.unpriced.length ? `, without a price: ${data.unpriced.join(", ")}` : "")
+          : "Nothing to buy: you have every card.";
+      } catch (error) {
+        out.textContent = "Could not look up the prices: " + error.message;
+      }
+      button.disabled = false;
+    });
+  </script>
+  {% endif %}
   {% else %}
   <div class="progress"><div style="width: {{ pct }}%"></div></div>
   <p class="muted">

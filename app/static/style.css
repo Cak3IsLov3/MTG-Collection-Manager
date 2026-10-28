@@ -1024,3 +1024,6 @@ a.group-chip:hover { border-color: var(--accent); color: var(--text); }
 .colour-bar .bar-R { background: #e2473d; } .colour-bar .bar-G { background: #2fa36a; }
 .colour-figures { color: var(--muted); font-size: 13px; }
 @media (max-width: 720px) { .colour-row { grid-template-columns: 1fr; gap: 2px; } }
+
+.testing-panel { margin-top: 16px; padding-top: 12px; border-top: 1px dashed var(--border, #2a3340); }
+.testing-panel p { margin: 0 0 8px; }

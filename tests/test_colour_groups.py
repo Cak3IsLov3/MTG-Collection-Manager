@@ -175,7 +175,18 @@ async def test_the_summary_has_decks_new_cards_and_alerts_and_can_be_daily(clien
     assert "Most valuable new: Lim-Dûl&#39;s Vault ×2" in page and "Most valuable card:" in page
 
 
-def test_a_deck_is_built_from_the_free_cards_you_own_without_lands(client, session, monkeypatch):
+def test_basic_lands_follow_the_colours_of_the_commander_and_the_spells():
+    from app.services.auto_deck import basic_lands
+
+    assert basic_lands("", [], {}, 5) == {"Wastes": 5}
+    assert basic_lands("G", ["a"], {}, 36) == {"Forest": 36}
+    assert basic_lands("WU", [], {}, 0) == {}
+    # more blue spells than white: more Islands, and both colours get lands, all 36 of them
+    split = basic_lands("WU", ["a", "b", "c", "d"], {"a": "U", "b": "U", "c": "U", "d": "W"}, 36)
+    assert sum(split.values()) == 36 and split["Island"] > split["Plains"] > 0
+
+
+def test_a_deck_is_built_from_the_free_cards_you_own_with_lands(client, session, monkeypatch):
     from app.services import auto_deck
     from tests import conftest
 
@@ -195,10 +206,11 @@ def test_a_deck_is_built_from_the_free_cards_you_own_without_lands(client, sessi
         deck = next(d for d in client.get("/api/decks").json() if d["name"] == "Marwyn, the Nurturer - from my collection")
         detail = client.get(f"/api/decks/{deck['id']}").json()
         names = {card["name"] for card in detail["cards"]}
-        # the commander and the cards most played with it that are free; no Sol Ring (in another deck), no land
-        assert names == {"Marwyn, the Nurturer", "Lim-Dûl's Vault", "Pitiless Plunderer"} and detail["commander"] == "Marwyn, the Nurturer"
+        # the commander, the cards most played with it that are free and the free land of its list; no Sol Ring (in another deck)
+        assert names == {"Marwyn, the Nurturer", "Lim-Dûl's Vault", "Pitiless Plunderer", "Fire // Ice"} and detail["commander"] == "Marwyn, the Nurturer"
         page = client.get(made.headers["location"]).text
-        assert "Built a deck of 2 cards you own, without lands" in page and "1 more you own are in other decks" in page
+        assert "Built a deck of 2 cards you own, with 1 land you own and 36 basic lands" in page and "1 more you own are in other decks" in page
+        assert "36 basic lands" in page
 
         # a commander EDHREC does not know
         assert "Could not build a deck for Nobody" in client.post("/deck/colours/build", data={"commander": "Nobody"}).text

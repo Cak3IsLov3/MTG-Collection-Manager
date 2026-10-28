@@ -623,7 +623,7 @@ async def deck_page(
 @router.post("/deck/colours/build")
 async def build_deck_from_collection(commander: str = Form(...), session: Session = Depends(get_session),
                                      edhrec: EdhrecClient = Depends(get_edhrec)):
-    """Make a deck of this commander and the free cards of your collection that its decks play most (no lands)."""
+    """Make a deck of this commander and the free cards of your collection that its decks play most, with the lands you own and basic lands in its colours."""
     from app.services import auto_deck
 
     back = "/deck"
@@ -640,7 +640,11 @@ async def build_deck_from_collection(commander: str = Form(...), session: Sessio
     deck = decks.save_deck(session, f"{commander} - from my collection", cards, left_out)
     session.commit()
     note = f" {made.skipped_used} more you own are in other decks." if made.skipped_used else ""
-    return redirect(f"/decks/{deck.id}", f"Built a deck of {len(made.cards)} cards you own, without lands.{note}")
+    lands = [f"{len(made.lands)} land{'s' if len(made.lands) != 1 else ''} you own"] if made.lands else []
+    if made.basics:
+        lands.append(f"{sum(made.basics.values())} basic lands")
+    with_lands = f", with {' and '.join(lands)}" if lands else ""
+    return redirect(f"/decks/{deck.id}", f"Built a deck of {len(made.cards)} cards you own{with_lands}.{note}")
 
 
 @router.get("/deck/colours/{slug}")
@@ -839,6 +843,7 @@ async def saved_deck_page(
                   deck_achievements=achievements.achievements(session)[1].get(deck.id, []),
                   card_wall=deck_insights.card_wall(session, deck, deck_rows),
                   results=games.RESULTS, win_methods=games.WIN_METHODS, today=dt.date.today().isoformat(),
+                  real_preview=decks.real_preview(session, deck) if deck.testing else None,
                   summaries=summaries, folders=decks.deck_folders(session), left_out=decks.deck_left_out(session, deck),
                   bracket=deck.bracket, brackets=decks.BRACKETS, basic_names=decks.BASIC_LAND_NAMES,
                   tracked_basics=decks.tracked_basic_lands(session, deck), deck_link=decks.deck_url(deck))
@@ -941,6 +946,35 @@ async def saved_deck_sync(deck_id: int, session: Session = Depends(get_session))
         return redirect(f"/decks/{deck_id}", f"Could not sync: {exc}", error=True)
     session.commit()
     return redirect(f"/decks/{deck_id}", result.summary())
+
+
+@router.get("/decks/{deck_id}/real-cost")
+async def saved_deck_real_cost(deck_id: int, session: Session = Depends(get_session),
+                               scryfall: ScryfallClient = Depends(get_scryfall)):
+    """What it would cost to make this testing deck real (for the "What would it cost?" button)."""
+    deck = session.get(Deck, deck_id)
+    if deck is None:
+        raise HTTPException(status_code=404, detail="Deck not found")
+    try:
+        result = await decks.real_cost(session, scryfall, deck)
+    except ScryfallError as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+    return {"cost": result.cost, "cards": result.cards, "unpriced": result.unpriced}
+
+
+@router.post("/decks/{deck_id}/make-real")
+def saved_deck_make_real(deck_id: int, session: Session = Depends(get_session)):
+    """The "Make this a real deck" button on a testing deck: from now on it takes copies from the collection."""
+    deck = session.get(Deck, deck_id)
+    if deck is None:
+        return redirect("/deck", "Deck not found", error=True)
+    decks.set_testing(session, deck, False)
+    session.commit()
+    summary = next(s for s in decks.deck_summaries(session) if s.deck.id == deck.id)
+    return redirect(
+        f"/decks/{deck_id}",
+        f"{deck.name} is a real deck now: {summary.usable} of its {summary.needed} cards are set aside from your collection.",
+    )
 
 
 @router.post("/decks/{deck_id}/add-all")

@@ -423,7 +423,10 @@ class _CardPool:
     or let the app decide.
     """
 
-    def __init__(self, session: Session, rows: list[CollectionRow] | None = None) -> None:
+    def __init__(
+        self, session: Session, rows: list[CollectionRow] | None = None, assume_real: set[int] | None = None
+    ) -> None:
+        """`assume_real`: ids of testing decks to share the collection out to as if they were real decks."""
         self.printings: dict[str, list[CollectionRow]] = {}
         self._alias: dict[str, str] = {}  # "fire" -> "fire // ice"
         for row in collection_rows(session) if rows is None else rows:
@@ -456,7 +459,7 @@ class _CardPool:
         self.remaining = {row.entry.id: row.entry.quantity for rows in self.printings.values() for row in rows}
         self.claims: dict[int, dict[str, dict[int, int]]] = {deck.id: {} for deck in self.decks}
         # A deck you are only testing takes nothing from the collection: its cards all stay missing.
-        claiming = [deck for deck in self.decks if not deck.testing]
+        claiming = [deck for deck in self.decks if not deck.testing or deck.id in (assume_real or ())]
         for deck in claiming:  # chosen printings first
             for key, need in self.needs[deck.id].items():
                 if need.pin is not None and not need.unassigned:
@@ -1356,6 +1359,58 @@ def set_testing(session: Session, deck: Deck, testing: bool) -> None:
     deck.testing = testing
     session.add(deck)
     session.flush()
+
+
+@dataclass
+class RealPreview:
+    """What a testing deck would get from your collection if it were a real deck."""
+
+    needed: int
+    usable: int
+    missing_rows: list[DeckRow]
+
+    @property
+    def missing(self) -> int:
+        return self.needed - self.usable
+
+    @property
+    def percent(self) -> int:
+        return round(self.usable / self.needed * 100) if self.needed else 0
+
+
+def real_preview(session: Session, deck: Deck) -> RealPreview:
+    rows = _CardPool(session, assume_real={deck.id}).rows(deck_id=deck.id)
+    return RealPreview(
+        needed=sum(row.needed for row in rows),
+        usable=sum(row.usable for row in rows),
+        missing_rows=[row for row in rows if row.missing > 0],
+    )
+
+
+@dataclass
+class RealCost:
+    cost: float = 0.0  # what the missing cards cost, one cheapest copy each
+    cards: int = 0  # copies that are missing
+    unpriced: list[str] = field(default_factory=list)  # cards without a price (or that Scryfall could not find)
+
+
+async def real_cost(session: Session, scryfall: ScryfallClient, deck: Deck) -> RealCost:
+    """What it would cost to make a testing deck real: the cards it would still miss, at today's Scryfall price."""
+    result = RealCost()
+    rows = real_preview(session, deck).missing_rows
+    if not rows:
+        return result
+    resolved = await scryfall.resolve([row.card_ref() for row in rows])
+    await scryfall.fill_missing_prices([data for data in resolved if data is not None])
+    for row, data in zip(rows, resolved):
+        result.cards += row.missing
+        price = data.price_eur if data is not None else None
+        if price is None:
+            result.unpriced.append(row.name)
+        else:
+            result.cost += price * row.missing
+    result.cost = round(result.cost, 2)
+    return result
 
 
 def deck_folders(session: Session) -> list[DeckFolder]:

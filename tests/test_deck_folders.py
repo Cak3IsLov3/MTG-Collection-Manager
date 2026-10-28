@@ -87,6 +87,41 @@ async def test_add_all_cards_puts_back_what_was_taken_out_and_new_copies(session
     assert all(r.missing == 0 for r in saved_deck_rows(session, deck))
 
 
+async def test_a_testing_deck_shows_what_it_would_get_and_cost_and_can_be_made_real(session, scryfall):
+    await add_card_by_name(session, scryfall, "Sol Ring", quantity=1)
+    deck = save_deck(session, "Try", [DeckCard("Sol Ring", 1), DeckCard("Fire // Ice", 1)])
+    decks.set_testing(session, deck, True)
+    session.commit()
+    assert [s.usable for s in deck_summaries(session)] == [0]
+
+    preview = decks.real_preview(session, deck)
+    assert (preview.needed, preview.usable, preview.missing, preview.percent) == (2, 1, 1, 50)
+    assert [row.name for row in preview.missing_rows] == ["Fire // Ice"]
+    assert [s.usable for s in deck_summaries(session)] == [0]  # a preview takes nothing
+
+    cost = await decks.real_cost(session, scryfall, deck)
+    assert cost.cards == 1 and cost.cost > 0 and cost.unpriced == []
+
+    decks.set_testing(session, deck, False)
+    session.commit()
+    assert [s.usable for s in deck_summaries(session)] == [1]
+
+
+def test_make_real_and_the_cost_through_the_pages(client):
+    client.post("/api/collection", json={"name": "Sol Ring"})
+    client.post("/deck", data={"decklist": "1 Sol Ring\n1 Fire // Ice", "deck_name": "Try", "action": "save", "testing": "on"})
+    deck_id = client.get("/api/decks").json()[0]["id"]
+
+    page = client.get(f"/decks/{deck_id}").text
+    assert "Make this a real deck" in page and "What would it cost?" in page
+    assert client.get(f"/decks/{deck_id}/real-cost").json()["cards"] == 1
+
+    assert client.post(f"/decks/{deck_id}/make-real").status_code == 200
+    page = client.get(f"/decks/{deck_id}").text
+    assert "Make this a real deck" not in page
+    assert client.get(f"/decks/999/real-cost").status_code == 404
+
+
 def test_a_deck_can_be_added_as_a_testing_deck(client):
     client.post("/api/collection", json={"name": "Sol Ring"})
     page = client.get("/deck").text
