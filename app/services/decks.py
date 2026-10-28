@@ -27,7 +27,7 @@ from app.models import (
     WishlistEntry,
 )
 from app.scryfall import CardRef, ScryfallClient, name_key
-from app.services.collection import CollectionRow, _fold, collection_rows, find_card
+from app.services.collection import CollectionRow, _fold, add_to_collection, collection_rows, find_card
 from app.services.games import forget_deck
 from app.services.pricing import SCRYFALL, price_for, store_scryfall_card
 from app.services.wishlist import add_to_wishlist
@@ -153,6 +153,12 @@ class DeckRow:
     @property
     def missing(self) -> int:
         return self.needed - self.usable
+
+    @property
+    def can_add(self) -> bool:
+        """A card of a saved deck that "Add all cards to this deck" can do something for: you took your copies
+        out of it, or new copies from an import wait for it."""
+        return bool(self.entry_id) and self.missing > 0 and (self.waiting > 0 or self.unassigned)
 
     @property
     def value(self) -> float:
@@ -658,6 +664,50 @@ def put_new_copy_in_deck(
     session.add(owned)
     session.flush()
     return f"Put {copies}× {entry.name} in {deck.name}"
+
+
+@dataclass
+class AddAllResult:
+    new_copies: int = 0  # cards that got new copies from an import that waited for them
+    put_back: int = 0  # cards you had taken out of the deck
+    added: int = 0  # copies put in your collection
+    not_found: list[str] = field(default_factory=list)  # cards Scryfall could not find
+
+    @property
+    def nothing(self) -> bool:
+        return not (self.new_copies or self.put_back or self.added)
+
+
+async def add_all_missing(session: Session, scryfall: ScryfallClient, deck: Deck) -> AddAllResult:
+    """Make the deck complete: cards you took out come back, new copies from an import that wait go in, and
+    for what is still missing one copy per missing card is added to your collection (in the printing the deck
+    list names, else by name), so this deck gets them."""
+    result = AddAllResult()
+    for row in saved_deck_rows(session, deck):
+        if not row.can_add:
+            continue
+        if row.waiting:
+            try:
+                put_new_copy_in_deck(session, deck, row.entry_id)
+                result.new_copies += 1
+                continue
+            except DeckError:
+                pass  # no new copy of this card after all
+        if row.unassigned:
+            set_assigned(session, deck, row.entry_id, True)
+            result.put_back += 1
+    rows = [row for row in saved_deck_rows(session, deck) if row.entry_id and row.missing > 0]
+    if rows:
+        resolved = await scryfall.resolve([row.card_ref() for row in rows])
+        found = [(row, data) for row, data in zip(rows, resolved) if data is not None]
+        result.not_found = [row.name for row, data in zip(rows, resolved) if data is None]
+        await scryfall.fill_missing_prices(
+            [data for _, data in found], {data.scryfall_id for row, data in found if row.foil}
+        )
+        for row, data in found:
+            add_to_collection(session, store_scryfall_card(session, data), row.missing, bool(row.foil))
+            result.added += row.missing
+    return result
 
 
 def let_app_sort(session: Session, collection_entry_id: int | None = None) -> int:

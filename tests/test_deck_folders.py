@@ -2,7 +2,7 @@ import pytest
 
 from app.models import Deck
 from app.services import decks
-from app.services.collection import add_card_by_name
+from app.services.collection import add_card_by_name, collection_rows
 from app.services.decks import DeckCard, DeckError, deck_summaries, save_deck, saved_deck_rows
 
 
@@ -49,6 +49,42 @@ async def test_folders_hold_decks_and_go_away_without_them(session, scryfall):
     session.commit()
     assert session.get(Deck, deck.id).folder_id is None  # the deck stays
     assert [f.name for f in decks.deck_folders(session)] == ["Cheap"]
+
+
+async def test_add_all_cards_puts_back_what_was_taken_out_and_new_copies(session, scryfall):
+    from sqlmodel import select
+
+    from app.models import CollectionEntry, DeckEntry
+
+    await add_card_by_name(session, scryfall, "Sol Ring", quantity=1)
+    deck = save_deck(session, "Mine", [DeckCard("Sol Ring", 1), DeckCard("Fire // Ice", 1)])
+    session.commit()
+    entries = {e.name: e for e in session.exec(select(DeckEntry).where(DeckEntry.deck_id == deck.id))}
+    decks.set_assigned(session, deck, entries["Sol Ring"].id, False)
+    session.commit()
+    rows = {r.name: r for r in saved_deck_rows(session, deck)}
+    assert rows["Sol Ring"].missing == 1 and rows["Sol Ring"].can_add and not rows["Fire // Ice"].can_add
+    assert rows["Fire // Ice"].missing == 1  # not owned at all
+
+    # The one taken out comes back; the one you do not own is added to the collection.
+    result = await decks.add_all_missing(session, scryfall, deck)
+    session.commit()
+    assert (result.put_back, result.added, result.new_copies, result.not_found) == (1, 1, 0, [])
+    assert all(r.missing == 0 for r in saved_deck_rows(session, deck))
+    assert {r.card.name: r.entry.quantity for r in collection_rows(session)} == {"Sol Ring": 1, "Fire // Ice": 1}
+    assert (await decks.add_all_missing(session, scryfall, deck)).nothing
+
+    # New copies from an import that wait go in first, instead of buying more.
+    decks.set_assigned(session, deck, entries["Sol Ring"].id, False)
+    session.commit()
+    for owned in session.exec(select(CollectionEntry)):
+        owned.unsorted = owned.quantity
+        session.add(owned)
+    session.commit()
+    result = await decks.add_all_missing(session, scryfall, deck)
+    session.commit()
+    assert (result.new_copies, result.added) == (2, 0)
+    assert all(r.missing == 0 for r in saved_deck_rows(session, deck))
 
 
 def test_a_deck_can_be_added_as_a_testing_deck(client):

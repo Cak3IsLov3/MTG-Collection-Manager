@@ -943,6 +943,34 @@ async def saved_deck_sync(deck_id: int, session: Session = Depends(get_session))
     return redirect(f"/decks/{deck_id}", result.summary())
 
 
+@router.post("/decks/{deck_id}/add-all")
+async def saved_deck_add_all(deck_id: int, session: Session = Depends(get_session),
+                             scryfall: ScryfallClient = Depends(get_scryfall)):
+    """The "Add all cards to this deck" button under Still missing: puts every missing card in your collection."""
+    deck = session.get(Deck, deck_id)
+    if deck is None:
+        return redirect("/deck", "Deck not found", error=True)
+    try:
+        result = await decks.add_all_missing(session, scryfall, deck)
+    except ScryfallError as exc:
+        session.rollback()
+        return redirect(f"/decks/{deck_id}", f"Nothing was added: {exc}", error=True)
+    session.commit()
+    if result.nothing:
+        return redirect(f"/decks/{deck_id}", "There was nothing to add" + (f"; not found: {', '.join(result.not_found)}" if result.not_found else ""), error=True)
+    parts = []
+    if result.added:
+        parts.append(f"added {result.added} cop{'ies' if result.added != 1 else 'y'} to your collection")
+    if result.new_copies:
+        parts.append(f"put {result.new_copies} card{'s' if result.new_copies != 1 else ''} with new import copies in the deck")
+    if result.put_back:
+        parts.append(f"put {result.put_back} card{'s' if result.put_back != 1 else ''} you had taken out back")
+    message = ", ".join(parts).capitalize() + "."
+    if result.not_found:
+        message += f" Not found: {', '.join(result.not_found)}."
+    return redirect(f"/decks/{deck_id}", message, error=bool(result.not_found))
+
+
 @router.post("/decks/{deck_id}/cards/{entry_id}/new-copy")
 def saved_deck_new_copy(deck_id: int, entry_id: int, session: Session = Depends(get_session)):
     """Put a new copy from an import, that waits to be sorted, in this deck."""

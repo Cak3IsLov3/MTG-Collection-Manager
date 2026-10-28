@@ -944,6 +944,12 @@
 <div class="panel table-wrap" data-tab-panel="cards" style="order: 3">
   <div class="toolbar">
     <h2>Still missing ({{ need | length }})</h2>
+    {% set to_add = need | selectattr('entry_id') | list %}
+    {% if deck and to_add and not deck.testing %}
+    <form class="inline" method="post" action="/decks/{{ deck.id }}/add-all" data-confirm="Click again to add {{ to_add | sum(attribute='missing') }} cards to your collection">
+      <button class="secondary" title="Puts one copy of every missing card in your collection (cards you took out come back and new copies from your import go in first), so this deck is complete">Add all cards to this deck ({{ to_add | sum(attribute='missing') }})</button>
+    </form>
+    {% endif %}
     {% if addable %}
     <form class="row" method="post" action="/deck/wishlist">
       {% for row in addable %}<input type="hidden" name="cards" value="{{ row.name }}|{{ row.set_code or '' }}|{{ row.collector_number or '' }}|{{ row.scryfall_id or '' }}">{% endfor %}

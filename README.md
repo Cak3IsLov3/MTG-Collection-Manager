@@ -102,6 +102,12 @@ Press **▶ Play** on a deck and the stream screen opens with every token that d
 
 ![The saved decks sorted on missing cards: the decks closest to done first](docs/decks-sorted.jpg)
 
+![Folders for decks: a Folder column with a menu per deck, a filter on folder, and the Folders panel below the list to make, rename and delete them; decks marked as testing decks show a badge](docs/decks-folders.jpg)
+
+![A testing deck: the Testing deck box and the Folder menu next to the bracket; the deck takes no cards from your collection, so all 64 cards count as missing and it is worth 0 euros](docs/deck-testing.jpg)
+
+![Adding a deck as a testing deck: tick Testing deck next to Include tokens before saving](docs/deck-add-testing.jpg)
+
 ![A saved deck: its commander, bracket and "Tokens owned", an overview of cards, value, deck size and games, and tabs for its cards, analysis, improvements, lands and tokens, games and value, and Archidekt](docs/deck.jpg)
 
 ![The cards of a deck as pictures: a stack per card type, missing cards grey, a foil copy shining](docs/deck-wall.jpg)
@@ -171,6 +177,8 @@ Press **▶ Play** on a deck and the stream screen opens with every token that d
 ![Searching inside a deck](docs/deck-search.jpg)
 
 ![A card taken out of a deck: it moved to Still missing and can be put back](docs/deck-removed.jpg)
+
+![Add all cards to this deck under Still missing: the first click says how many cards go into your collection, the second click does it](docs/deck-add-all.jpg)
 
 ![Deleting a deck asks for a second click instead of a pop-up](docs/deck-delete.jpg)
 
@@ -270,6 +278,7 @@ Press **▶ Play** on a deck and the stream screen opens with every token that d
 - "Tokens owned" on a deck: tick it when you have the tokens the deck needs. Until you set it, a deck whose list has tokens counts as ticked; adding tokens to its list never ticks it for you. The saved decks show a "tokens owned" badge and can be filtered on it, so you know which decks are ready to play
 - Folders for decks: make them under the list of decks ("Folders"), put a deck in one with the menu in its row (or on its own page) and filter the list on a folder. Deleting a folder keeps its decks
 - "Testing deck" on a deck: tick it when you only want to try the deck out. It takes no copies from your collection, so every card counts as missing (the Proxies sheet prints them) and your real decks keep their cards
+- "Add all cards to this deck" under Still missing: puts one copy of every missing card in your collection (after a second click), so the deck is complete. Cards you took out come back and new copies from an import that wait go in first. Not on testing decks. Also ticking "Testing deck" when you add a deck makes it a testing deck from the start
 - Search the saved decks on deck name or on a card: "arcane signet" lists every deck that runs it, with the matching cards under the deck name
 - Filter the saved decks on colour: every deck shows the colour identity of its cards, and you pick decks with exactly, any of, or within the chosen colours
 - Sort the saved decks by how many cards they still miss, or by name, bracket, size, progress or value
