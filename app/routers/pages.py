@@ -919,6 +919,10 @@ async def saved_deck_save(deck_id: int, request: Request, session: Session = Dep
                 if deck.archidekt_id
                 else "Changes saved. This deck no longer follows an Archidekt deck."
             )
+        for field, proxy in (("proxy", True), ("unproxy", False)):
+            if str(form.get(field, "")).strip():
+                entry = decks.set_proxy(session, deck, int(form[field]), proxy)
+                message = f"{entry.name} is a proxy in this deck" if proxy else f"{entry.name} is a real card in this deck again"
         for field, assigned in (("unassign", False), ("assign", True)):
             if str(form.get(field, "")).strip():
                 entry = decks.set_assigned(session, deck, int(form[field]), assigned)

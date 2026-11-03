@@ -199,6 +199,8 @@ class DeckEntry(SQLModel, table=True):
     quantity: int = 1
     # True when the user took their copies out of the deck: the card is still on the list, but missing.
     unassigned: bool = False
+    # True when this card is a proxy in the deck: it counts as there but takes no copy from the collection.
+    proxy: bool = False
     # The printing the deck list asks for (e.g. from Archidekt), when it names one.
     set_code: str | None = None
     collector_number: str | None = None

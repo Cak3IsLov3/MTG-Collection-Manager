@@ -49,6 +49,7 @@ def add_missing_columns(target=None) -> None:
                  "folder_id": "INTEGER", "testing": "BOOLEAN NOT NULL DEFAULT 0"},
         "deckentry": {
             "unassigned": "BOOLEAN NOT NULL DEFAULT 0",
+            "proxy": "BOOLEAN NOT NULL DEFAULT 0",
             "set_code": "VARCHAR",
             "collector_number": "VARCHAR",
             "scryfall_id": "VARCHAR",

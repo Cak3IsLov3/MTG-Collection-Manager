@@ -178,6 +178,8 @@ Press **▶ Play** on a deck and the stream screen opens with every token that d
 
 ![A card taken out of a deck: it moved to Still missing and can be put back](docs/deck-removed.jpg)
 
+![A card marked as a proxy: it sits under In this deck with a proxy label, counts as there and takes no copy from your collection, so the deck is one card closer to complete](docs/deck-proxy.jpg)
+
 ![Add all cards to this deck under Still missing: the first click says how many cards go into your collection, the second click does it](docs/deck-add-all.jpg)
 
 ![Deleting a deck asks for a second click instead of a pop-up](docs/deck-delete.jpg)
@@ -279,6 +281,7 @@ Press **▶ Play** on a deck and the stream screen opens with every token that d
 - Folders for decks: make them under the list of decks ("Folders"), put a deck in one with the menu in its row (or on its own page) and filter the list on a folder. Deleting a folder keeps its decks
 - "Testing deck" on a deck: tick it when you only want to try the deck out. It takes no copies from your collection, so every card counts as missing (the Proxies sheet prints them) and your real decks keep their cards
 - On a testing deck a line says how many cards it would get from your collection if it were a real deck, "What would it cost?" adds up the missing cards at today's price, and "Make this a real deck" (second click) turns it into a normal deck that takes its copies from your collection
+- "Proxy" on a card of a deck (in the deck list and under Still missing): the card counts as in the deck without taking a copy from your collection, gets a proxy label, is left out of the deck's value, and is always on the Proxies sheet. "Real card" turns it back. A card of an Archidekt deck keeps its mark when the deck is synced
 - "Add all cards to this deck" under Still missing: puts one copy of every missing card in your collection (after a second click), so the deck is complete. Cards you took out come back and new copies from an import that wait go in first. Not on testing decks. Also ticking "Testing deck" when you add a deck makes it a testing deck from the start
 - Search the saved decks on deck name or on a card: "arcane signet" lists every deck that runs it, with the matching cards under the deck name
 - Filter the saved decks on colour: every deck shows the colour identity of its cards, and you pick decks with exactly, any of, or within the chosen colours

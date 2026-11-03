@@ -6,6 +6,7 @@
 
 {# The copies this deck uses and, for a saved deck, the choice of printing. #}
 {% macro using(row) %}
+  {% if row.proxy %}<span class="badge proxy-mark" title="Marked as a proxy: it counts as in the deck, takes no copy from your collection, and is on the Proxies sheet">⎙ proxy</span>{% endif %}
   {% for p, count in row.picks %}
   <div class="printing">
     {{ count }}× <a href="/cards/{{ p.card.id }}">{{ printing_name(p) }}</a>
@@ -13,7 +14,7 @@
     <span class="muted">{{ p.unit_price | eur }}</span>{% if p.price_from_set %} <span class="badge est" title="This printing has no price. Shown is the cheapest printing with a price: {{ p.price_from_set | upper }}.">≈ {{ p.price_from_set | upper }}</span>{% endif %}
   </div>
   {% endfor %}
-  {% if deck and row.entry_id and row.printings | length > 1 and not row.unassigned %}
+  {% if deck and row.entry_id and row.printings | length > 1 and not row.unassigned and not row.proxy %}
   <div>
     <select name="pick:{{ row.entry_id }}" form="deck-form" title="Choose which printing this deck uses">
       <option value="">{% if row.wanted_printing %}Follow the deck list ({{ row.wanted_printing }}){% else %}Choose for me (cheapest free copy){% endif %}</option>
@@ -957,9 +958,16 @@
       <td class="num">{{ row.value | eur }}</td>
       {% if deck %}
       <td>
-        {% if row.entry_id and row.usable %}
+        {% if row.entry_id and row.usable and not row.proxy %}
         <button form="deck-form" name="unassign" value="{{ row.entry_id }}" class="secondary small"
                 title="Take your copies out of this deck. The card stays on the list as missing.">Remove</button>
+        {% endif %}
+        {% if row.entry_id and row.proxy %}
+        <button form="deck-form" name="unproxy" value="{{ row.entry_id }}" class="secondary small"
+                title="This card is not a proxy: use a copy of your collection for it again">Real card</button>
+        {% elif row.entry_id %}
+        <button form="deck-form" name="proxy" value="{{ row.entry_id }}" class="secondary small"
+                title="Mark this card as a proxy: it counts as in the deck without a copy of your collection">Proxy</button>
         {% endif %}
       </td>
       {% endif %}
@@ -967,7 +975,8 @@
     {% endfor %}
   </table>
   {% if deck %}<p class="muted">Own a card in several printings? Pick the one that is in this deck; otherwise the printing from the deck list is used if you own it, and else the cheapest free copy. Changes take effect when you save.
-    "Remove" takes your copies of a card out of this deck: it moves to Still missing and the copies are free for other decks.</p>{% endif %}
+    "Remove" takes your copies of a card out of this deck: it moves to Still missing and the copies are free for other decks.
+    "Proxy" marks a card as a proxy: it counts as in the deck, takes no copy from your collection and is printed on the Proxies sheet.</p>{% endif %}
   {% else %}
   <p class="muted">None of these cards are available in your collection yet.</p>
   {% endif %}
@@ -1016,6 +1025,10 @@
         {% elif row.owned and not row.available %}<span class="badge">all copies in other decks</span>
         {% elif row.owned %}<span class="badge">need more copies</span>
         {% else %}<span class="badge">not owned</span>{% endif %}
+        {% if deck and row.entry_id %}
+        <button form="deck-form" name="proxy" value="{{ row.entry_id }}" class="secondary small"
+                title="Mark this card as a proxy: it counts as in the deck without a copy of your collection">Proxy</button>
+        {% endif %}
       </td>
     </tr>
     {% endfor %}

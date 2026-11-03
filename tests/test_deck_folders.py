@@ -1,3 +1,5 @@
+import re
+
 import pytest
 
 from app.models import Deck
@@ -120,6 +122,58 @@ def test_make_real_and_the_cost_through_the_pages(client):
     page = client.get(f"/decks/{deck_id}").text
     assert "Make this a real deck" not in page
     assert client.get(f"/decks/999/real-cost").status_code == 404
+
+
+async def test_a_proxy_counts_as_in_the_deck_without_a_copy_of_the_collection(session, scryfall):
+    from sqlmodel import select
+
+    from app.models import DeckEntry
+    from app.services import deck_insights
+
+    await add_card_by_name(session, scryfall, "Sol Ring", quantity=1)
+    first = save_deck(session, "First", [DeckCard("Sol Ring", 1), DeckCard("Fire // Ice", 1)])
+    second = save_deck(session, "Second", [DeckCard("Sol Ring", 1)])
+    session.commit()
+    entries = {e.name: e for e in session.exec(select(DeckEntry).where(DeckEntry.deck_id == first.id))}
+    assert {r.name: r.usable for r in saved_deck_rows(session, second)} == {"Sol Ring": 0}  # First has the only copy
+
+    # Sol Ring is a proxy in the first deck: it is there, the copy goes to the second deck.
+    decks.set_proxy(session, first, entries["Sol Ring"].id, True)
+    session.commit()
+    rows = {r.name: r for r in saved_deck_rows(session, first)}
+    assert (rows["Sol Ring"].proxy, rows["Sol Ring"].usable, rows["Sol Ring"].missing, rows["Sol Ring"].value) == (True, 1, 0, 0)
+    assert rows["Fire // Ice"].missing == 1 and not rows["Fire // Ice"].proxy
+    assert {r.name: r.usable for r in saved_deck_rows(session, second)} == {"Sol Ring": 1}
+    assert [(s.deck.name, s.usable, s.needed) for s in deck_summaries(session)] == [("First", 1, 2), ("Second", 1, 1)]
+
+    # The sheet to print holds the proxy and the missing card.
+    assert sorted(name for name, _ in deck_insights.proxies(session, list(rows.values()))) == ["Fire // Ice", "Sol Ring"]
+
+    decks.set_proxy(session, first, entries["Sol Ring"].id, False)
+    session.commit()
+    assert {r.name: r.usable for r in saved_deck_rows(session, first)}["Sol Ring"] == 1
+    with pytest.raises(DeckError):
+        decks.set_proxy(session, second, entries["Sol Ring"].id, True)  # not a card of that deck
+
+
+def test_a_card_is_marked_as_proxy_on_the_deck_page(client):
+    client.post("/api/collection", json={"name": "Sol Ring"})
+    client.post("/deck", data={"decklist": "1 Sol Ring\n1 Fire // Ice", "deck_name": "Mine", "action": "save"})
+    deck_id = client.get("/api/decks").json()[0]["id"]
+    page = client.get(f"/decks/{deck_id}").text
+    entry_id = int(re.search(r'name="proxy" value="(\d+)"', page).group(1))
+    assert "Mark this card as a proxy" in page and "⎙ proxy" not in page.split("Still missing")[0]
+
+    client.post(f"/decks/{deck_id}/save", data={"tokens_shown": "1", "proxy": str(entry_id)})
+    page = client.get(f"/decks/{deck_id}").text
+    assert "⎙ proxy</span>" in page and 'name="unproxy"' in page
+    # not the class of the card-sized boxes on the Proxies sheet, or the label would be a white card
+    assert 'class="badge proxy-mark"' in page and 'class="badge proxy"' not in page
+    sheet = client.get(f"/decks/{deck_id}/proxies").text
+    assert sheet.count('class="proxy"') >= 1
+
+    client.post(f"/decks/{deck_id}/save", data={"tokens_shown": "1", "unproxy": str(entry_id)})
+    assert 'name="unproxy"' not in client.get(f"/decks/{deck_id}").text
 
 
 def test_a_deck_can_be_added_as_a_testing_deck(client):

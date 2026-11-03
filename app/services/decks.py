@@ -75,6 +75,7 @@ class DeckCard:
     scryfall_id: str | None = None
     foil: bool | None = None
     commander: bool = False  # the deck list puts it in the Commander category
+    proxy: bool = False  # a proxy in the deck: counts as there, takes no copy from the collection
 
     def wants(self, row: CollectionRow) -> bool:
         """Is this collection entry the printing the deck list asks for?"""
@@ -112,6 +113,8 @@ class DeckRow:
     pinned_id: int | None = None  # collection entry id the user chose, if any
     # The user took their copies out of this deck: it uses none, so the card counts as missing.
     unassigned: bool = False
+    # A proxy: the card counts as in the deck without a copy from the collection.
+    proxy: bool = False
     # New copies from an import that wait for you to put them in a deck.
     waiting: int = 0
     # The printing the deck list asks for, when it names one.
@@ -147,8 +150,8 @@ class DeckRow:
 
     @property
     def usable(self) -> int:
-        """Copies this deck actually has."""
-        return sum(count for _, count in self.picks)
+        """Copies this deck actually has (a proxy counts as all of them)."""
+        return self.needed if self.proxy else sum(count for _, count in self.picks)
 
     @property
     def missing(self) -> int:
@@ -402,10 +405,16 @@ class _Need:
     entry_id: int | None = None
     pin: int | None = None
     unassigned: bool = False
+    proxy: bool = False
     set_code: str | None = None
     collector_number: str | None = None
     scryfall_id: str | None = None
     foil: bool | None = None
+
+    @property
+    def takes_nothing(self) -> bool:
+        """Taken out of the deck or a proxy: no copy of the collection goes to it."""
+        return self.unassigned or self.proxy
 
 
 class _CardPool:
@@ -449,7 +458,7 @@ class _CardPool:
         for entry in session.exec(select(DeckEntry).order_by(DeckEntry.id)):
             cards.setdefault(entry.deck_id, []).append(
                 DeckCard(
-                    entry.name, entry.quantity, entry.id, unassigned=entry.unassigned, set_code=entry.set_code,
+                    entry.name, entry.quantity, entry.id, unassigned=entry.unassigned, proxy=entry.proxy, set_code=entry.set_code,
                     collector_number=entry.collector_number, scryfall_id=entry.scryfall_id, foil=entry.foil,
                 )
             )
@@ -462,7 +471,7 @@ class _CardPool:
         claiming = [deck for deck in self.decks if not deck.testing or deck.id in (assume_real or ())]
         for deck in claiming:  # chosen printings first
             for key, need in self.needs[deck.id].items():
-                if need.pin is not None and not need.unassigned:
+                if need.pin is not None and not need.takes_nothing:
                     self._take([need.pin], need.quantity, self.remaining, self.claims[deck.id].setdefault(key, {}))
         # New copies from an import wait for you: the automatic steps below do not get them.
         self.waiting: dict[int, int] = {}
@@ -474,14 +483,14 @@ class _CardPool:
                     self.remaining[row.entry.id] -= held
         for deck in claiming:  # then the printing a deck list names
             for key, need in self.needs[deck.id].items():
-                if need.unassigned or not need.set_code:
+                if need.takes_nothing or not need.set_code:
                     continue
                 claimed = self.claims[deck.id].setdefault(key, {})
                 self._take(self._wanted_ids(key, need), need.quantity - sum(claimed.values()), self.remaining, claimed)
         for deck in claiming:  # then whatever is still needed
             for key, need in self.needs[deck.id].items():
                 claimed = self.claims[deck.id].setdefault(key, {})
-                if need.unassigned:
+                if need.takes_nothing:
                     continue
                 self._take(self._order(key, need), need.quantity - sum(claimed.values()), self.remaining, claimed)
         for entry_id, held in self.waiting.items():  # free, but still waiting to be sorted
@@ -529,6 +538,7 @@ class _CardPool:
             need = needs.setdefault(key, _Need(card.name, 0, card.entry_id))
             need.quantity += card.quantity
             need.unassigned = need.unassigned or card.unassigned
+            need.proxy = need.proxy or card.proxy
             if need.set_code is None and card.set_code:
                 need.set_code, need.collector_number = card.set_code, card.collector_number
                 need.scryfall_id, need.foil = card.scryfall_id, card.foil
@@ -570,6 +580,7 @@ class _CardPool:
                     entry_id=need.entry_id,
                     pinned_id=need.pin,
                     unassigned=need.unassigned,
+                    proxy=need.proxy,
                     waiting=sum(self.waiting.get(row.entry.id, 0) for row in printings),
                     set_code=need.set_code,
                     collector_number=need.collector_number,
@@ -1171,6 +1182,17 @@ def set_assigned(session: Session, deck: Deck, entry_id: int, assigned: bool) ->
     return entry
 
 
+def set_proxy(session: Session, deck: Deck, entry_id: int, proxy: bool) -> DeckEntry:
+    """Mark a card of a deck as a proxy (it counts as there but takes no copy from the collection), or as real again."""
+    entry = session.get(DeckEntry, entry_id)
+    if entry is None or entry.deck_id != deck.id:
+        raise DeckError("That card is not in this deck")
+    entry.proxy = proxy
+    session.add(entry)
+    session.flush()
+    return entry
+
+
 def update_deck(
     session: Session,
     deck: Deck,
@@ -1379,7 +1401,7 @@ class RealPreview:
 
 
 def real_preview(session: Session, deck: Deck) -> RealPreview:
-    rows = _CardPool(session, assume_real={deck.id}).rows(deck_id=deck.id)
+    rows = [row for row in _CardPool(session, assume_real={deck.id}).rows(deck_id=deck.id) if not row.proxy]
     return RealPreview(
         needed=sum(row.needed for row in rows),
         usable=sum(row.usable for row in rows),

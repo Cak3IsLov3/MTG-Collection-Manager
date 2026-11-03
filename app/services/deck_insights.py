@@ -565,14 +565,15 @@ def export_text(session: Session, deck: Deck, rows: list[DeckRow]) -> str:
 
 
 def proxies(session: Session, rows: list[DeckRow], everything: bool = False) -> list[tuple[str, str]]:
-    """(name, picture) for every copy to print: the missing cards, or with `everything` the whole deck."""
+    """(name, picture) for every copy to print: the missing cards and the cards you marked as proxy, or with
+    `everything` the whole deck."""
     pictures = {
         entry.id: entry.image_url
         for entry in session.exec(select(DeckEntry).where(DeckEntry.id.in_([row.entry_id for row in rows if row.entry_id])))
     }
     sheet = []
     for row in rows:
-        copies = row.needed if everything else row.missing
+        copies = row.needed if everything or row.proxy else row.missing
         sheet += [(row.name, pictures.get(row.entry_id) or "")] * max(0, copies)
     return sheet
 

@@ -6,7 +6,7 @@
   <h1>Proxies <span class="muted">· {{ deck.name }}</span></h1>
   <div class="actions">
     {% if everything %}
-    <a href="/decks/{{ deck.id }}/proxies">Only the missing cards</a>
+    <a href="/decks/{{ deck.id }}/proxies">Only the missing cards and the ones marked as proxy</a>
     {% else %}
     <a href="/decks/{{ deck.id }}/proxies?all=1">The whole deck</a>
     {% endif %}
