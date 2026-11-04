@@ -981,6 +981,32 @@ def saved_deck_make_real(deck_id: int, session: Session = Depends(get_session)):
     )
 
 
+@router.post("/decks/{deck_id}/proxy-all")
+def saved_deck_proxy_all(deck_id: int, session: Session = Depends(get_session)):
+    """The "Add all cards as proxy" button under Still missing."""
+    deck = session.get(Deck, deck_id)
+    if deck is None:
+        return redirect("/deck", "Deck not found", error=True)
+    marked = decks.proxy_all_missing(session, deck)
+    session.commit()
+    if not marked:
+        return redirect(f"/decks/{deck_id}", "There is no missing card to mark as a proxy", error=True)
+    return redirect(f"/decks/{deck_id}", f"Marked {marked} card{'s' if marked != 1 else ''} as a proxy. They count as in the deck and are on the Proxies sheet.")
+
+
+@router.post("/decks/{deck_id}/use-owned")
+def saved_deck_use_owned(deck_id: int, session: Session = Depends(get_session)):
+    """The "Use my copies" button: proxies of cards you own by now become real cards."""
+    deck = session.get(Deck, deck_id)
+    if deck is None:
+        return redirect("/deck", "Deck not found", error=True)
+    made_real = decks.unproxy_owned(session, deck)
+    session.commit()
+    if not made_real:
+        return redirect(f"/decks/{deck_id}", "You own no free copy of a proxy in this deck", error=True)
+    return redirect(f"/decks/{deck_id}", f"{made_real} proxy card{'s' if made_real != 1 else ''} now use{'s' if made_real == 1 else ''} your own cop{'ies' if made_real != 1 else 'y'}.")
+
+
 @router.post("/decks/{deck_id}/add-all")
 async def saved_deck_add_all(deck_id: int, session: Session = Depends(get_session),
                              scryfall: ScryfallClient = Depends(get_scryfall)):

@@ -156,6 +156,53 @@ async def test_a_proxy_counts_as_in_the_deck_without_a_copy_of_the_collection(se
         decks.set_proxy(session, second, entries["Sol Ring"].id, True)  # not a card of that deck
 
 
+async def test_all_missing_cards_become_proxies_and_real_again_when_you_own_them(session, scryfall):
+    await add_card_by_name(session, scryfall, "Sol Ring", quantity=1)
+    deck = save_deck(session, "Mine", [DeckCard("Sol Ring", 1), DeckCard("Fire // Ice", 2), DeckCard("Lim-Dûl's Vault", 1)])
+    session.commit()
+    assert sum(1 for r in saved_deck_rows(session, deck) if r.missing) == 2
+
+    assert decks.proxy_all_missing(session, deck) == 2  # the two cards you do not own, not the Sol Ring you do
+    session.commit()
+    rows = {r.name: r for r in saved_deck_rows(session, deck)}
+    assert [r.missing for r in rows.values()] == [0, 0, 0]
+    assert rows["Fire // Ice"].proxy and rows["Lim-Dûl's Vault"].proxy and not rows["Sol Ring"].proxy
+    assert decks.proxy_all_missing(session, deck) == 0
+    assert decks.unproxy_owned(session, deck) == 0  # you own none of them
+
+    # You get a copy of one card (one of the two Fire // Ice is not enough: the deck needs two).
+    await add_card_by_name(session, scryfall, "Lim-Dûl's Vault", quantity=1)
+    await add_card_by_name(session, scryfall, "Fire // Ice", quantity=1)
+    session.commit()
+    rows = {r.name: r for r in saved_deck_rows(session, deck)}
+    assert rows["Lim-Dûl's Vault"].can_replace_proxy and not rows["Fire // Ice"].can_replace_proxy
+    assert decks.unproxy_owned(session, deck) == 1
+    session.commit()
+    rows = {r.name: r for r in saved_deck_rows(session, deck)}
+    assert not rows["Lim-Dûl's Vault"].proxy and rows["Lim-Dûl's Vault"].usable == 1 and rows["Fire // Ice"].proxy
+
+
+def test_the_proxy_buttons_are_on_the_deck_page(client):
+    client.post("/api/collection", json={"name": "Sol Ring"})
+    client.post("/deck", data={"decklist": "1 Sol Ring\n1 Fire // Ice", "deck_name": "Mine", "action": "save"})
+    deck_id = client.get("/api/decks").json()[0]["id"]
+    page = client.get(f"/decks/{deck_id}").text
+    assert "Add all cards as proxy (1)" in page and "Use my copies for" not in page
+
+    assert client.post(f"/decks/{deck_id}/proxy-all").status_code == 200
+    page = client.get(f"/decks/{deck_id}").text
+    assert "Add all cards as proxy" not in page and "⎙ proxy</span>" in page
+    assert "no missing card" in client.post(f"/decks/{deck_id}/proxy-all", follow_redirects=True).text
+
+    client.post("/api/collection", json={"name": "Fire // Ice"})
+    page = client.get(f"/decks/{deck_id}").text
+    assert "you own it now" in page and "Use my copies for 1 proxy card" in page and "Use my copy" in page
+    client.post(f"/decks/{deck_id}/use-owned")
+    page = client.get(f"/decks/{deck_id}").text
+    assert "you own it now" not in page and "Use my copies for" not in page
+    assert client.post("/decks/999/proxy-all").status_code == 200  # redirects to the list with an error
+
+
 def test_a_card_is_marked_as_proxy_on_the_deck_page(client):
     client.post("/api/collection", json={"name": "Sol Ring"})
     client.post("/deck", data={"decklist": "1 Sol Ring\n1 Fire // Ice", "deck_name": "Mine", "action": "save"})

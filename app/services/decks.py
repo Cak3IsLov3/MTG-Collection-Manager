@@ -158,6 +158,11 @@ class DeckRow:
         return self.needed - self.usable
 
     @property
+    def can_replace_proxy(self) -> bool:
+        """A proxy of a card you own a free copy of by now: it can take that copy and be a real card."""
+        return self.proxy and self.available >= self.needed
+
+    @property
     def can_add(self) -> bool:
         """A card of a saved deck that "Add all cards to this deck" can do something for: you took your copies
         out of it, or new copies from an import wait for it."""
@@ -1191,6 +1196,26 @@ def set_proxy(session: Session, deck: Deck, entry_id: int, proxy: bool) -> DeckE
     session.add(entry)
     session.flush()
     return entry
+
+
+def proxy_all_missing(session: Session, deck: Deck) -> int:
+    """Mark every card the deck misses as a proxy; returns how many cards were marked."""
+    marked = 0
+    for row in saved_deck_rows(session, deck):
+        if row.entry_id and row.missing > 0 and not row.proxy:
+            set_proxy(session, deck, row.entry_id, True)
+            marked += 1
+    return marked
+
+
+def unproxy_owned(session: Session, deck: Deck) -> int:
+    """Make the proxies real again for the cards you own a free copy of; returns how many cards that were."""
+    made_real = 0
+    for row in saved_deck_rows(session, deck):
+        if row.entry_id and row.proxy and row.can_replace_proxy:
+            set_proxy(session, deck, row.entry_id, False)
+            made_real += 1
+    return made_real
 
 
 def update_deck(

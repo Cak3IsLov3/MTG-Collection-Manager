@@ -6,7 +6,7 @@
 
 {# The copies this deck uses and, for a saved deck, the choice of printing. #}
 {% macro using(row) %}
-  {% if row.proxy %}<span class="badge proxy-mark" title="Marked as a proxy: it counts as in the deck, takes no copy from your collection, and is on the Proxies sheet">⎙ proxy</span>{% endif %}
+  {% if row.proxy %}<span class="badge proxy-mark" title="Marked as a proxy: it counts as in the deck, takes no copy from your collection, and is on the Proxies sheet">⎙ proxy</span>{% if row.can_replace_proxy %} <span class="badge hit" title="You own a free copy of this card by now">you own it now</span>{% endif %}{% endif %}
   {% for p, count in row.picks %}
   <div class="printing">
     {{ count }}× <a href="/cards/{{ p.card.id }}">{{ printing_name(p) }}</a>
@@ -940,7 +940,15 @@
 {% endif %}
 
 <div class="panel table-wrap" data-tab-panel="cards" style="order: 2">
-  <h2 class="up">{{ 'In this deck' if deck else 'Available in your collection' }} ({{ have | length }})</h2>
+  <div class="toolbar">
+    <h2 class="up">{{ 'In this deck' if deck else 'Available in your collection' }} ({{ have | length }})</h2>
+    {% set replaceable = have | selectattr('can_replace_proxy') | list %}
+    {% if deck and replaceable %}
+    <form class="inline" method="post" action="/decks/{{ deck.id }}/use-owned" data-keep-scroll>
+      <button class="small" title="You own a free copy of these proxy cards by now: use your copies instead of proxies">Use my copies for {{ replaceable | length }} proxy card{{ 's' if replaceable | length != 1 }}</button>
+    </form>
+    {% endif %}
+  </div>
   {% if have %}
   <table>
     <tr>
@@ -964,7 +972,7 @@
         {% endif %}
         {% if row.entry_id and row.proxy %}
         <button form="deck-form" name="unproxy" value="{{ row.entry_id }}" class="secondary small"
-                title="This card is not a proxy: use a copy of your collection for it again">Real card</button>
+                title="This card is not a proxy: use a copy of your collection for it again">{{ 'Use my copy' if row.can_replace_proxy else 'Real card' }}</button>
         {% elif row.entry_id %}
         <button form="deck-form" name="proxy" value="{{ row.entry_id }}" class="secondary small"
                 title="Mark this card as a proxy: it counts as in the deck without a copy of your collection">Proxy</button>
@@ -989,6 +997,11 @@
     {% if deck and to_add and not deck.testing %}
     <form class="inline" method="post" action="/decks/{{ deck.id }}/add-all" data-confirm="Click again to add {{ to_add | sum(attribute='missing') }} cards to your collection">
       <button class="secondary" title="Puts one copy of every missing card in your collection (cards you took out come back and new copies from your import go in first), so this deck is complete">Add all cards to this deck ({{ to_add | sum(attribute='missing') }})</button>
+    </form>
+    {% endif %}
+    {% if deck and to_add %}
+    <form class="inline" method="post" action="/decks/{{ deck.id }}/proxy-all" data-confirm="Click again to mark {{ to_add | length }} card{{ 's' if to_add | length != 1 }} as proxy">
+      <button class="secondary" title="Marks every missing card as a proxy: they count as in the deck, take no copy of your collection and are printed on the Proxies sheet">Add all cards as proxy ({{ to_add | length }})</button>
     </form>
     {% endif %}
     {% if addable %}
