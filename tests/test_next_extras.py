@@ -330,3 +330,16 @@ def test_planeswalkers_are_looked_up_again_once(session):
     run_data_migrations(engine)  # only once
     with engine.begin() as connection:
         assert connection.exec_driver_sql("SELECT token_parts FROM deckentry WHERE name = 'Elspeth'").scalar() == "[]"
+
+
+def test_only_endless_or_early_two_card_combos_count_for_the_bracket():
+    from app.services.combos import Combo
+
+    slow_win = Combo(["Brass's Bounty", "Mechanized Production"], ["Win the game at the beginning of your next upkeep"], mana_value=7)
+    cheap_win = Combo(["Rhystic Study", "Time Warp"], ["Win the game"], mana_value=5)
+    unknown_cost = Combo(["Rhystic Study", "Time Warp"], ["Win the game"], mana_value=None)
+    endless = Combo(["Basalt Monolith", "Rings of Brighthearth"], ["Infinite colorless mana"], mana_value=9)
+    three_cards = Combo(["a", "b", "c"], ["Infinite mana"], mana_value=2)
+    assert not slow_win.two_card  # a win, but expensive and slow: left out
+    assert cheap_win.two_card and unknown_cost.two_card and endless.two_card  # a high cost does not make infinite harmless
+    assert not three_cards.two_card

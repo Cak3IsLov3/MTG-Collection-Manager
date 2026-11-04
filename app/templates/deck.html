@@ -647,7 +647,7 @@
   </ul>
   {% if not bc.known %}<p class="muted small">The Game Changers list could not be fetched from Scryfall, so those are not counted. Reload later.</p>{% endif %}
   {% if bc.unchecked %}<p class="muted small">{{ bc.unchecked }} card{{ 's' if bc.unchecked != 1 }} not checked yet; reload in a minute.</p>{% endif %}
-  <p class="muted small">Game Changers come from the official list on Scryfall and combos from Commander Spellbook. Mass land denial and extra turns are found from the rules text, so look over the result yourself.</p>
+  <p class="muted small">Game Changers come from the official list on Scryfall and combos from Commander Spellbook. A two-card combo counts when it is infinite or wins for up to 5 mana; a slow win that costs more is left out. Mass land denial and extra turns are found from the rules text, so look over the result yourself.</p>
 </div>
 {% endif %}
 
@@ -715,7 +715,7 @@
   {% if deck_combos.included %}
   <ul class="combo-list">
     {% for combo in deck_combos.included %}
-    <li><strong>{{ combo_cards(combo) }}</strong>{% if combo.two_card %} <span class="badge warn" title="A two-card infinite combo: not in bracket 1–2">two cards</span>{% endif %}
+    <li><strong>{{ combo_cards(combo) }}</strong>{% if combo.two_card %} <span class="badge warn" title="A two-card combo that is infinite or wins early (up to 5 mana): not in bracket 1–2">two cards</span>{% endif %}
       <span class="muted">→ {{ combo.produces[:3] | join(', ') }}</span>
       {% if combo.url %}<a class="small-link" href="{{ combo.url }}" target="_blank" rel="noopener">how ↗</a>{% endif %}</li>
     {% endfor %}

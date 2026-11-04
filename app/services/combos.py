@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 
 COMBO_URL = "https://commanderspellbook.com/combo/{id}/"
 MAX_INCLUDED = 40
+EARLY_MANA = 5  # a combo that wins but costs more than this is not early: it does not count as a two-card combo
 MAX_ALMOST = 15
 
 
@@ -39,8 +40,20 @@ class Combo:
         return any(effect.startswith("Infinite") or effect.startswith("Win the game") for effect in self.produces)
 
     @property
+    def endless(self) -> bool:
+        """Really goes on forever (infinite mana, tokens, ...), not just a win."""
+        return any(effect.startswith("Infinite") for effect in self.produces)
+
+    @property
+    def early(self) -> bool:
+        """Cheap enough to be played early (or the cost is not known)."""
+        return self.mana_value is None or self.mana_value <= EARLY_MANA
+
+    @property
     def two_card(self) -> bool:
-        return len(self.cards) == 2 and self.infinite
+        """Two cards that go on forever or win, and that are not a slow, expensive win: what brackets 1-2 do not
+        allow (and bracket 3 only late in the game)."""
+        return len(self.cards) == 2 and self.infinite and (self.endless or self.early)
 
     def label(self) -> str:
         return " + ".join(self.cards)
