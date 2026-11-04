@@ -69,6 +69,11 @@ def redirect(path: str, msg: str | None = None, error: bool = False) -> Redirect
     return RedirectResponse(path, status_code=303)
 
 
+def count_of(number: int, word: str, plural: str | None = None) -> str:
+    """"1 card", "2 cards", "2 copies"."""
+    return f"{number} {word if number == 1 else plural or word + 's'}"
+
+
 def parse_money(text: str) -> float | None:
     """Accepts both '12.50' and '12,50'."""
     try:
@@ -640,7 +645,9 @@ async def build_deck_from_collection(commander: str = Form(...), session: Sessio
     deck = decks.save_deck(session, f"{commander} - from my collection", cards, left_out)
     session.commit()
     note = f" {made.skipped_used} more you own are in other decks." if made.skipped_used else ""
-    lands = [f"{len(made.lands)} land{'s' if len(made.lands) != 1 else ''} you own"] if made.lands else []
+    lands = []
+    if made.lands:
+        lands.append(f"{count_of(len(made.lands), 'land')} you own")
     if made.basics:
         lands.append(f"{sum(made.basics.values())} basic lands")
     with_lands = f", with {' and '.join(lands)}" if lands else ""
@@ -991,7 +998,7 @@ def saved_deck_proxy_all(deck_id: int, session: Session = Depends(get_session)):
     session.commit()
     if not marked:
         return redirect(f"/decks/{deck_id}", "There is no missing card to mark as a proxy", error=True)
-    return redirect(f"/decks/{deck_id}", f"Marked {marked} card{'s' if marked != 1 else ''} as a proxy. They count as in the deck and are on the Proxies sheet.")
+    return redirect(f"/decks/{deck_id}", f"Marked {count_of(marked, 'card')} as a proxy. They count as in the deck and are on the Proxies sheet.")
 
 
 @router.post("/decks/{deck_id}/use-owned")
@@ -1004,7 +1011,7 @@ def saved_deck_use_owned(deck_id: int, session: Session = Depends(get_session)):
     session.commit()
     if not made_real:
         return redirect(f"/decks/{deck_id}", "You own no free copy of a proxy in this deck", error=True)
-    return redirect(f"/decks/{deck_id}", f"{made_real} proxy card{'s' if made_real != 1 else ''} now use{'s' if made_real == 1 else ''} your own cop{'ies' if made_real != 1 else 'y'}.")
+    return redirect(f"/decks/{deck_id}", f"Your own copies are now used for {count_of(made_real, 'proxy card')}.")
 
 
 @router.post("/decks/{deck_id}/add-all")
@@ -1020,19 +1027,22 @@ async def saved_deck_add_all(deck_id: int, session: Session = Depends(get_sessio
         session.rollback()
         return redirect(f"/decks/{deck_id}", f"Nothing was added: {exc}", error=True)
     session.commit()
-    if result.nothing:
-        return redirect(f"/decks/{deck_id}", "There was nothing to add" + (f"; not found: {', '.join(result.not_found)}" if result.not_found else ""), error=True)
-    parts = []
+    return redirect(f"/decks/{deck_id}", _add_all_message(result), error=bool(result.not_found) or result.nothing)
+
+
+def _add_all_message(result: "decks.AddAllResult") -> str:
+    """What "Add all cards to this deck" did, in one sentence."""
+    done = []
     if result.added:
-        parts.append(f"added {result.added} cop{'ies' if result.added != 1 else 'y'} to your collection")
+        done.append(f"added {count_of(result.added, 'copy', 'copies')} to your collection")
     if result.new_copies:
-        parts.append(f"put {result.new_copies} card{'s' if result.new_copies != 1 else ''} with new import copies in the deck")
+        done.append(f"put {count_of(result.new_copies, 'card')} with new import copies in the deck")
     if result.put_back:
-        parts.append(f"put {result.put_back} card{'s' if result.put_back != 1 else ''} you had taken out back")
-    message = ", ".join(parts).capitalize() + "."
+        done.append(f"put {count_of(result.put_back, 'card')} you had taken out back")
+    message = ", ".join(done).capitalize() + "." if done else "There was nothing to add."
     if result.not_found:
         message += f" Not found: {', '.join(result.not_found)}."
-    return redirect(f"/decks/{deck_id}", message, error=bool(result.not_found))
+    return message
 
 
 @router.post("/decks/{deck_id}/cards/{entry_id}/new-copy")
@@ -1308,7 +1318,7 @@ def deck_folder_delete(folder_id: int, session: Session = Depends(get_session)):
     name = folder.name
     count = decks.delete_folder(session, folder)
     session.commit()
-    return redirect("/deck", f"Deleted the folder {name}. Its {count} deck{'s' if count != 1 else ''} stay{'s' if count == 1 else ''}, in no folder.")
+    return redirect("/deck", f"Deleted the folder {name}. {count_of(count, 'deck')} in it moved out of the folder.")
 
 
 @router.post("/decks/{deck_id}/folder")

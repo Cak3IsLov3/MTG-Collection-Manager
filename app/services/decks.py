@@ -698,10 +698,15 @@ class AddAllResult:
 
 
 async def add_all_missing(session: Session, scryfall: ScryfallClient, deck: Deck) -> AddAllResult:
-    """Make the deck complete: cards you took out come back, new copies from an import that wait go in, and
-    for what is still missing one copy per missing card is added to your collection (in the printing the deck
-    list names, else by name), so this deck gets them."""
+    """Make the deck complete: first give back what you took out and use the new copies that wait, then
+    add every card that is still missing to your collection."""
     result = AddAllResult()
+    _give_back_cards(session, deck, result)
+    await _add_missing_to_collection(session, scryfall, deck, result)
+    return result
+
+
+def _give_back_cards(session: Session, deck: Deck, result: AddAllResult) -> None:
     for row in saved_deck_rows(session, deck):
         if not row.can_add:
             continue
@@ -711,22 +716,24 @@ async def add_all_missing(session: Session, scryfall: ScryfallClient, deck: Deck
                 result.new_copies += 1
                 continue
             except DeckError:
-                pass  # no new copy of this card after all
+                pass  # no new copy after all; the card may still have been taken out
         if row.unassigned:
             set_assigned(session, deck, row.entry_id, True)
             result.put_back += 1
+
+
+async def _add_missing_to_collection(session: Session, scryfall: ScryfallClient, deck: Deck, result: AddAllResult) -> None:
     rows = [row for row in saved_deck_rows(session, deck) if row.entry_id and row.missing > 0]
-    if rows:
-        resolved = await scryfall.resolve([row.card_ref() for row in rows])
-        found = [(row, data) for row, data in zip(rows, resolved) if data is not None]
-        result.not_found = [row.name for row, data in zip(rows, resolved) if data is None]
-        await scryfall.fill_missing_prices(
-            [data for _, data in found], {data.scryfall_id for row, data in found if row.foil}
-        )
-        for row, data in found:
-            add_to_collection(session, store_scryfall_card(session, data), row.missing, bool(row.foil))
-            result.added += row.missing
-    return result
+    if not rows:
+        return
+    resolved = await scryfall.resolve([row.card_ref() for row in rows])
+    found = [(row, data) for row, data in zip(rows, resolved) if data is not None]
+    result.not_found = [row.name for row, data in zip(rows, resolved) if data is None]
+    foil_ids = {data.scryfall_id for row, data in found if row.foil}
+    await scryfall.fill_missing_prices([data for _, data in found], foil_ids)
+    for row, data in found:
+        add_to_collection(session, store_scryfall_card(session, data), row.missing, bool(row.foil))
+        result.added += row.missing
 
 
 def let_app_sort(session: Session, collection_entry_id: int | None = None) -> int:
@@ -1451,11 +1458,10 @@ async def real_cost(session: Session, scryfall: ScryfallClient, deck: Deck) -> R
     await scryfall.fill_missing_prices([data for data in resolved if data is not None])
     for row, data in zip(rows, resolved):
         result.cards += row.missing
-        price = data.price_eur if data is not None else None
-        if price is None:
+        if data is None or data.price_eur is None:
             result.unpriced.append(row.name)
         else:
-            result.cost += price * row.missing
+            result.cost += data.price_eur * row.missing
     result.cost = round(result.cost, 2)
     return result
 

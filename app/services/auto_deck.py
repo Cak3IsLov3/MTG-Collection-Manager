@@ -51,8 +51,9 @@ def basic_lands(identity: str, spells: list[str], colours_of: dict[str, str], co
     weights = {letter: 1 + sum(1 for name in spells if letter in colours_of.get(name, "")) for letter in letters}
     total = sum(weights.values())
     shares = {letter: count * weight // total for letter, weight in weights.items()}
-    # What rounding left over goes to the colours with the largest remainder.
-    for letter in sorted(letters, key=lambda l: (count * weights[l] % total), reverse=True)[: count - sum(shares.values())]:
+    # The lands that rounding left over go to the colours with the most spells.
+    leftover = count - sum(shares.values())
+    for letter in sorted(letters, key=weights.get, reverse=True)[:leftover]:
         shares[letter] += 1
     return {BASIC_FOR_COLOUR[letter]: number for letter, number in shares.items() if number}
 
