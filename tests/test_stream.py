@@ -998,7 +998,23 @@ def test_deck_intro(client):
         ws.receive_json()
         client.post("/api/intro", json=intro)
         event = ws.receive_json()["event"]
-    assert event == {"type": "intro", **intro, "image_url": None}  # only Scryfall pictures
+    assert event == {"type": "intro", **intro, "image_url": None, "testing": False, "proxies": 0, "folder": None}  # only Scryfall pictures
+
+
+def test_deck_roulette(client):
+    assert client.post("/api/roulette").status_code == 404  # nothing to pick from yet
+    intros = [{"name": f"Deck {n}", "commander": None, "image_url": None, "bracket": None, "record": None} for n in range(15)]
+    client.app.state.roulette_hook = lambda: intros
+    with client.websocket_connect("/ws") as ws:
+        ws.receive_json()
+        assert client.post("/api/roulette").status_code == 200
+        event = ws.receive_json()["event"]
+    assert event["type"] == "roulette"
+    assert len(event["names"]) == 12 and len(set(event["names"])) == 12  # a reel of twelve different decks
+    assert event["winner"]["name"].startswith("Deck ") and event["winner"]["proxies"] == 0
+    assert client.get("/sd/roulette").status_code == 200  # a Stream Deck key can press it too
+    client.app.state.roulette_hook = lambda: []
+    assert client.post("/api/roulette").status_code == 404
 
 
 def test_game_result_on_stream_only(client):
@@ -1124,7 +1140,8 @@ def test_deck_tokens_to_the_stream(monkeypatch):
             assert set(names) == {"Soldier", "Treasure"}
             assert names["Treasure"]["made_by"] == ["Pitiless Plunderer"]
             assert names["Soldier"]["image_url"] == "https://cards.scryfall.io/normal/front/a/b/id-soldier.jpg"
-            assert found["intro"] == {"name": "Tokens", "commander": None, "image_url": None, "bracket": None, "record": None, "colors": "WB"}
+            assert found["intro"] == {"name": "Tokens", "commander": None, "image_url": None, "bracket": None, "record": None, "colors": "WB",
+                                      "testing": False, "proxies": 0, "folder": None}
             assert [c["name"] for c in found["spotlight"]] == ["Pitiless Plunderer", "Raise the Alarm"]
             # The control panel shows it like a scanned deck.
             assert c.get("/stream/api/deck").json()["deck_id"] == deck["id"]

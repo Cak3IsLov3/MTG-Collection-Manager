@@ -553,7 +553,7 @@
     text-shadow: 0 .3vh 1.2vh rgba(0, 0, 0, .7);
   }
   .intro .commander { font-size: 2.7vh; font-weight: 600; color: rgba(255, 255, 255, .78); }
-  .intro .facts { display: flex; gap: 1vh; margin-top: .6vh; }
+  .intro .facts { display: flex; flex-wrap: wrap; gap: 1vh; margin-top: .6vh; }
   .intro .fact {
     padding: .25vh 1.2vh .35vh;
     border-radius: 999px;
@@ -564,6 +564,38 @@
   }
   .intro .fact.bracket { border-color: rgba(231, 179, 67, .7); color: #f3cc6e; }
   .intro .fact.record { border-color: rgba(123, 224, 143, .6); color: #9be8aa; }
+  .intro .fact.folder { border-color: rgba(255, 255, 255, .35); color: rgba(255, 255, 255, .85); }
+  .intro .fact.testing { border-color: rgba(190, 150, 255, .7); color: #cdb4ff; }
+  .intro .fact.proxies { border-color: rgba(120, 190, 255, .7); color: #a8d4ff; }
+
+  /* ---- deck roulette: a reel of deck names that slows down and stops at the deck that is picked */
+  .roulette {
+    position: fixed;
+    left: 50%;
+    top: 36%;
+    z-index: 27;
+    min-width: 54vh;
+    max-width: 80vw;
+    padding: 2.6vh 6vh 3vh;
+    text-align: center;
+    pointer-events: none;
+    color: #fff;
+    background: linear-gradient(180deg, rgba(14, 15, 19, .97), rgba(22, 24, 30, .94));
+    border: .3vh solid #e7b343;
+    border-radius: 2vh;
+    box-shadow: 0 2vh 6vh rgba(0, 0, 0, .6);
+  }
+  .roulette .kicker { color: #e7b343; font-size: 2vh; font-weight: 700; letter-spacing: .3em; text-transform: uppercase; }
+  .roulette .reel {
+    margin-top: 1.4vh;
+    min-height: 7vh;
+    font-family: "Cinzel", Georgia, serif;
+    font-size: 6vh;
+    font-weight: 700;
+    line-height: 1.15;
+    color: #fff4d6;
+  }
+  .roulette .reel.won { color: #ffd76a; text-shadow: 0 0 3vh rgba(231, 179, 67, .85); }
 
   /* ---- the end of the game: Victory!, GG or Draw over the whole screen */
   .result-screen {
@@ -1661,6 +1693,9 @@
     const facts = make("div", "facts");
     if (ev.bracket) facts.append(make("span", "fact bracket", ev.bracket));
     if (ev.record) facts.append(make("span", "fact record", ev.record));
+    if (ev.folder) facts.append(make("span", "fact folder", `📁 ${ev.folder}`));
+    if (ev.testing) facts.append(make("span", "fact testing", "⚗ testing deck"));
+    if (ev.proxies) facts.append(make("span", "fact proxies", `⎙ ${ev.proxies} prox${ev.proxies === 1 ? "y" : "ies"}`));
     if (facts.children.length) text.append(facts);
     bar.append(text);
     document.body.append(bar);
@@ -1673,6 +1708,36 @@
     ], { duration: 9000, easing: "cubic-bezier(.25, .8, .3, 1)" });
     anim.onfinish = () => { bar.remove(); if (introEl === bar) introEl = null; };
     setTimeout(() => bar.remove(), 9500);
+  }
+
+  // ---- Deck roulette: the names go round, slow down, and stop at the deck that was picked; then its intro.
+  function onRoulette(ev) {
+    const make = (tag, cls, text) => Object.assign(document.createElement(tag), { className: cls, textContent: text || "" });
+    const box = make("div", "roulette");
+    const reel = make("div", "reel");
+    box.append(make("div", "kicker", "Deck roulette"), reel);
+    document.body.append(box);
+    const names = ev.names && ev.names.length ? ev.names : [ev.winner.name];
+    const spins = Array.from({ length: 22 }, (_, i) => names[i % names.length]).concat(ev.winner.name);
+    box.animate([
+      { transform: "translate(-50%, -30%) scale(.9)", opacity: 0 },
+      { transform: "translate(-50%, -50%) scale(1)", opacity: 1 },
+    ], { duration: 350, easing: "cubic-bezier(.25, .8, .3, 1)", fill: "forwards" });
+    let step = 0;
+    const tick = () => {
+      reel.textContent = spins[step];
+      if (step === spins.length - 1) {
+        reel.classList.add("won");
+        setTimeout(() => {
+          box.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 400, fill: "forwards" }).onfinish = () => box.remove();
+          onIntro(ev.winner);
+        }, 1400);
+        return;
+      }
+      step += 1;
+      setTimeout(tick, 60 + step * step * 1.1);  // every name stays a little longer than the one before
+    };
+    tick();
   }
 
   // ---- Achievements unlocked by this game: one after the other, after the result screen.
@@ -1912,6 +1977,7 @@
           if (data.event.type === "phase") onPhase(data.event);
           if (data.event.type === "spotlight") onSpotlight(data.event);
           if (data.event.type === "intro") onIntro(data.event);
+          if (data.event.type === "roulette") onRoulette(data.event);
           if (data.event.type === "result") onResult(data.event);
           return;
         }

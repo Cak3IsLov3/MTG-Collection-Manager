@@ -278,6 +278,22 @@ def test_the_compare_page_and_the_move_menu(client):
     assert client.post(f"/decks/{ids['First']}/cards/{entry_id}/move", data={"to": ""}, follow_redirects=True).text.count("Pick the deck") == 1
 
 
+async def test_the_stream_intro_and_roulette_know_folders_proxies_and_testing_decks(session, scryfall):
+    from app.services.stream_link import deck_intro, deck_roulette
+
+    real = save_deck(session, "Real", [DeckCard("Sol Ring", 1), DeckCard("Fire // Ice", 1)])
+    testing = save_deck(session, "Try", [DeckCard("Sol Ring", 1)])
+    decks.set_testing(session, testing, True)
+    decks.set_folder(session, real, decks.create_folder(session, "Tribal").id)
+    decks.proxy_all_missing(session, real)  # you own neither card
+    session.commit()
+
+    intro = deck_intro(session, real)
+    assert (intro["folder"], intro["proxies"], intro["testing"]) == ("Tribal", 2, False)
+    assert deck_intro(session, testing)["testing"] is True
+    assert [deck["name"] for deck in deck_roulette()] == ["Real"]  # the roulette skips the testing deck
+
+
 def test_the_deck_list_counts_proxies_and_filters_on_them(client):
     client.post("/api/collection", json={"name": "Sol Ring"})
     client.post("/deck", data={"decklist": "1 Sol Ring\n1 Fire // Ice", "deck_name": "With proxy", "action": "save"})
@@ -293,6 +309,7 @@ def test_the_deck_list_counts_proxies_and_filters_on_them(client):
     assert page.count('data-testing="1"') == 1
     # the randomizer knows about proxies, testing decks and folders
     assert 'id="random-noproxy"' in page and 'id="random-notesting"' in page
+    assert "/stream/intro" in page and "Show on stream" in page  # a pick can go straight to the stream overlay
     assert '"proxies": 1' in page and '"testing": true' in page
 
 

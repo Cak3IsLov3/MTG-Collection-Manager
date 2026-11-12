@@ -6,7 +6,7 @@ import datetime as dt
 from sqlmodel import Session, select
 
 from app.icons import icon
-from app.models import Card, Deck, DeckEntry, Game, utcnow
+from app.models import Card, Deck, DeckEntry, DeckFolder, Game, utcnow
 from app.scryfall import name_key
 from app.services.deck_insights import token_suggestions
 from app.services.decks import BRACKETS, deck_tokens
@@ -26,13 +26,16 @@ class StreamLinkError(Exception):
     pass
 
 
-def deck_intro(session: Session, deck: Deck) -> dict:
-    """What the deck intro on stream shows: commander, deck name, bracket and how the deck has done."""
-    stats = deck_plays(session).get(deck.id)
+def deck_intro(session: Session, deck: Deck, plays: dict | None = None) -> dict:
+    """What the deck intro on stream shows: commander, deck name, bracket, how the deck has done, its
+    folder and whether it is a testing deck or has proxies. `plays`: deck_plays(session), when you have it."""
+    stats = (deck_plays(session) if plays is None else plays).get(deck.id)
     record = None
     if stats and stats.played:
         record = f"{stats.wins} W · {stats.losses} L" + (f" · {stats.draws} D" if stats.draws else "")
     image = deck.commander_image if (deck.commander_image or "").startswith(server.ALLOWED_IMAGE_PREFIX) else None
+    folder = session.get(DeckFolder, deck.folder_id) if deck.folder_id else None
+    proxies = len(session.exec(select(DeckEntry.id).where(DeckEntry.deck_id == deck.id, DeckEntry.proxy == True)).all())  # noqa: E712
     return {
         "name": deck.name,
         "commander": deck.commander or None,
@@ -40,7 +43,19 @@ def deck_intro(session: Session, deck: Deck) -> dict:
         "bracket": f"Bracket {deck.bracket} · {BRACKETS[deck.bracket]}" if deck.bracket in BRACKETS else None,
         "record": record,
         "colors": "".join(c for c in (deck.colors or "") if c in "WUBRG"),
+        "testing": deck.testing,
+        "proxies": proxies,
+        "folder": folder.name if folder else None,
     }
+
+
+def deck_roulette() -> list[dict]:
+    """The decks the roulette on stream picks from: the intro of every saved deck except the ones you only test."""
+    from app.database import engine
+
+    with Session(engine) as session:
+        plays = deck_plays(session)
+        return [deck_intro(session, deck, plays) for deck in session.exec(select(Deck).order_by(Deck.id)) if not deck.testing]
 
 
 RESULT_REPEAT = dt.timedelta(minutes=2)

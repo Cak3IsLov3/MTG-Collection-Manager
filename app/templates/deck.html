@@ -1483,8 +1483,31 @@
     return item;
   }
 
+  // After a pick for one player: slide the intro of that deck in on the stream overlay.
+  function streamButton(deck) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "secondary small";
+    button.style.alignSelf = "center";  // the result is a row of cards: do not stretch the button to their height
+    const label = "📺 Show on stream";
+    button.textContent = label;
+    button.title = "Slide the deck intro of this deck in on the stream overlay";
+    button.addEventListener("click", async () => {
+      button.disabled = true;
+      try {
+        const response = await fetch(`/api/decks/${deck.id}/stream/intro`, { method: "POST" });
+        button.textContent = response.ok ? "📺 On stream ✓" : "📺 Could not show it";
+      } catch (error) {
+        button.textContent = "📺 Could not show it";
+      }
+      setTimeout(() => { button.textContent = label; button.disabled = false; }, 2500);
+    });
+    return button;
+  }
+
   function show(decks, settled) {
     result.replaceChildren(...decks.map((deck, i) => card(deck, decks.length > 1 ? `Player ${i + 1}` : "", settled)));
+    if (settled && decks.length === 1) result.append(streamButton(decks[0]));
   }
 
   goButton.addEventListener("click", () => {

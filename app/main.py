@@ -10,7 +10,7 @@ from app.database import init_db
 from app.deps import close_clients
 from app.jobs import start_scheduler
 from app.routers import api, pages
-from app.services.stream_link import record_result, tonight_score
+from app.services.stream_link import deck_roulette, record_result, tonight_score
 from app.stream.server import create_app as create_stream_app
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -39,4 +39,5 @@ app.include_router(pages.router)
 stream_app = create_stream_app(get_settings().stream_state)
 stream_app.state.result_hook = record_result  # Victory! on stream also logs the game
 stream_app.state.tonight_hook = tonight_score  # tonight's score on stream
+stream_app.state.roulette_hook = deck_roulette  # the deck roulette picks from the saved decks
 app.mount("/stream", stream_app)

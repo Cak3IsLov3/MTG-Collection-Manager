@@ -1077,6 +1077,8 @@
         <div class="qrow">
           <button id="introBtn" class="primary" type="button" disabled
                   title="A bar with the commander, the deck name, its bracket and record slides in for a few seconds">▶ Show deck intro</button>
+          <button id="rouletteBtn" type="button"
+                  title="A reel of your saved decks spins on stream and stops at a random one, which gets its intro (not the decks you only test)">🎰 Deck roulette</button>
         </div>
         <span id="introDeck" class="note">Pick a deck under Add tokens first.</span>
         <div class="qrow result-row">
@@ -2561,6 +2563,10 @@
       ? await api("POST", `/api/decks/${encodeURIComponent(shownDeck.deck_id)}/stream/intro`)
       : await api("POST", ROOT + "/api/intro");
     if (ok) toast(`Intro of ${shownDeck.name} on stream`);
+  });
+
+  $("rouletteBtn").addEventListener("click", async () => {
+    if (await api("POST", ROOT + "/api/roulette")) toast("Deck roulette on stream");
   });
 
   const tally = (name, delta) => api("POST", `${ROOT}/api/tally/${name}`, { delta });

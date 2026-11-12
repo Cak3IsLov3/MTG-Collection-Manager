@@ -11,6 +11,7 @@ import functools
 import hashlib
 import json
 import os
+import random
 import re
 import secrets
 import tempfile
@@ -71,6 +72,7 @@ MAX_CASTS = 99
 MAX_STORM = 999
 TALLY_LIMITS = {"casts": MAX_CASTS, "storm": MAX_STORM}
 SPOTLIGHT_SECONDS = (2, 30)
+ROULETTE_NAMES = 12  # deck names that go round on the reel of the deck roulette
 
 
 # Stream Deck: every action at a plain address (/stream/sd/<action>), so the Website action that
@@ -89,7 +91,7 @@ STREAMDECK_ACTIONS = (
     ("clear", "Clear the board"),
 )
 # Still pressable, though not on the ready-made layout (keys set up earlier keep working).
-STREAMDECK_EXTRA = ("tracker-on", "tracker-off", "2d6", "draw")
+STREAMDECK_EXTRA = ("tracker-on", "tracker-off", "2d6", "draw", "roulette")
 STREAMDECK_PRESET_KEYS = 4
 MANA_SYMBOLS = ("W", "U", "B", "R", "G", "C")
 
@@ -319,6 +321,9 @@ class IntroIn(BaseModel):
     image_url: str | None = None
     bracket: str | None = Field(default=None, max_length=60)
     record: str | None = Field(default=None, max_length=60)
+    testing: bool = False  # a deck you only test
+    proxies: int = Field(default=0, ge=0, le=999)  # cards marked as a proxy
+    folder: str | None = Field(default=None, max_length=60)
 
     @field_validator("image_url")
     @classmethod
@@ -1022,6 +1027,8 @@ def create_app(state_path: Path | str = DEFAULT_STATE_PATH) -> FastAPI:
     app.state.result_hook = None
     # tonight_hook() returns {"wins": 2, "losses": 1, "draws": 0}: tonight's score, from the game log.
     app.state.tonight_hook = None
+    # roulette_hook() returns the intro (a dict like IntroIn) of every deck the deck roulette may pick.
+    app.state.roulette_hook = None
 
     def full_state() -> dict:
         """The tokens and the turn, and what the others may see of the playtest table."""
@@ -1231,6 +1238,18 @@ def create_app(state_path: Path | str = DEFAULT_STATE_PATH) -> FastAPI:
         await hub.broadcast({"event": event})
         return event
 
+    @app.post("/api/roulette")
+    async def roulette():
+        """Deck roulette: a reel of deck names on stream that stops at a random deck, which then gets its intro."""
+        decks_to_pick = await asyncio.to_thread(app.state.roulette_hook) if app.state.roulette_hook else []
+        if not decks_to_pick:
+            raise HTTPException(404, "no deck to pick from: save a deck first")
+        winner = random.choice(decks_to_pick)
+        names = [deck["name"] for deck in random.sample(decks_to_pick, min(len(decks_to_pick), ROULETTE_NAMES))]
+        event = {"type": "roulette", "names": names, "winner": IntroIn(**winner).model_dump()}
+        await hub.broadcast({"event": event})
+        return event
+
     @app.post("/api/result")
     async def game_result(body: ResultIn):
         """The game is over: Victory!, GG or Draw on stream, and the game in the log."""
@@ -1410,6 +1429,8 @@ def create_app(state_path: Path | str = DEFAULT_STATE_PATH) -> FastAPI:
             return await simple[action]()
         if action == "intro":
             return await intro(None)
+        if action == "roulette":
+            return await roulette()
         if action == "new-game":
             return await set_turn(TurnPatch(on=True, number=1, phase="untap", casts=0, storm=0))
         if action in ("tracker-on", "tracker-off"):

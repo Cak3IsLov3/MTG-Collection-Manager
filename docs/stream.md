@@ -229,6 +229,12 @@ The **Show on stream** block on the Board tab:
   name, the commander, its bracket and your record with it from the game log (e.g. "4 W · 3 L").
   It shows by itself when you press **▶ Play** on a deck; **▶ Show deck intro** shows it again.
   For a deck from Archidekt or Moxfield it shows the deck name.
+  For a saved deck it also shows chips for its folder, a "testing deck" and how many cards you
+  marked as a proxy.
+- **Deck roulette**: **🎰 Deck roulette** (or the Stream Deck key `/stream/sd/roulette`) spins a reel
+  of your saved decks on stream. It slows down and stops at a random deck, which then gets its deck
+  intro. The decks you only test are left out. On the Decks page the randomizer has a
+  **📺 Show on stream** button for a pick.
 - **Commander tax & storm**: **♛ Cast commander** (or **K**) counts your commander casts; the
   overlay shows "Commander tax +4 · 2× cast". **⚡ Spell cast** (or **X**) counts the spells of this
   turn for storm and goes back to 0 every new turn. **−** (or **Shift+K** / **Shift+X**) takes one
