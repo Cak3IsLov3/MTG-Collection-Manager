@@ -1,8 +1,9 @@
 import re
 
 import pytest
+from sqlmodel import select
 
-from app.models import Deck
+from app.models import Deck, DeckEntry
 from app.services import decks
 from app.services.collection import add_card_by_name, collection_rows
 from app.services.decks import DeckCard, DeckError, deck_summaries, save_deck, saved_deck_rows
@@ -201,6 +202,80 @@ def test_the_proxy_buttons_are_on_the_deck_page(client):
     page = client.get(f"/decks/{deck_id}").text
     assert "you own it now" not in page and "Use my copies for" not in page
     assert client.post("/decks/999/proxy-all").status_code == 200  # redirects to the list with an error
+
+
+async def test_two_decks_are_compared_card_by_card(session, scryfall):
+    await add_card_by_name(session, scryfall, "Sol Ring", quantity=1)
+    first = save_deck(session, "First", [DeckCard("Sol Ring", 1), DeckCard("Fire // Ice", 1), DeckCard("Lim-Dûl's Vault", 1)])
+    second = save_deck(session, "Second", [DeckCard("Sol Ring", 1), DeckCard("Fire", 1), DeckCard("Arcane Signet", 2)])
+    session.commit()
+
+    result = decks.compare_decks(session, first, second)
+    shared = {card.name: card for card in result.shared}
+    assert sorted(shared) == ["Fire // Ice", "Sol Ring"]  # Fire is one half of Fire // Ice
+    assert shared["Sol Ring"].short == 1  # both want it, you own one
+    assert shared["Fire // Ice"].owned == 0 and shared["Fire // Ice"].short == 2
+    assert result.only_a == [("Lim-Dûl's Vault", 1)] and result.only_b == [("Arcane Signet", 2)]
+    assert (result.percent_of("a"), result.percent_of("b")) == (67, 67)
+
+    # a proxy in one of the decks is no fight over copies
+    entry = next(e for e in session.exec(select(DeckEntry).where(DeckEntry.deck_id == second.id)) if e.name == "Sol Ring")
+    decks.set_proxy(session, second, entry.id, True)
+    session.commit()
+    assert {c.name: c.short for c in decks.compare_decks(session, first, second).shared}["Sol Ring"] == 0
+
+
+async def test_a_card_moves_to_another_deck(session, scryfall):
+    first = save_deck(session, "First", [DeckCard("Marwyn, the Nurturer", 1, commander=True), DeckCard("Sol Ring", 1),
+                                         DeckCard("Arcane Signet", 2)])
+    second = save_deck(session, "Second", [DeckCard("Arcane Signet", 1)])
+    session.commit()
+    entries = {e.name: e for e in session.exec(select(DeckEntry).where(DeckEntry.deck_id == first.id))}
+
+    assert decks.move_card(session, first, entries["Sol Ring"].id, second) == "Moved 1× Sol Ring to Second"
+    decks.move_card(session, first, entries["Arcane Signet"].id, second)  # added to the one the deck has
+    session.commit()
+    assert {r.name: r.needed for r in saved_deck_rows(session, first)} == {"Marwyn, the Nurturer": 1}
+    assert {r.name: r.needed for r in saved_deck_rows(session, second)} == {"Sol Ring": 1, "Arcane Signet": 3}
+
+    with pytest.raises(DeckError):
+        decks.move_card(session, first, entries["Marwyn, the Nurturer"].id, second)  # the commander stays
+    with pytest.raises(DeckError):
+        decks.move_card(session, second, entries["Sol Ring"].id, first)  # not a card of that deck
+    with pytest.raises(DeckError):
+        decks.move_card(session, first, entries["Marwyn, the Nurturer"].id, first)
+
+
+def test_the_export_can_leave_the_proxies_out(client):
+    client.post("/deck", data={"decklist": "1 Sol Ring\n1 Fire // Ice", "deck_name": "Mine", "action": "save"})
+    deck_id = client.get("/api/decks").json()[0]["id"]
+    assert "without_proxies" not in client.get(f"/decks/{deck_id}").text  # nothing is marked yet
+
+    client.post(f"/decks/{deck_id}/proxy-all")
+    assert "export.txt?without_proxies=1" in client.get(f"/decks/{deck_id}").text
+    everything = client.get(f"/decks/{deck_id}/export.txt").text
+    real_only = client.get(f"/decks/{deck_id}/export.txt?without_proxies=1").text
+    assert "Sol Ring" in everything and "Fire // Ice" in everything
+    assert "Sol Ring" not in real_only and "Fire // Ice" not in real_only and "// Mine" in real_only
+
+
+def test_the_compare_page_and_the_move_menu(client):
+    client.post("/api/collection", json={"name": "Sol Ring"})
+    client.post("/deck", data={"decklist": "1 Sol Ring\n1 Fire // Ice", "deck_name": "First", "action": "save"})
+    client.post("/deck", data={"decklist": "1 Sol Ring\n1 Arcane Signet", "deck_name": "Second", "action": "save"})
+    ids = {d["name"]: d["id"] for d in client.get("/api/decks").json()}
+
+    assert 'class="deck-compare"' in client.get("/deck").text
+    page = client.get(f"/deck/compare?a={ids['First']}&b={ids['Second']}").text
+    assert "Only in First (1)" in page and "Only in Second (1)" in page and "1 short" in page
+    assert "Pick two different decks" in client.get(f"/deck/compare?a={ids['First']}&b={ids['First']}", follow_redirects=True).text
+
+    deck_page = client.get(f"/decks/{ids['First']}").text
+    assert "⇄ Compare with…" in deck_page and "Move to…" in deck_page
+    entry_id = int(re.search(r'action="/decks/\d+/cards/(\d+)/move"', deck_page).group(1))
+    moved = client.post(f"/decks/{ids['First']}/cards/{entry_id}/move", data={"to": str(ids["Second"])}, follow_redirects=True).text
+    assert "Moved 1×" in moved
+    assert client.post(f"/decks/{ids['First']}/cards/{entry_id}/move", data={"to": ""}, follow_redirects=True).text.count("Pick the deck") == 1
 
 
 def test_the_deck_list_counts_proxies_and_filters_on_them(client):

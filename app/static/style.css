@@ -1027,3 +1027,6 @@ a.group-chip:hover { border-color: var(--accent); color: var(--text); }
 
 .testing-panel { margin-top: 16px; padding-top: 12px; border-top: 1px dashed var(--border, #2a3340); }
 .testing-panel p { margin: 0 0 8px; }
+
+.compare-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+@media (max-width: 800px) { .compare-columns { grid-template-columns: 1fr; } }

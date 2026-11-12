@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}Compare · {{ comparison.a.name }} / {{ comparison.b.name }} · MTG Collection Manager{% endblock %}
+
+{% macro card_list(cards) %}
+  {% if cards %}
+  <table>
+    {% for name, count in cards %}<tr><td data-card-name="{{ name }}">{{ name }}</td><td class="num">{{ count }}×</td></tr>{% endfor %}
+  </table>
+  {% else %}<p class="muted">Nothing: every card is in the other deck too.</p>{% endif %}
+{% endmacro %}
+
+{% block content %}
+{% set c = comparison %}
+<div class="toolbar">
+  <h1>Compare decks</h1>
+  <div class="actions">
+    <a href="/decks/{{ c.a.id }}">{{ c.a.name }}</a>
+    <a href="/decks/{{ c.b.id }}">{{ c.b.name }}</a>
+    <a href="/deck">← All decks</a>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="deck-stats-row">
+    <div class="mini-stat">
+      <div class="label">In both decks</div>
+      <div class="value">{{ c.shared | length }}</div>
+      <div class="sub">different cards</div>
+    </div>
+    <div class="mini-stat">
+      <div class="label">{{ c.a.name }}</div>
+      <div class="value">{{ c.percent_of('a') }}%</div>
+      <div class="sub">is also in {{ c.b.name }}</div>
+    </div>
+    <div class="mini-stat">
+      <div class="label">{{ c.b.name }}</div>
+      <div class="value">{{ c.percent_of('b') }}%</div>
+      <div class="sub">is also in {{ c.a.name }}</div>
+    </div>
+    {% set short = c.shared | rejectattr('proxy') | selectattr('short') | list %}
+    <div class="mini-stat">
+      <div class="label">Fighting over copies</div>
+      <div class="value">{{ short | length }}</div>
+      <div class="sub">cards you own too few of for both</div>
+    </div>
+  </div>
+</div>
+
+<div class="panel table-wrap">
+  <h2>In both decks ({{ c.shared | length }})</h2>
+  {% if c.shared %}
+  <table>
+    <tr><th class="card-col">Card</th><th class="num">{{ c.a.name }}</th><th class="num">{{ c.b.name }}</th><th class="num">You own</th><th></th></tr>
+    {% for card in c.shared %}
+    <tr>
+      <td data-card-name="{{ card.name }}">{{ card.name }}</td>
+      <td class="num">{{ card.in_a }}</td>
+      <td class="num">{{ card.in_b }}</td>
+      <td class="num">{{ card.owned }}</td>
+      <td>{% if card.proxy %}<span class="badge proxy-mark">⎙ proxy</span>
+        {% elif card.short %}<span class="badge warn" title="Both decks want it, but you own too few copies">{{ card.short }} short</span>
+        {% else %}<span class="badge hit">enough</span>{% endif %}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}<p class="muted">These decks have no card in common.</p>{% endif %}
+</div>
+
+<div class="compare-columns">
+  <div class="panel table-wrap">
+    <h2>Only in {{ c.a.name }} ({{ c.only_a | length }})</h2>
+    {{ card_list(c.only_a) }}
+  </div>
+  <div class="panel table-wrap">
+    <h2>Only in {{ c.b.name }} ({{ c.only_b | length }})</h2>
+    {{ card_list(c.only_b) }}
+  </div>
+</div>
+{% endblock %}

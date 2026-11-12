@@ -46,6 +46,18 @@
   {% if source and source.card.image_url %}<img class="thumb" src="{{ source.card.image_url }}" alt="" loading="lazy">{% endif %}
 {% endmacro %}
 
+{% macro move_form(row) %}
+  {% if deck and row.entry_id and summaries | length > 1 %}
+  <form class="inline" method="post" action="/decks/{{ deck.id }}/cards/{{ row.entry_id }}/move">
+    <select name="to" class="small" aria-label="Move {{ row.name }} to another deck" title="Move this card to another deck"
+            onchange="if (this.value) this.form.submit()">
+      <option value="">Move to…</option>
+      {% for s in summaries if s.deck.id != deck.id %}<option value="{{ s.deck.id }}">{{ s.deck.name }}</option>{% endfor %}
+    </select>
+  </form>
+  {% endif %}
+{% endmacro %}
+
 {% macro combo_cards(combo) %}{% for name in combo.cards %}<span data-card-name="{{ name }}">{{ name }}</span>{{ ' + ' if not loop.last }}{% endfor %}{% endmacro %}
 
 {% block content %}
@@ -106,7 +118,20 @@
     </form>
     <a class="button-link" href="/table?deck={{ deck.id }}" title="Life, poison and commander damage for the table, with this deck chosen">♥ Life counter</a>
     <a class="button-link" href="/decks/{{ deck.id }}/export.txt" title="Download this deck as a text list for Archidekt or Moxfield">⤓ Export list</a>
+    {% if rows | selectattr('proxy') | list %}
+    <a class="button-link" href="/decks/{{ deck.id }}/export.txt?without_proxies=1" title="The same list, without the cards you marked as a proxy">⤓ Without proxies</a>
+    {% endif %}
     <a class="button-link" href="/decks/{{ deck.id }}/proxies" title="A printable sheet of the cards you still miss, to play-test with">⎙ Proxies</a>
+    {% if summaries | length > 1 %}
+    <form class="inline" method="get" action="/deck/compare">
+      <input type="hidden" name="a" value="{{ deck.id }}">
+      <select name="b" class="small" aria-label="Compare this deck with another deck" title="See which cards this deck shares with another deck"
+              onchange="if (this.value) this.form.submit()">
+        <option value="">⇄ Compare with…</option>
+        {% for s in summaries if s.deck.id != deck.id %}<option value="{{ s.deck.id }}">{{ s.deck.name }}</option>{% endfor %}
+      </select>
+    </form>
+    {% endif %}
     <form class="inline" method="post" action="/decks/{{ deck.id }}/delete" data-confirm="Click again to delete">
       <button class="secondary small">Delete deck</button>
     </form>
@@ -252,6 +277,17 @@
     </div>
     {% endfor %}
   </details>
+  {% if summaries | length > 1 %}
+  <details class="deck-compare">
+    <summary><b>Compare two decks</b> <span class="muted">· which cards they share and which only one plays</span></summary>
+    <form class="row" method="get" action="/deck/compare">
+      <select name="a" aria-label="First deck">{% for s in summaries %}<option value="{{ s.deck.id }}">{{ s.deck.name }}</option>{% endfor %}</select>
+      <span class="muted">⇄</span>
+      <select name="b" aria-label="Second deck">{% for s in summaries %}<option value="{{ s.deck.id }}" {{ 'selected' if loop.index == 2 }}>{{ s.deck.name }}</option>{% endfor %}</select>
+      <button class="small">Compare</button>
+    </form>
+  </details>
+  {% endif %}
   {% set linked = summaries | selectattr('deck.archidekt_id') | list | length %}
   <form class="row" method="post" action="/deck/sync"
         onsubmit="const b = this.querySelector('button'); b.disabled = true; b.textContent = 'Checking Archidekt…';">
@@ -992,6 +1028,7 @@
         <button form="deck-form" name="proxy" value="{{ row.entry_id }}" class="secondary small"
                 title="Mark this card as a proxy: it counts as in the deck without a copy of your collection">Proxy</button>
         {% endif %}
+        {{ move_form(row) }}
       </td>
       {% endif %}
     </tr>
@@ -1057,6 +1094,7 @@
         <button form="deck-form" name="proxy" value="{{ row.entry_id }}" class="secondary small"
                 title="Mark this card as a proxy: it counts as in the deck without a copy of your collection">Proxy</button>
         {% endif %}
+        {{ move_form(row) }}
       </td>
     </tr>
     {% endfor %}

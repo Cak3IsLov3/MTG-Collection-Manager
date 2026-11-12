@@ -114,6 +114,12 @@ Press **▶ Play** on a deck and the stream screen opens with every token that d
 
 ![The randomizer with a folder to pick from, No proxies and Skip testing decks: here a deck from the Tribal folder without proxies](docs/decks-random-options.jpg)
 
+![Two decks compared: how many cards they share and how much of each deck that is, the shared cards with how many copies you own (a proxy or "short" when both decks want more than you have), and the cards only one of them plays](docs/deck-compare.jpg)
+
+![The tools of a deck: Compare with... to pick another deck, and Without proxies next to Export list when the deck has proxy cards](docs/deck-tools-compare.jpg)
+
+![Every card of a deck has a Move to... menu: pick another deck and the card moves there](docs/deck-move-card.jpg)
+
 ![A saved deck: its commander, bracket and "Tokens owned", an overview of cards, value, deck size and games, and tabs for its cards, analysis, improvements, lands and tokens, games and value, and Archidekt](docs/deck.jpg)
 
 ![The cards of a deck as pictures: a stack per card type, missing cards grey, a foil copy shining](docs/deck-wall.jpg)
@@ -290,6 +296,9 @@ Press **▶ Play** on a deck and the stream screen opens with every token that d
 - "Testing deck" on a deck: tick it when you only want to try the deck out. It takes no copies from your collection, so every card counts as missing (the Proxies sheet prints them) and your real decks keep their cards
 - On a testing deck a line says how many cards it would get from your collection if it were a real deck, "What would it cost?" adds up the missing cards at today's price, and "Make this a real deck" (second click) turns it into a normal deck that takes its copies from your collection
 - "Proxy" on a card of a deck (in the deck list and under Still missing): the card counts as in the deck without taking a copy from your collection, gets a proxy label, is left out of the deck's value, and is always on the Proxies sheet. "Real card" turns it back. A card of an Archidekt deck keeps its mark when the deck is synced
+- Compare two decks (under the list of decks, or "Compare with..." on a deck): the cards they share, how much of each deck that is, which shared cards you own too few copies of for both, and the cards only one of them plays
+- "Move to..." on every card of a deck moves the card to another deck (added to the copies that deck has already; the commander stays)
+- "Without proxies" next to Export list: the same deck list without the cards you marked as a proxy
 - Proxies in the list of decks: a badge under every deck with the number of proxy cards, a filter "Only decks without proxies" and one that hides the testing decks
 - Folders show how many decks they hold, what those are worth together and how many are complete
 - The randomizer can pick from one folder, leave out decks with proxies ("No proxies") and skip testing decks

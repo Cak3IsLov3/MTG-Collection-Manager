@@ -991,6 +991,30 @@ def saved_deck_make_real(deck_id: int, session: Session = Depends(get_session)):
     )
 
 
+@router.get("/deck/compare")
+def deck_compare_page(request: Request, a: int = 0, b: int = 0, session: Session = Depends(get_session)):
+    first, second = session.get(Deck, a), session.get(Deck, b)
+    if first is None or second is None or first.id == second.id:
+        return redirect("/deck", "Pick two different decks to compare", error=True)
+    return render(request, "deck_compare.html", comparison=decks.compare_decks(session, first, second))
+
+
+@router.post("/decks/{deck_id}/cards/{entry_id}/move")
+def saved_deck_move_card(deck_id: int, entry_id: int, to: str = Form(""), session: Session = Depends(get_session)):
+    """The "Move to…" menu of a card: put it in another deck."""
+    deck = session.get(Deck, deck_id)
+    target = session.get(Deck, int(to)) if to.isdigit() else None
+    if deck is None or target is None:
+        return redirect(f"/decks/{deck_id}", "Pick the deck to move the card to", error=True)
+    try:
+        message = decks.move_card(session, deck, entry_id, target)
+    except decks.DeckError as exc:
+        session.rollback()
+        return redirect(f"/decks/{deck_id}", str(exc), error=True)
+    session.commit()
+    return redirect(f"/decks/{deck_id}", message)
+
+
 @router.post("/decks/{deck_id}/proxy-all")
 def saved_deck_proxy_all(deck_id: int, session: Session = Depends(get_session)):
     """The "Add all cards as proxy" button under Still missing."""
@@ -1162,12 +1186,12 @@ def _download_name(name: str) -> str:
 
 
 @router.get("/decks/{deck_id}/export.txt")
-def saved_deck_export(deck_id: int, session: Session = Depends(get_session)):
-    """The deck as a text list for Archidekt or Moxfield."""
+def saved_deck_export(deck_id: int, without_proxies: bool = False, session: Session = Depends(get_session)):
+    """The deck as a text list for Archidekt or Moxfield, with or without the cards marked as proxy."""
     deck = session.get(Deck, deck_id)
     if deck is None:
         raise HTTPException(status_code=404, detail="Deck not found")
-    text = deck_insights.export_text(session, deck, decks.saved_deck_rows(session, deck))
+    text = deck_insights.export_text(session, deck, decks.saved_deck_rows(session, deck), without_proxies)
     filename = quote(f"{_download_name(deck.name)}.txt")
     return PlainTextResponse(text, headers={"Content-Disposition": f"attachment; filename*=UTF-8''{filename}"})
 

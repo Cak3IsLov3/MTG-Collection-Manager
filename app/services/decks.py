@@ -1195,6 +1195,79 @@ def set_assigned(session: Session, deck: Deck, entry_id: int, assigned: bool) ->
     return entry
 
 
+def move_card(session: Session, deck: Deck, entry_id: int, target: Deck) -> str:
+    """Move a card from `deck` to the deck `target`; it is added to the copies the target already has."""
+    entry = session.get(DeckEntry, entry_id)
+    if entry is None or entry.deck_id != deck.id:
+        raise DeckError("That card is not in this deck")
+    if target.id == deck.id:
+        raise DeckError("Pick another deck to move the card to")
+    if deck.commander and name_key(deck.commander) == name_key(entry.name):
+        raise DeckError(f"{entry.name} is the commander of {deck.name}: choose another commander first")
+    existing = next(
+        (e for e in session.exec(select(DeckEntry).where(DeckEntry.deck_id == target.id)) if _names(e.name) & _names(entry.name)),
+        None,
+    )
+    if existing is None:
+        copy = DeckEntry(**entry.model_dump(exclude={"id", "deck_id"}), deck_id=target.id)
+        copy.unassigned = False
+        session.add(copy)
+    else:
+        existing.quantity += entry.quantity
+        session.add(existing)
+    for pick in session.exec(select(DeckPick).where(DeckPick.deck_entry_id == entry.id)).all():
+        session.delete(pick)
+    session.delete(entry)
+    for changed in (deck, target):
+        changed.colors = None  # worked out again from the cards
+        session.add(changed)
+    session.flush()
+    return f"Moved {entry.quantity}× {entry.name} to {target.name}"
+
+
+@dataclass
+class SharedCard:
+    name: str
+    in_a: int
+    in_b: int
+    owned: int
+    proxy: bool = False  # a proxy in one of the decks
+
+    @property
+    def short(self) -> int:
+        """Copies missing if both decks want to play it for real."""
+        return 0 if self.proxy else max(0, self.in_a + self.in_b - self.owned)
+
+
+@dataclass
+class DeckComparison:
+    a: Deck
+    b: Deck
+    shared: list[SharedCard]
+    only_a: list[tuple[str, int]]
+    only_b: list[tuple[str, int]]
+
+    def percent_of(self, side: str) -> int:
+        """How much of deck `side` ("a" or "b") is also in the other deck."""
+        total = len(self.shared) + len(self.only_a if side == "a" else self.only_b)
+        return round(len(self.shared) / total * 100) if total else 0
+
+
+def compare_decks(session: Session, a: Deck, b: Deck) -> DeckComparison:
+    """Which cards two decks have in common and which only one of them plays."""
+    pool = _CardPool(session)
+    rows_b = pool.rows(deck_id=b.id)
+    shared, only_a = [], []
+    for row in pool.rows(deck_id=a.id):
+        match = next((other for other in rows_b if _names(other.name) & _names(row.name)), None)
+        if match is None:
+            only_a.append((row.name, row.needed))
+            continue
+        rows_b.remove(match)
+        shared.append(SharedCard(row.name, row.needed, match.needed, row.owned, row.proxy or match.proxy))
+    return DeckComparison(a, b, shared, only_a, [(row.name, row.needed) for row in rows_b])
+
+
 def set_proxy(session: Session, deck: Deck, entry_id: int, proxy: bool) -> DeckEntry:
     """Mark a card of a deck as a proxy (it counts as there but takes no copy from the collection), or as real again."""
     entry = session.get(DeckEntry, entry_id)

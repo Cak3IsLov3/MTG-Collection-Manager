@@ -538,10 +538,13 @@ def deck_stats(session: Session, deck: Deck) -> DeckStats:
     return stats
 
 
-def export_text(session: Session, deck: Deck, rows: list[DeckRow]) -> str:
+def export_text(session: Session, deck: Deck, rows: list[DeckRow], without_proxies: bool = False) -> str:
     """The deck as a text list Archidekt and Moxfield can import: "1 Sol Ring (cmm) 410", the
-    commander first, then the other cards, the basic lands and the tokens."""
+    commander first, then the other cards, the basic lands and the tokens. The cards you marked as a
+    proxy are left out with `without_proxies`."""
     commander = name_key(deck.commander) if deck.commander else None
+    if without_proxies:
+        rows = [row for row in rows if not row.proxy]
 
     def line(row: DeckRow) -> str:
         printing = f" ({row.set_code.upper()}) {row.collector_number or ''}".rstrip() if row.set_code else ""
