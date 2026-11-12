@@ -203,6 +203,39 @@ def test_the_proxy_buttons_are_on_the_deck_page(client):
     assert client.post("/decks/999/proxy-all").status_code == 200  # redirects to the list with an error
 
 
+def test_the_deck_list_counts_proxies_and_filters_on_them(client):
+    client.post("/api/collection", json={"name": "Sol Ring"})
+    client.post("/deck", data={"decklist": "1 Sol Ring\n1 Fire // Ice", "deck_name": "With proxy", "action": "save"})
+    client.post("/deck", data={"decklist": "1 Sol Ring", "deck_name": "Real", "action": "save"})
+    client.post("/deck", data={"decklist": "1 Fire // Ice", "deck_name": "Try", "action": "save", "testing": "on"})
+    with_proxy = next(d["id"] for d in client.get("/api/decks").json() if d["name"] == "With proxy")
+    client.post(f"/decks/{with_proxy}/proxy-all")
+
+    page = client.get("/deck").text
+    assert "⎙ 1 proxy</span>" in page and page.count('class="badge proxy-mark"') == 1
+    assert 'id="deck-noproxy-filter"' in page and 'id="deck-notesting-filter"' in page
+    assert page.count('data-proxies="0"') == 2 and page.count('data-proxies="1"') == 1
+    assert page.count('data-testing="1"') == 1
+    # the randomizer knows about proxies, testing decks and folders
+    assert 'id="random-noproxy"' in page and 'id="random-notesting"' in page
+    assert '"proxies": 1' in page and '"testing": true' in page
+
+
+def test_a_folder_shows_how_many_decks_it_holds_and_what_they_are_worth(client):
+    client.post("/api/collection", json={"name": "Sol Ring"})
+    client.post("/deck", data={"decklist": "1 Sol Ring", "deck_name": "Complete", "action": "save"})
+    client.post("/deck", data={"decklist": "1 Fire // Ice", "deck_name": "Missing", "action": "save"})
+    client.post("/deck/folders", data={"name": "Tribal"})
+    page = client.get("/deck").text
+    folder_id = int(re.search(r'action="/deck/folders/(\d+)/rename"', page).group(1))
+    for deck in client.get("/api/decks").json():
+        client.post(f"/decks/{deck['id']}/folder", data={"folder": str(folder_id)})
+
+    page = client.get("/deck").text
+    assert "2 decks · " in page and " · 1 complete" in page
+    assert 'id="random-folder"' in page and f'<option value="{folder_id}">' in page
+
+
 def test_a_card_is_marked_as_proxy_on_the_deck_page(client):
     client.post("/api/collection", json={"name": "Sol Ring"})
     client.post("/deck", data={"decklist": "1 Sol Ring\n1 Fire // Ice", "deck_name": "Mine", "action": "save"})

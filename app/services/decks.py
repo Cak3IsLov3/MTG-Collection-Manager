@@ -181,6 +181,7 @@ class DeckSummary:
     value: float = 0.0  # what the copies in this deck are worth
     basic_lands: int = 0
     tokens: int = 0  # tokens in its deck list (not counted as cards)
+    proxies: int = 0  # cards you marked as a proxy
 
     @property
     def uses_tokens(self) -> bool:
@@ -1603,6 +1604,7 @@ def deck_summaries(session: Session) -> list[DeckSummary]:
                 value=round(sum(row.value for row in rows), 2),
                 basic_lands=basics.get(deck.id, 0),
                 tokens=tokens.get(deck.id, 0),
+                proxies=sum(1 for row in rows if row.proxy),
             )
         )
     return summaries

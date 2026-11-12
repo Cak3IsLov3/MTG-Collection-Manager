@@ -710,6 +710,9 @@ def _deck_data(summaries: list[decks.DeckSummary], plays: dict | None = None) ->
             "played": plays[s.deck.id].played if s.deck.id in plays else 0,
             "days_since_played": plays[s.deck.id].days_since() if s.deck.id in plays else None,
             "played_tonight": s.deck.id in plays and plays[s.deck.id].played_tonight(),
+            "folder": s.deck.folder_id,
+            "proxies": s.proxies,
+            "testing": s.deck.testing,
         }
         for s in summaries
     ]

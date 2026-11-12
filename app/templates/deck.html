@@ -168,6 +168,8 @@
     </select>
     {% endif %}
     <label class="check muted"><input id="deck-complete-filter" type="checkbox">&nbsp;Only complete decks</label>
+    <label class="check muted"><input id="deck-noproxy-filter" type="checkbox">&nbsp;Only decks without proxies</label>
+    {% if summaries | selectattr('deck.testing') | list %}<label class="check muted"><input id="deck-notesting-filter" type="checkbox">&nbsp;Hide testing decks</label>{% endif %}
     <label class="check muted"><input id="deck-tokens-filter" type="checkbox">&nbsp;Only decks whose tokens I own</label>
     <span id="deck-filter-count" class="muted"></span>
   </div>
@@ -197,14 +199,15 @@
         data-colors="{{ '?' if s.deck.colors is none else s.deck.colors }}"
         data-group="{{ colour_group(s.deck.colors) or '' }}" data-group-order="{{ colour_order(s.deck.colors) }}"
         data-card-names="{{ (card_names | default({})).get(s.deck.id, []) | join('|') }}"
-        data-tokens="{{ 1 if s.uses_tokens else 0 }}" data-folder="{{ s.deck.folder_id or 'none' }}"
+        data-tokens="{{ 1 if s.uses_tokens else 0 }}" data-proxies="{{ s.proxies }}" data-testing="{{ 1 if s.deck.testing else 0 }}" data-folder="{{ s.deck.folder_id or 'none' }}"
         data-folder-name="{{ (folders | selectattr('id', 'equalto', s.deck.folder_id) | map(attribute='name') | first) if s.deck.folder_id else '' }}"
         {% set p = (plays | default({})).get(s.deck.id) %}data-played="{{ p.played if p else 0 }}">
       <td class="deck-name-cell" style="--deck-colours: linear-gradient(180deg, {{ colour_gradient(s.deck.colors) }})">{% if s.deck.commander_image %}<img class="thumb commander-thumb" src="{{ s.deck.commander_image }}" alt="" loading="lazy" title="{{ s.deck.commander }}">{% else %}<span class="commander-thumb empty"></span>{% endif %}
         <div><a href="/decks/{{ s.deck.id }}">{{ s.deck.name }}</a>
         <div class="muted small deck-hit" hidden></div>{% if s.deck.archidekt_id %} <span class="badge linked" title="Follows its deck on Archidekt">↻ Archidekt</span>{% endif %}
         {% if s.uses_tokens %}<span class="badge tokens" title="You have the tokens of this deck{% if s.tokens %} ({{ s.tokens }} on its list){% endif %}">✓ tokens owned</span>{% endif %}
-        {% if s.deck.testing %}<span class="badge" title="Only for testing: this deck takes no cards from your collection">⚗ testing</span>{% endif %}</div></td>
+        {% if s.deck.testing %}<span class="badge" title="Only for testing: this deck takes no cards from your collection">⚗ testing</span>{% endif %}
+        {% if s.proxies %}<span class="badge proxy-mark" title="{{ s.proxies }} card{{ 's' if s.proxies != 1 }} of this deck {{ 'are' if s.proxies != 1 else 'is' }} marked as a proxy">⎙ {{ s.proxies }} prox{{ 'ies' if s.proxies != 1 else 'y' }}</span>{% endif %}</div></td>
       <td class="folder-cell">
         <form class="inline" method="post" action="/decks/{{ s.deck.id }}/folder" data-keep-scroll>
           <select name="folder" class="small" aria-label="Folder of {{ s.deck.name }}" onchange="this.form.submit()">
@@ -241,7 +244,8 @@
         <input name="name" type="text" size="24" maxlength="60" value="{{ folder.name }}" aria-label="Name of folder {{ folder.name }}" required>
         <button class="secondary small">Rename</button>
       </form>
-      <span class="muted">{{ summaries | selectattr('deck.folder_id', 'equalto', folder.id) | list | length }} decks</span>
+      {% set inside = summaries | selectattr('deck.folder_id', 'equalto', folder.id) | list %}
+      <span class="muted">{{ inside | length }} deck{{ 's' if inside | length != 1 }} · {{ inside | sum(attribute='value') | eur }} · {{ inside | selectattr('complete') | list | length }} complete</span>
       <form class="inline" method="post" action="/deck/folders/{{ folder.id }}/delete" data-confirm="Click again to delete">
         <button class="secondary small" title="The decks in it stay, in no folder">Delete folder</button>
       </form>
@@ -269,7 +273,18 @@
       </select>
     </label>
     <label>Players<input id="random-players" class="qty" type="number" min="1" max="{{ summaries | length }}" step="1" value="1"></label>
+    {% if folders %}
+    <label>Folder
+      <select id="random-folder">
+        <option value="">Any folder</option>
+        {% for folder in folders %}<option value="{{ folder.id }}">📁 {{ folder.name }}</option>{% endfor %}
+        <option value="none">No folder</option>
+      </select>
+    </label>
+    {% endif %}
     <label class="check"><input id="random-complete" type="checkbox">&nbsp;Only decks I can build right now</label>
+    <label class="check" title="Decks with a card that is marked as a proxy are left out"><input id="random-noproxy" type="checkbox">&nbsp;No proxies</label>
+    {% if summaries | selectattr('deck.testing') | list %}<label class="check" title="Decks you only use for testing are left out"><input id="random-notesting" type="checkbox">&nbsp;Skip testing decks</label>{% endif %}
     <label class="check" title="Decks you have not played for a long time (or never) get a bigger chance"><input id="random-fresh" type="checkbox">&nbsp;Prefer decks I haven't played in a while</label>
     {% set tonight_count = deck_data | selectattr('played_tonight') | list | length %}
     <label class="check" title="Decks that are already in the game log for tonight are left out (until six in the morning it is still tonight)"><input id="random-tonight" type="checkbox">&nbsp;Skip decks played tonight{% if tonight_count %} <span class="muted">({{ tonight_count }})</span>{% endif %}</label>
@@ -1286,6 +1301,8 @@
   const groupFilter = document.getElementById("deck-group-filter");
   const tokensFilter = document.getElementById("deck-tokens-filter");
   const folderFilter = document.getElementById("deck-folder-filter") || { value: "", addEventListener() {} };
+  const noProxyFilter = document.getElementById("deck-noproxy-filter");
+  const noTestingFilter = document.getElementById("deck-notesting-filter") || { checked: false, addEventListener() {} };
   const deckListRows = [...document.querySelectorAll("#deck-list tr[data-bracket]")];
 
   const deckColours = colourFilter("deck", "deck-colors", "exact", () => filterDecks());
@@ -1317,6 +1334,8 @@
         (!groupFilter.value || row.dataset.group === groupFilter.value) &&
         (!folderFilter.value || row.dataset.folder === folderFilter.value) &&
         (!completeFilter.checked || row.dataset.complete === "1") &&
+        (!noProxyFilter.checked || row.dataset.proxies === "0") &&
+        (!noTestingFilter.checked || row.dataset.testing === "0") &&
         (!tokensFilter.checked || row.dataset.tokens === "1") &&
         deckColours.matches(row.dataset.colors);
       row.hidden = !match;
@@ -1331,7 +1350,7 @@
     if (deckSearch.value.trim()) url.searchParams.set("q", deckSearch.value.trim());
     else url.searchParams.delete("q");
     history.replaceState(null, "", url);
-    const filtered = bracketFilter.value || groupFilter.value || folderFilter.value || completeFilter.checked || tokensFilter.checked || deckColours.active() || words.length > 0;
+    const filtered = bracketFilter.value || groupFilter.value || folderFilter.value || completeFilter.checked || noProxyFilter.checked || noTestingFilter.checked || tokensFilter.checked || deckColours.active() || words.length > 0;
     document.getElementById("deck-filter-count").textContent = filtered ? `${shown} of ${deckListRows.length} decks` : "";
     document.getElementById("deck-filter-empty").hidden = shown > 0;
     document.getElementById("deck-list").hidden = shown === 0;
@@ -1346,6 +1365,8 @@
   groupFilter.addEventListener("change", filterDecks);
   folderFilter.addEventListener("change", filterDecks);
   completeFilter.addEventListener("change", filterDecks);
+  noProxyFilter.addEventListener("change", filterDecks);
+  noTestingFilter.addEventListener("change", filterDecks);
   tokensFilter.addEventListener("change", filterDecks);
   deckSearch.addEventListener("input", filterDecks);
   filterDecks();
@@ -1361,8 +1382,12 @@
     const bracket = document.getElementById("random-bracket").value;
     const completeOnly = document.getElementById("random-complete").checked;
     const skipTonight = document.getElementById("random-tonight").checked;
+    const folder = document.getElementById("random-folder")?.value || "";
+    const noProxy = document.getElementById("random-noproxy").checked;
+    const noTesting = document.getElementById("random-notesting")?.checked;
     return savedDecks.filter((d) => (!bracket || String(d.bracket) === bracket) && (!completeOnly || d.complete) &&
-      (!skipTonight || !d.played_tonight));
+      (!skipTonight || !d.played_tonight) && (!folder || String(d.folder ?? "none") === folder) &&
+      (!noProxy || d.proxies === 0) && (!noTesting || !d.testing));
   }
 
   function shuffled(list) {
