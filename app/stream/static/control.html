@@ -1101,6 +1101,26 @@
         </div>
       </div>
       <div class="qgroup">
+        <span class="qlabel">Poison, energy &amp; status</span>
+        <div class="qrow">
+          <button id="poisonMinus" class="icon" type="button" title="One poison counter back">−</button>
+          <button id="poisonPlus" class="tally-btn" type="button"
+                  title="You got a poison counter. At ten you lose: the pill on stream turns red.">☠ Poison<b id="poisonValue"></b></button>
+        </div>
+        <div class="qrow">
+          <button id="energyMinus" class="icon" type="button" title="One energy counter back">−</button>
+          <button id="energyPlus" class="tally-btn" type="button" title="You got an energy counter">⚡ Energy<b id="energyValue"></b></button>
+        </div>
+        <div class="qrow">
+          <button id="experienceMinus" class="icon" type="button" title="One experience counter back">−</button>
+          <button id="experiencePlus" class="tally-btn" type="button" title="You got an experience counter">✦ Experience<b id="experienceValue"></b></button>
+        </div>
+        <div class="qrow">
+          <button id="monarchBtn" class="tally-btn" type="button" title="You are the monarch: a crown pill on stream. Click again when you lose it.">👑 Monarch<b id="monarchValue"></b></button>
+          <button id="dayNightBtn" class="tally-btn" type="button" title="Day, then night, then neither: a pill on stream and a faint glow over the screen">☀ Day / night<b id="dayNightValue"></b></button>
+        </div>
+      </div>
+      <div class="qgroup">
         <span class="qlabel">Spotlight</span>
         <form id="spotForm" class="qrow">
           <input id="spotName" list="spotList" placeholder="A card from your deck, or any card" autocomplete="off"
@@ -1705,7 +1725,7 @@
                      onclick: () => api("POST", ROOT + "/api/turn/next") }),
       moreMenu([
         { text: "New game (turn 1)", onclick: async () => {
-            if (await sure("Start over at turn 1?")) api("PATCH", ROOT + "/api/turn", { number: 1, phase: "untap", on: true, casts: 0, storm: 0 });
+            if (await sure("Start over at turn 1?")) api("PATCH", ROOT + "/api/turn", { number: 1, phase: "untap", on: true, casts: 0, storm: 0, poison: 0, energy: 0, experience: 0, monarch: false, day_night: "off" });
           } },
         { text: "Hide tracker", onclick: () => api("PATCH", ROOT + "/api/turn", { on: false }) },
       ]),
@@ -2574,6 +2594,17 @@
   $("castsMinus").addEventListener("click", () => tally("casts", -1));
   $("stormPlus").addEventListener("click", () => tally("storm", 1));
   $("stormMinus").addEventListener("click", () => tally("storm", -1));
+  for (const name of ["poison", "energy", "experience"]) {
+    $(`${name}Plus`).addEventListener("click", () => tally(name, 1));
+    $(`${name}Minus`).addEventListener("click", () => tally(name, -1));
+  }
+  $("monarchBtn").addEventListener("click", () => {
+    api("PATCH", ROOT + "/api/turn", { monarch: !(lastState.turn && lastState.turn.monarch) });
+  });
+  $("dayNightBtn").addEventListener("click", () => {
+    const next = { none: "day", day: "night", night: "off" }[(lastState.turn && lastState.turn.day_night) || "none"];
+    api("PATCH", ROOT + "/api/turn", { day_night: next });
+  });
 
   function renderTally(turn) {
     const casts = (turn && turn.casts) || 0;
@@ -2582,6 +2613,13 @@
     $("stormValue").textContent = storm ? ` · ${storm}` : "";
     $("castsMinus").disabled = !casts;
     $("stormMinus").disabled = !storm;
+    for (const name of ["poison", "energy", "experience"]) {
+      const value = (turn && turn[name]) || 0;
+      $(`${name}Value`).textContent = value ? ` · ${value}` : "";
+      $(`${name}Minus`).disabled = !value;
+    }
+    $("monarchValue").textContent = turn && turn.monarch ? " · on" : "";
+    $("dayNightValue").textContent = turn && turn.day_night ? ` · ${turn.day_night}` : "";
   }
 
   // Spotlight: a card of your deck (in the printing you play), or any card from Scryfall.

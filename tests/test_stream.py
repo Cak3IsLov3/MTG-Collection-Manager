@@ -13,6 +13,10 @@ def token(name="Treasure", n=0):
     return {"name": name, "image_url": IMG.format(n)}
 
 
+# What the turn state holds besides the turn itself, on a quiet table.
+QUIET = {"poison": 0, "energy": 0, "experience": 0, "monarch": False, "day_night": None}
+
+
 @pytest.fixture
 def state_path(tmp_path):
     return tmp_path / "state.json"
@@ -828,7 +832,7 @@ def turn(client):
 
 
 def test_turn_starts_off(client):
-    assert turn(client) == {"on": False, "number": 1, "phase": "untap", "casts": 0, "storm": 0}
+    assert turn(client) == {"on": False, "number": 1, "phase": "untap", "casts": 0, "storm": 0, **QUIET}
 
 
 def test_next_phase_walks_through_the_turn(client):
@@ -875,7 +879,7 @@ def test_prev_phase(client):
 
 def test_patch_turn(client):
     client.patch("/api/turn", json={"on": True, "phase": "combat", "number": 5})
-    assert turn(client) == {"on": True, "number": 5, "phase": "combat", "casts": 0, "storm": 0}
+    assert turn(client) == {"on": True, "number": 5, "phase": "combat", "casts": 0, "storm": 0, **QUIET}
     client.patch("/api/turn", json={"on": False})
     assert turn(client)["on"] is False
     assert client.patch("/api/turn", json={"phase": "lunch"}).status_code == 422
@@ -895,13 +899,13 @@ def test_turn_survives_restart(state_path):
     with TestClient(create_app(state_path)) as c:
         c.patch("/api/turn", json={"on": True, "phase": "main2", "number": 4})
     with TestClient(create_app(state_path)) as c:
-        assert turn(c) == {"on": True, "number": 4, "phase": "main2", "casts": 0, "storm": 0}
+        assert turn(c) == {"on": True, "number": 4, "phase": "main2", "casts": 0, "storm": 0, **QUIET}
 
 
 def test_broken_turn_in_state_file(state_path):
     state_path.write_text('{"tokens": [], "turn": {"on": "yes", "number": -3, "phase": "nap"}}', encoding="utf-8")
     with TestClient(create_app(state_path)) as c:
-        assert turn(c) == {"on": False, "number": 1, "phase": "untap", "casts": 0, "storm": 0}
+        assert turn(c) == {"on": False, "number": 1, "phase": "untap", "casts": 0, "storm": 0, **QUIET}
 
 
 def test_pages_not_cached(client):
@@ -990,6 +994,74 @@ def test_spotlight_is_an_event_only(client):
     assert tokens(client) == []
 
 
+def test_poison_energy_and_experience_are_counted_like_commander_casts(client):
+    for name in ("poison", "energy", "experience"):
+        assert client.post(f"/api/tally/{name}").status_code == 200
+        client.post(f"/api/tally/{name}")
+        client.post(f"/api/tally/{name}", json={"delta": -1})
+        assert turn(client)[name] == 1
+        client.post(f"/api/tally/{name}", json={"delta": -5})
+        assert turn(client)[name] == 0  # never below 0
+    client.post("/api/tally/poison", json={"delta": 500})
+    assert turn(client)["poison"] == 99  # and a limit at the top
+    assert client.post("/api/tally/luck").status_code == 422
+    # the Stream Deck keys
+    client.get("/sd/poison")
+    client.get("/sd/energy")
+    client.get("/sd/energy")
+    client.get("/sd/experience")
+    client.get("/sd/energy-back")
+    assert (turn(client)["energy"], turn(client)["experience"]) == (1, 1)
+
+
+def test_monarch_and_day_night(client):
+    assert not turn(client)["monarch"] and turn(client)["day_night"] is None
+    client.patch("/api/turn", json={"monarch": True, "day_night": "night"})
+    assert turn(client)["monarch"] and turn(client)["day_night"] == "night"
+    assert client.patch("/api/turn", json={"day_night": "dusk"}).status_code == 422
+    client.get("/sd/monarch")
+    assert not turn(client)["monarch"]
+    client.get("/sd/day-night")  # night -> neither -> day -> night
+    assert turn(client)["day_night"] is None
+    client.get("/sd/day-night")
+    assert turn(client)["day_night"] == "day"
+    client.get("/sd/day-night")
+    assert turn(client)["day_night"] == "night"
+
+    # a new game starts clean
+    client.post("/api/tally/poison")
+    client.patch("/api/turn", json={"monarch": True})
+    client.get("/sd/new-game")
+    assert turn(client) == {"on": True, "number": 1, "phase": "untap", "casts": 0, "storm": 0, **QUIET}
+
+
+def test_the_board_adds_up_the_power_of_the_creature_tokens(client):
+    def add(name, how_many, power=None, toughness=None, image=0):
+        for _ in range(how_many):
+            client.post("/api/tokens", json={**token(name, image), "power": power, "toughness": toughness})
+
+    board = lambda: client.get("/api/state").json()["board"]  # noqa: E731
+    assert board() == {"tokens": 0, "power": 0}
+    add("Soldier", 3, "1", "1", 1)
+    add("Beast", 2, "3", "3", 2)
+    add("Construct", 1, "*", "*", 3)
+    add("Treasure", 4, image=4)
+    # 3 Soldiers (1 each) and 2 Beasts (3 each); the */* counts 0 and a Treasure is no creature
+    assert board() == {"tokens": 6, "power": 9}
+
+    soldiers = next(t for t in tokens(client) if t["name"] == "Soldier")["id"]
+    client.patch(f"/api/tokens/{soldiers}", json={"counter_delta": 2})  # three 3/3 Soldiers
+    assert board()["power"] == 15
+    client.patch(f"/api/tokens/{soldiers}", json={"counter_delta": -5})  # power never goes below 0
+    assert board()["power"] == 6
+
+    with client.websocket_connect("/ws") as ws:
+        ws.receive_json()
+        client.post("/api/attack-all")
+        event = ws.receive_json()["event"]
+    assert event["type"] == "attack" and event["power"] == 6 and len(event["ids"]) == 3
+
+
 def test_deck_intro(client):
     assert client.post("/api/intro").status_code == 404             # no deck yet
     intro = {"name": "Odric", "commander": "Odric, Lunarch Marshal", "image_url": "https://evil.example/x.jpg",
@@ -1060,7 +1132,7 @@ def test_streamdeck_keys_do_their_thing(client):
     client.get("/sd/next-phase")
     assert turn(client)["on"] and turn(client)["phase"] == "upkeep"
     client.get("/sd/new-game")
-    assert turn(client) == {"on": True, "number": 1, "phase": "untap", "casts": 0, "storm": 0}
+    assert turn(client) == {"on": True, "number": 1, "phase": "untap", "casts": 0, "storm": 0, **QUIET}
     assert client.get("/sd/undo").status_code == 200
     assert turn(client)["phase"] == "upkeep"
     client.get("/sd/clear")

@@ -70,7 +70,10 @@ MAX_TURN = 999
 # spells cast this turn (storm, back to 0 every new turn).
 MAX_CASTS = 99
 MAX_STORM = 999
-TALLY_LIMITS = {"casts": MAX_CASTS, "storm": MAX_STORM}
+MAX_STATUS = 99  # poison, energy and experience counters
+TALLY_LIMITS = {"casts": MAX_CASTS, "storm": MAX_STORM, "poison": MAX_STATUS, "energy": MAX_STATUS,
+                "experience": MAX_STATUS}
+DAY_NIGHT = ("day", "night")
 SPOTLIGHT_SECONDS = (2, 30)
 ROULETTE_NAMES = 12  # deck names that go round on the reel of the deck roulette
 
@@ -91,13 +94,15 @@ STREAMDECK_ACTIONS = (
     ("clear", "Clear the board"),
 )
 # Still pressable, though not on the ready-made layout (keys set up earlier keep working).
-STREAMDECK_EXTRA = ("tracker-on", "tracker-off", "2d6", "draw", "roulette")
+STREAMDECK_EXTRA = ("tracker-on", "tracker-off", "2d6", "draw", "roulette", "poison", "poison-back", "energy",
+                    "energy-back", "experience", "experience-back", "monarch", "day-night")
 STREAMDECK_PRESET_KEYS = 4
 MANA_SYMBOLS = ("W", "U", "B", "R", "G", "C")
 
 
 def default_turn() -> dict:
-    return {"on": False, "number": 1, "phase": "untap", "casts": 0, "storm": 0}
+    return {"on": False, "number": 1, "phase": "untap", **{name: 0 for name in TALLY_LIMITS},
+            "monarch": False, "day_night": None}
 
 
 def clean_turn(raw: Any) -> dict:
@@ -112,6 +117,10 @@ def clean_turn(raw: Any) -> dict:
         for name, limit in TALLY_LIMITS.items():
             if isinstance(raw.get(name), int) and 0 <= raw[name] <= limit:
                 turn[name] = raw[name]
+        if isinstance(raw.get("monarch"), bool):
+            turn["monarch"] = raw["monarch"]
+        if raw.get("day_night") in DAY_NIGHT:
+            turn["day_night"] = raw["day_night"]
     return turn
 MANUAL_PT = {"ge": -99, "le": 999}
 
@@ -288,6 +297,11 @@ class TurnPatch(BaseModel):
     number: int | None = Field(default=None, ge=1, le=MAX_TURN)
     casts: int | None = Field(default=None, ge=0, le=MAX_CASTS)
     storm: int | None = Field(default=None, ge=0, le=MAX_STORM)
+    poison: int | None = Field(default=None, ge=0, le=MAX_STATUS)
+    energy: int | None = Field(default=None, ge=0, le=MAX_STATUS)
+    experience: int | None = Field(default=None, ge=0, le=MAX_STATUS)
+    monarch: bool | None = None  # you are the monarch
+    day_night: Literal["day", "night", "off"] | None = None  # "off": neither
 
 
 class ResultIn(BaseModel):
@@ -350,6 +364,23 @@ class PresetIn(BaseModel):
 
 def is_creature(t: Token) -> bool:
     return t.kind == "card" and t.power is not None
+
+
+def stack_power(t: Token) -> int:
+    """The power of a whole stack: one token's power (a manual value, else the printed one) plus the
+    counters, times how many there are. A */* without a manual value counts as 0."""
+    printed = t.set_power if t.set_power is not None else t.power
+    try:
+        one = int(printed)
+    except (TypeError, ValueError):
+        return 0
+    return max(0, one + t.counters) * t.count
+
+
+def board_summary(tokens: list[Token]) -> dict:
+    """How many creature tokens are on the board and their power together."""
+    creatures = [t for t in tokens if is_creature(t)]
+    return {"tokens": sum(t.count for t in creatures), "power": sum(stack_power(t) for t in creatures)}
 
 
 def has_vigilance(t: Token) -> bool:
@@ -430,7 +461,8 @@ class TokenStore:
             raise
 
     def snapshot(self) -> dict:
-        return {"tokens": [t.model_dump() for t in self.tokens], "turn": dict(self.turn)}
+        return {"tokens": [t.model_dump() for t in self.tokens], "turn": dict(self.turn),
+                "board": board_summary(self.tokens)}
 
     def _find(self, token_id: str) -> Token:
         for t in self.tokens:
@@ -681,10 +713,13 @@ class TokenStore:
             self.turn["number"] = patch.number
         if patch.phase is not None:
             self.turn["phase"] = patch.phase
-        if patch.casts is not None:
-            self.turn["casts"] = patch.casts
-        if patch.storm is not None:
-            self.turn["storm"] = patch.storm
+        for name in TALLY_LIMITS:
+            if getattr(patch, name) is not None:
+                self.turn[name] = getattr(patch, name)
+        if patch.monarch is not None:
+            self.turn["monarch"] = patch.monarch
+        if patch.day_night is not None:
+            self.turn["day_night"] = None if patch.day_night == "off" else patch.day_night
         self._save()
 
     @mutating
@@ -1206,8 +1241,9 @@ def create_app(state_path: Path | str = DEFAULT_STATE_PATH) -> FastAPI:
         return await publish()
 
     @app.post("/api/tally/{name}")
-    async def tally(name: Literal["casts", "storm"], body: TallyIn | None = None):
-        """Commander cast (casts) or a spell for storm (storm): +1 by default, {"delta": -1} takes one back."""
+    async def tally(name: Literal["casts", "storm", "poison", "energy", "experience"], body: TallyIn | None = None):
+        """Commander cast (casts), a spell for storm (storm) or a poison, energy or experience counter:
+        +1 by default, {"delta": -1} takes one back."""
         delta = body.delta if body else 1
         value = store.tally(name, delta)
         await hub.broadcast({"event": {"type": "tally", "name": name, "value": value, "delta": delta}})
@@ -1289,14 +1325,16 @@ def create_app(state_path: Path | str = DEFAULT_STATE_PATH) -> FastAPI:
             raise HTTPException(422, "only creatures can attack")
         except PermissionError:
             raise HTTPException(409, "already tapped")
-        await hub.broadcast({"event": {"type": "attack", "ids": [token_id], "names": [token.name]}})
+        await hub.broadcast({"event": {"type": "attack", "ids": [token_id], "names": [token.name],
+                                       "power": stack_power(token)}})
         return await publish()
 
     @app.post("/api/attack-all")
     async def attack_all():
         ids = store.attack_all()
         if ids:
-            await hub.broadcast({"event": {"type": "attack", "ids": ids}})
+            power = sum(stack_power(t) for t in store.tokens if t.id in ids)
+            await hub.broadcast({"event": {"type": "attack", "ids": ids, "power": power}})
         return await publish()
 
     @app.post("/api/tokens/{token_id}/copy")
@@ -1432,13 +1470,22 @@ def create_app(state_path: Path | str = DEFAULT_STATE_PATH) -> FastAPI:
         if action == "roulette":
             return await roulette()
         if action == "new-game":
-            return await set_turn(TurnPatch(on=True, number=1, phase="untap", casts=0, storm=0))
+            return await set_turn(TurnPatch(on=True, number=1, phase="untap", casts=0, storm=0, poison=0, energy=0,
+                                            experience=0, monarch=False, day_night="off"))
         if action in ("tracker-on", "tracker-off"):
             return await set_turn(TurnPatch(on=action == "tracker-on"))
         if action == "tracker":
             return await set_turn(TurnPatch(on=not store.turn["on"]))
         if action in ("win", "loss", "draw"):
             return await game_result(ResultIn(result=action))
+        for name in ("poison", "energy", "experience"):
+            if action in (name, f"{name}-back"):
+                return await tally(name, TallyIn(delta=-1 if action.endswith("-back") else 1))
+        if action == "monarch":
+            return await set_turn(TurnPatch(monarch=not store.turn["monarch"]))
+        if action == "day-night":
+            following = {None: "day", "day": "night", "night": "off"}[store.turn["day_night"]]
+            return await set_turn(TurnPatch(day_night=following))
         if action in ("commander", "commander-back", "storm", "storm-back"):
             name = "casts" if action.startswith("commander") else "storm"
             return await tally(name, TallyIn(delta=-1 if action.endswith("-back") else 1))

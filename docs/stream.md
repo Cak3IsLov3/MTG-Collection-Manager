@@ -211,7 +211,10 @@ Draw, Main 1, Combat, Main 2, End), the current one lit up.
 - **⚔ Attack** (on creature stacks) taps the stack and makes it lunge forward
   on stream with a red glow. Creatures with vigilance attack without tapping.
   **⚔ Attack with all** does that for every untapped creature, with an
-  "Attack!" banner.
+  "Attack!" banner that also says how much power attacks ("Attack! · 10 power").
+- **Board power**: a pill at the bottom right adds up the power of your creature tokens ("Board
+  power 10 · 6 tokens"): the printed power or the one you set for a */* token, plus the +1/+1
+  counters, times the number of tokens. A */* without a set power counts 0.
 - **Copy one** and **Double (×2)** are in the **⋯** menu of a stack. Copies
   enter untapped and without counters, so they join a fresh stack (handy for
   Populate and token doublers).
@@ -240,6 +243,14 @@ The **Show on stream** block on the Board tab:
   turn for storm and goes back to 0 every new turn. **−** (or **Shift+K** / **Shift+X**) takes one
   back. **New game** in the turn tracker resets both. The pills sit at the same height as the turn
   tracker, on the right (`?tally=left` or `?tally=off` in the overlay URL).
+- **Poison, energy & status**: **☠ Poison**, **⚡ Energy** and **✦ Experience** count up (and with **−**
+  back, 99 at most) and show as pills on stream. The poison pill reads "7/10" and turns red and
+  pulses at ten ("lethal!"). **👑 Monarch** puts a crown pill on stream until you click it again.
+  **☀ Day / night** cycles day, night and neither: a pill, and a faint glow over the whole screen
+  (a warm glow from the top for day, a blue vignette for night; `?tint=off` in the overlay URL
+  keeps the pill and drops the glow). **New game** resets all of them. Stream Deck keys that are
+  not on the ready-made layout: `/stream/sd/poison`, `poison-back`, `energy`, `energy-back`,
+  `experience`, `experience-back`, `monarch` and `day-night`.
 - **Spotlight**: type a card (the cards of your deck are suggested, in the printing you play; any
   other card comes from Scryfall) and press **★ Show**: it appears big in the middle of the stream
   for 5 to 15 seconds. **Hide** takes it away sooner.
@@ -328,6 +339,8 @@ API directly:
 | Load a preset | `POST http://localhost:8017/stream/api/presets/Krenko/load` |
 | Cast commander | `POST http://localhost:8017/stream/api/tally/casts` |
 | Spell for storm | `POST http://localhost:8017/stream/api/tally/storm` |
+| A poison counter | `POST http://localhost:8017/stream/api/tally/poison` |
+| Monarch on or off | `GET http://localhost:8017/stream/sd/monarch` |
 | Deck intro | `POST http://localhost:8017/stream/api/intro` |
 | I won | `POST http://localhost:8017/stream/api/result` with `{"result": "win"}` |
 
@@ -473,10 +486,11 @@ Handy for hotkeys or a Stream Deck.
 | POST   | `/stream/api/mana/empty`        |                                       | remove all mana from the pool |
 | POST   | `/stream/api/turn/next`         |                                       | next phase (mana empties; after End a new turn, everything untaps) |
 | POST   | `/stream/api/turn/prev`         |                                       | previous phase |
-| PATCH  | `/stream/api/turn`              | `{"on": true}` / `{"phase": "combat"}` / `{"number": 1}` / `{"casts": 0, "storm": 0}` | show/hide the tracker, jump to a phase, set the turn or the tallies |
+| PATCH  | `/stream/api/turn`              | `{"on": true}` / `{"phase": "combat"}` / `{"number": 1}` / `{"casts": 0, "storm": 0}` / `{"poison": 0}` / `{"monarch": true}` / `{"day_night": "night"}` (`"day"`, `"night"` or `"off"`) | show/hide the tracker, jump to a phase, set the turn, the tallies, the monarch or day and night |
 | POST   | `/stream/api/untap`             |                                       | untap everything |
 | POST   | `/stream/api/tally/casts`       | none, or `{"delta": -1}`              | one commander cast more (or back); the tax is 2 per cast |
 | POST   | `/stream/api/tally/storm`       | none, or `{"delta": -1}`              | one spell more for storm (or back); 0 again every new turn |
+| POST   | `/stream/api/tally/poison` (`energy`, `experience`) | none, or `{"delta": -1}` | one more (or back) of that counter, 0 to 99 |
 | POST   | `/stream/api/spotlight`         | `{"name": "...", "image_url": "...", "seconds": 7}` | show a card big on stream (2–30 seconds) |
 | DELETE | `/stream/api/spotlight`         |                                       | take the spotlight card away |
 | GET    | `/stream/api/tonight`           |                                       | tonight's wins, losses and draws |

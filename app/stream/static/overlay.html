@@ -458,6 +458,28 @@
   .tally.storm .ico { background: linear-gradient(180deg, #9fd0ff, #3b74d6); color: #0b1830; }
   .tally.storm .num { color: #9fd0ff; }
   .tally.bump { animation: bump .45s var(--ease); }
+  .tally.poison .ico { background: linear-gradient(180deg, #c4f58c, #5ea62a); color: #10220a; }
+  .tally.poison .num { color: #c4f58c; }
+  .tally.poison.lethal { border-color: rgba(255, 90, 70, .9); animation: lethal 1s ease-in-out infinite alternate; }
+  .tally.poison.lethal .num, .tally.poison.lethal .sub { color: #ff8a7a; }
+  .tally.energy .ico { background: linear-gradient(180deg, #9cf3e2, #2fb39c); color: #05231e; }
+  .tally.energy .num { color: #9cf3e2; }
+  .tally.experience .ico { background: linear-gradient(180deg, #dcc4ff, #8a57e0); color: #1d0b3a; }
+  .tally.experience .num { color: #dcc4ff; }
+  .tally.monarch .ico { background: linear-gradient(180deg, #f8d988, #c99a2e); color: #2a1d04; }
+  .tally.monarch .lbl { color: #f3cc6e; }
+  .tally.day .ico { background: linear-gradient(180deg, #ffe08a, #f0a63a); color: #2d1c02; }
+  .tally.day .lbl { color: #ffe08a; }
+  .tally.night .ico { background: linear-gradient(180deg, #b9c8ff, #5a6fd6); color: #0b1236; }
+  .tally.night .lbl { color: #b9c8ff; }
+  .tally.board .ico { background: linear-gradient(180deg, #ffb3a3, #e0553d); color: #320b04; }
+  .tally.board .num { color: #ffb3a3; }
+  @keyframes lethal { from { box-shadow: 0 8px 24px rgba(0, 0, 0, .5); } to { box-shadow: 0 0 3vh rgba(255, 70, 50, .8); } }
+
+  /* ---- day and night: a faint glow over the whole screen (?tint=off takes it away) */
+  #daynight-tint { position: fixed; inset: 0; z-index: 2; pointer-events: none; opacity: 0; transition: opacity 1.4s ease; }
+  #daynight-tint.day { opacity: 1; background: radial-gradient(ellipse at 50% -10%, rgba(255, 214, 120, .28), transparent 62%); }
+  #daynight-tint.night { opacity: 1; background: radial-gradient(ellipse at 50% 50%, transparent 38%, rgba(30, 48, 130, .42) 100%); }
 
   .tally .ico svg { width: 2.1vh; height: 2.1vh; }
   .achievement .medal svg { width: 6vh; height: 6vh; color: #f3cc6e; }
@@ -828,6 +850,7 @@
 <div id="row"></div>
 <div id="dice"></div>
 <div id="phases" hidden></div>
+<div id="daynight-tint"></div>
 <div id="tally" hidden></div>
 <div id="play" hidden></div>
 <script>
@@ -1280,7 +1303,7 @@
   function onAttack(ev) {
     const entries = ev.ids.map((id) => elements.get(id)).filter(Boolean);
     entries.forEach((entry, i) => setTimeout(() => lunge(entry), i * 90));
-    if (ev.ids.length > 1) showBanner("⚔ Attack!", "attack");
+    if (ev.ids.length > 1) showBanner(ev.power ? `⚔ Attack! · ${ev.power} power` : "⚔ Attack!", "attack");
   }
 
   function lunge(entry) {
@@ -1578,6 +1601,10 @@
   const ICONS = {
     crown: '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 19h18 M4 16L3 7l5 4 4-7 4 7 5-4-1 9z" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>',
     bolt: '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M13.5 2L4.5 13.5h6.5L10 22l9-11.5h-6.5z" fill="currentColor"/></svg>',
+    skull: '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a7.5 7.5 0 0 0-7.5 7.5c0 2.6 1.3 4.5 3 5.6V19h9v-2.9c1.7-1.1 3-3 3-5.6A7.5 7.5 0 0 0 12 3z" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/><circle cx="9" cy="11" r="1.7" fill="currentColor"/><circle cx="15" cy="11" r="1.7" fill="currentColor"/><path d="M10.5 19v2M13.5 19v2" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg>',
+    star: '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z" fill="currentColor"/></svg>',
+    sun: '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4.2" fill="currentColor"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M18.7 5.3l-2.1 2.1M7.4 16.6l-2.1 2.1" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg>',
+    sword: '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 4l-9.5 9.5M20 4h-5.5M20 4v5.5M7 14l3 3M5 19l3-3M4 20l2-2" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>',
     moon: '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.6A8.2 8.2 0 1 1 9.4 4a6.6 6.6 0 0 0 10.6 10.6z" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   };
 
@@ -1600,6 +1627,15 @@
   }
   const castsPill = tallyPill("casts", "crown", "Commander tax");
   const stormPill = tallyPill("storm", "bolt", "Storm");
+  const poisonPill = tallyPill("poison", "skull", "Poison");
+  const energyPill = tallyPill("energy", "bolt", "Energy");
+  const experiencePill = tallyPill("experience", "star", "Experience");
+  const monarchPill = tallyPill("monarch", "crown", "Monarch");
+  const dayNightPill = tallyPill("day", "sun", "Day");
+  const boardPill = tallyPill("board", "sword", "Board power");
+  const tint = document.getElementById("daynight-tint");
+  if (params.get("tint") === "off") tint.remove();
+  const countPills = { casts: castsPill, storm: stormPill, poison: poisonPill, energy: energyPill, experience: experiencePill };
   let tallies = null;  // not shown yet: no bump on the first draw
 
   // Tonight's score: from the game log, fetched now and then and after every result.
@@ -1627,18 +1663,52 @@
   }
 
   function renderTally(turn) {
-    const casts = (turn && turn.casts) || 0;
-    const storm = (turn && turn.storm) || 0;
-    castsPill.hidden = !casts;
-    stormPill.hidden = !storm;
-    showTallyBox();
-    castsPill.querySelector(".num").textContent = `+${2 * casts}`;
-    castsPill.querySelector(".sub").textContent = `${casts}× cast`;
-    stormPill.querySelector(".num").textContent = String(storm);
+    const now = {};
+    for (const [name, pill] of Object.entries(countPills)) {
+      now[name] = (turn && turn[name]) || 0;
+      pill.hidden = !now[name];
+    }
+    castsPill.querySelector(".num").textContent = `+${2 * now.casts}`;
+    castsPill.querySelector(".sub").textContent = `${now.casts}× cast`;
+    stormPill.querySelector(".num").textContent = String(now.storm);
     stormPill.querySelector(".sub").textContent = "";
-    if (tallies && casts !== tallies.casts && casts) bump(castsPill);
-    if (tallies && storm !== tallies.storm && storm) bump(stormPill);
-    tallies = { casts, storm };
+    // Ten poison counters: you lose.
+    poisonPill.querySelector(".num").textContent = `${now.poison}/10`;
+    poisonPill.querySelector(".sub").textContent = now.poison >= 10 ? "lethal!" : "";
+    poisonPill.classList.toggle("lethal", now.poison >= 10);
+    energyPill.querySelector(".num").textContent = String(now.energy);
+    experiencePill.querySelector(".num").textContent = String(now.experience);
+    now.monarch = !!(turn && turn.monarch);
+    monarchPill.hidden = !now.monarch;
+    const dayNight = (turn && turn.day_night) || "";
+    now.dayNight = dayNight;
+    dayNightPill.hidden = !dayNight;
+    if (dayNight) {
+      dayNightPill.className = `tally ${dayNight}`;
+      dayNightPill.querySelector(".ico").innerHTML = ICONS[dayNight === "day" ? "sun" : "moon"];
+      dayNightPill.querySelector(".lbl").textContent = dayNight === "day" ? "Day" : "Night";
+    }
+    tint.className = dayNight;
+    showTallyBox();
+    if (tallies) {
+      for (const [name, pill] of Object.entries(countPills)) if (now[name] !== tallies[name] && now[name]) bump(pill);
+      if (now.monarch && !tallies.monarch) bump(monarchPill);
+      if (dayNight && dayNight !== tallies.dayNight) bump(dayNightPill);
+    }
+    tallies = now;
+  }
+
+  // The creature tokens on the board: how many, and their power together.
+  function renderBoard(board) {
+    const power = (board && board.power) || 0;
+    const count = (board && board.tokens) || 0;
+    const before = boardPill.dataset.power;
+    boardPill.hidden = !count;
+    boardPill.querySelector(".num").textContent = String(power);
+    boardPill.querySelector(".sub").textContent = `${count} token${count === 1 ? "" : "s"}`;
+    if (before !== undefined && before !== String(power) && count) bump(boardPill);
+    boardPill.dataset.power = String(power);
+    showTallyBox();
   }
 
   // ---- Spotlight: one card big in the middle, for a few seconds.
@@ -1925,6 +1995,7 @@
     renderPlay(state.play);
     renderTurn(state.turn);
     renderTally(state.turn);
+    renderBoard(state.board);
     const seen = new Set();
     let prev = null;
     for (const t of state.tokens || []) {
